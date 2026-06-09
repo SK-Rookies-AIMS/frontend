@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useTheme } from "@/components/theme-provider"
-import { Bell, ChevronDown, Home, Factory, ClipboardCheck, Sun, Moon, Clock, AlertTriangle, LogOut } from "lucide-react"
+import { Home, Factory, ClipboardCheck, Sun, Moon, Clock, AlertTriangle, LogOut } from "lucide-react"
 
 interface HeaderProps {
   currentTime: Date
@@ -123,14 +123,6 @@ export function Header({ currentTime }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Notifications */}
-        <Link to="/events" className="relative cursor-pointer p-2 hover:bg-secondary rounded-md transition-colors">
-          <Bell className="w-5 h-5 text-muted-foreground" />
-          <span className="absolute top-1 right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] rounded-full flex items-center justify-center">
-            3
-          </span>
-        </Link>
-
         {/* User Profile */}
         <div className="flex items-center gap-2 cursor-pointer">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
@@ -143,7 +135,6 @@ export function Header({ currentTime }: HeaderProps) {
           <span className={`text-xs px-2 py-0.5 rounded ${roleStyles[currentUser.role].bg} ${roleStyles[currentUser.role].text}`}>
             {currentUser.role}
           </span>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
         </div>
 
         {/* DateTime */}

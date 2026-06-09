@@ -135,7 +135,7 @@ export default function LoginPage() {
 
               {/* Sign up */}
               <Link
-                to="/"
+                to="/signup"
                 className="w-full text-center border border-border rounded-md py-2.5 text-sm font-medium text-foreground hover:bg-secondary transition-colors"
               >
                 회원가입

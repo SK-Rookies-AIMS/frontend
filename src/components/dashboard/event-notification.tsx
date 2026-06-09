@@ -66,7 +66,7 @@ function toDerived(event: EventItem): DerivedNotification {
 export function EventNotificationProvider({ children }: { children: React.ReactNode }) {
   // 로그인 등 인증 전 화면에서는 알림 UI를 숨긴다 (컨텍스트는 계속 제공)
   const { pathname } = useLocation();
-  const hideNotificationUI = pathname === "/login"
+  const isAuthPage = pathname === "/login" || pathname === "/signup"
   // 이벤트 단일 상태 (이벤트 페이지의 데이터를 그대로 사용 - 새로 생성하지 않음)
   const [events, setEvents] = useState<EventItem[]>(eventsData)
   // 팝업(우측 상단 토스트)을 X로 닫은 알림 id 목록.
@@ -92,7 +92,7 @@ export function EventNotificationProvider({ children }: { children: React.ReactN
 
   // 처음 등장하는 위험 알림이 있으면 오버레이를 한 번만 강조 (8초 재알림 없음)
   useEffect(() => {
-    if (!isEnabled) {
+    if (isAuthPage || !isEnabled) {
       setShowOverlay(false)
       return
     }
@@ -107,7 +107,7 @@ export function EventNotificationProvider({ children }: { children: React.ReactN
     if (activeNotifications.length === 0) {
       setShowOverlay(false)
     }
-  }, [activeNotifications.map(n => n.id).join(","), isEnabled])
+  }, [activeNotifications.map(n => n.id).join(","), isAuthPage, isEnabled])
 
   // 화면에 실제로 떠 있는 팝업 (X로 닫은 알림 제외)
   const visiblePopups = activeNotifications.filter(n => !dismissedIds.includes(n.id))
@@ -116,7 +116,7 @@ export function EventNotificationProvider({ children }: { children: React.ReactN
   // (생산 공정 이벤트만 대상 - 검사/자재 관리 제외)
   // (AI 지수가 아닌 calculatePriorityScore 기준)
   const actionableEvents = events.filter(e => e.severity === "위험" && isActionableStatus(e.status) && isProductionProcess(e.area))
-  const topEvent = actionableEvents.length > 0
+  const topEvent = !isAuthPage && actionableEvents.length > 0
     ? toDerived(
         [...actionableEvents].sort((a, b) => calculatePriorityScore(b) - calculatePriorityScore(a))[0]
       )
@@ -132,11 +132,11 @@ export function EventNotificationProvider({ children }: { children: React.ReactN
       events,
       updateEventStatus,
       topEvent,
-      activeCount: activeNotifications.length,
+      activeCount: isAuthPage ? 0 : activeNotifications.length,
     }}>
       {children}
 
-      {!hideNotificationUI && (
+      {!isAuthPage && (
         <>
           {/* Screen Overlay - 반투명 화면 덮기 */}
           {showOverlay && (
