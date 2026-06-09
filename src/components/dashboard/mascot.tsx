@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useTheme } from "@/components/theme-provider"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 
@@ -16,8 +16,10 @@ export function Mascot() {
   // 말풍선 모드: none(숨김) | alert(상황 요약) | detail(상세 조치 안내)
   const [bubbleMode, setBubbleMode] = useState<"none" | "alert" | "detail">("none")
   const { resolvedTheme } = useTheme()
+  const { pathname } = useLocation()
   const navigate = useNavigate()
   const { topEvent } = useMascotAlert()
+  const isAuthPage = pathname === "/login" || pathname === "/signup"
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
@@ -30,6 +32,8 @@ export function Mascot() {
 
   // 테마에 따른 마스코트 이미지 선택
   const mascotImage = resolvedTheme === "dark" ? MASCOT_IMAGE_DARK : MASCOT_IMAGE_LIGHT
+
+  if (isAuthPage) return null
 
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
   const handleMascotClick = () => {
