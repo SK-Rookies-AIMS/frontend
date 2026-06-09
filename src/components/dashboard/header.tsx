@@ -71,7 +71,7 @@ export function Header({ currentTime }: HeaderProps) {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
           <img
-            src="/images/aims-logo.jpeg"
+            src="/images/aims-logo-new.png"
             alt="AIMS Logo"
             width={48}
             height={48}

@@ -7,7 +7,7 @@ import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 
 // 라이트 모드용 마스코트 이미지
-const MASCOT_IMAGE_LIGHT = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/ChatGPT%20Image%202026%EB%85%84%205%EC%9B%94%2029%EC%9D%BC%20%EC%98%A4%ED%9B%84%2001_17_04-Photoroom%201-W5ocFVewfPUpfXrdPe3wq5vtOHG9R0.png"
+const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
 
 // 다크 모드용 마스코트 이미지
 const MASCOT_IMAGE_DARK = "/images/watchy-dark.png"
@@ -16,14 +16,8 @@ export function Mascot() {
   // 말풍선 모드: none(숨김) | alert(상황 요약) | detail(상세 조치 안내)
   const [bubbleMode, setBubbleMode] = useState<"none" | "alert" | "detail">("none")
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
   const navigate = useNavigate()
   const { topEvent } = useMascotAlert()
-
-  // hydration 문제 방지
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
@@ -35,7 +29,7 @@ export function Mascot() {
   }, [topEvent?.id])
 
   // 테마에 따른 마스코트 이미지 선택
-  const mascotImage = mounted && resolvedTheme === "dark" ? MASCOT_IMAGE_DARK : MASCOT_IMAGE_LIGHT
+  const mascotImage = resolvedTheme === "dark" ? MASCOT_IMAGE_DARK : MASCOT_IMAGE_LIGHT
 
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
   const handleMascotClick = () => {
@@ -135,7 +129,7 @@ export function Mascot() {
           </span>
         )}
         <img
-          src="/images/watchy-dark.png"
+          src={mascotImage}
           alt="watchy"
           width={200}
           height={200}

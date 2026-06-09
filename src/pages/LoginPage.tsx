@@ -33,7 +33,7 @@ export default function LoginPage() {
           {/* Logo & Title */}
           <div className="flex flex-col items-center text-center mb-8">
             <img
-              src="/images/aims-logo.jpeg"
+              src="/images/aims-logo-new.png"
               alt="AIMS 로고"
               width={72}
               height={72}
