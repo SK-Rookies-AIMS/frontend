@@ -215,7 +215,7 @@ export function EventNotificationProvider({ children }: { children: React.ReactN
       )}
 
       {/* Overlay Animation Style */}
-      <style jsx global>{`
+      <style>{`
         @keyframes pulse-overlay {
           0%, 100% { opacity: 0.5; }
           50% { opacity: 0.8; }
