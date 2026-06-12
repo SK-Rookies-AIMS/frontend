@@ -13,14 +13,34 @@ export default function LoginPage() {
   const [rememberId, setRememberId] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    // 데모용: 인증 없이 세션 플래그만 설정하고 메인 대시보드로 이동
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("aims-auth", "1")
+    
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        sessionStorage.setItem("aims-auth-accessToken", data.data.accessToken)
+        sessionStorage.setItem("aims-auth-refreshToken", data.data.refreshToken)
+        navigate("/")
+      } else {
+        alert(data.message || "로그인 실패: 알 수 없는 오류입니다.")
+      }
+    } catch (error) {
+      console.error("로그인 중 오류 발생:", error)
+      alert("로그인 중 네트워크 오류가 발생했습니다.")
+    } finally {
+      setIsSubmitting(false)
     }
-    navigate("/")
   }
 
   return (
