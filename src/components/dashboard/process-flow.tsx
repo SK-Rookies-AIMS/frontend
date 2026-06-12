@@ -1,241 +1,307 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Truck } from "lucide-react"
 
-// AGV paths for animation - following the exact lines in the design
-// New Route: AGV저장소 -> 프레스 -> 차체 -> 도장 -> 의장 -> 최종 검사 -> AGV저장소 (direct return via bottom curve)
-const agvPath = [
-  { x: 80, y: 365 },  // AGV 저장소
-  { x: 80, y: 100 },  // Up to 프레스
-  { x: 200, y: 100 },  // 프레스 to 차체 (horizontal)
-  { x: 200, y: 230 },  // 차체 to 도장 (vertical down)
-  { x: 320, y: 230 },  // 도장 to 의장 (horizontal right)
-  { x: 440, y: 230 },  // 의장 to 최종 검사
-  { x: 440, y: 380 },  // 최종 검사 down to bottom
-  { x: 80, y: 380 },  // Horizontal back to AGV 저장소 (bottom path)
+type AgvStatus = "WAITING" | "MOVING" | "RETURNING"
+type AgvPhase = "WAIT_START" | "MOVING" | "WAIT_END" | "RETURNING"
+
+type Agv = {
+  id: string
+  routeIndex: number
+  laneIndex: number
+  progress: number
+  status: AgvStatus
+  phase: AgvPhase
+  waitTick: number
+  speed: number
+}
+
+const SVG_WIDTH = 1500
+const SVG_HEIGHT = 200
+
+const PROCESS_Y = 50
+const PROCESS_WIDTH = 110
+const PROCESS_HEIGHT = 80  // 높이를 늘려서 레인 5개가 박스 안에 들어오게
+
+// 박스 중앙 Y
+const PROCESS_CENTER_Y = PROCESS_Y + PROCESS_HEIGHT / 2  // 90
+
+// 레인 간격 및 시작 Y (5개 레인을 박스 중앙 기준으로 수직 정렬)
+const LANE_GAP = 13
+const LANE_COUNT = 5
+const LANE_START_Y = PROCESS_CENTER_Y - ((LANE_COUNT - 1) / 2) * LANE_GAP  // 64
+
+const PROCESS_NODES = [
+  { name: "프레스", x: 40 },
+  { name: "차체", x: 340 },
+  { name: "도장", x: 640 },
+  { name: "의장", x: 940 },
+  { name: "최종검사", x: 1240 },
 ]
 
-export function ProcessFlow() {
-  const [agvPositions, setAgvPositions] = useState([
-    { pathIndex: 0, progress: 0 },
-    { pathIndex: 2, progress: 0.5 },
-  ])
+const ROUTES = [
+  { routeName: "AGV 1~5", fromX: 150, toX: 340, agvStart: 1 },
+  { routeName: "AGV 6~10", fromX: 450, toX: 640, agvStart: 6 },
+  { routeName: "AGV 11~15", fromX: 750, toX: 940, agvStart: 11 },
+  { routeName: "AGV 16~20", fromX: 1050, toX: 1240, agvStart: 16 },
+]
 
-  // Animate AGVs along the path
+const WAIT_START_TICK = 60
+const WAIT_END_TICK = 40
+
+const createInitialAgvs = (): Agv[] => {
+  const agvs: Agv[] = []
+
+  ROUTES.forEach((route, routeIndex) => {
+    for (let laneIndex = 0; laneIndex < 5; laneIndex++) {
+      const agvNumber = route.agvStart + laneIndex
+      let status: AgvStatus = "WAITING"
+      let phase: AgvPhase = "WAIT_START"
+      let progress = 0
+      let waitTick = laneIndex * 15
+
+      if (laneIndex === 0) { status = "MOVING"; phase = "MOVING"; progress = 0.3 }
+      if (laneIndex === 3) { status = "RETURNING"; phase = "RETURNING"; progress = 0.7 }
+
+      agvs.push({
+        id: `AGV-${String(agvNumber).padStart(2, "0")}`,
+        routeIndex,
+        laneIndex,
+        progress,
+        status,
+        phase,
+        waitTick,
+        speed: 0.003 + laneIndex * 0.00025,
+      })
+    }
+  })
+
+  return agvs
+}
+
+const getStatusColor = (status: AgvStatus) => {
+  if (status === "MOVING") return "#22d3ee"
+  if (status === "RETURNING") return "#a855f7"
+  return "#eab308"
+}
+
+const getStatusLabel = (status: AgvStatus) => {
+  if (status === "MOVING") return "운반"
+  if (status === "RETURNING") return "복귀"
+  return "대기"
+}
+
+export function ProcessFlow() {
+  const [agvs, setAgvs] = useState<Agv[]>(createInitialAgvs())
+
   useEffect(() => {
     const interval = setInterval(() => {
-      setAgvPositions(prev => prev.map(agv => {
-        const currentIdx = agv.pathIndex
-        const nextIdx = (currentIdx + 1) % agvPath.length
-        let newProgress = agv.progress + 0.015
-        let newPathIndex = currentIdx
+      setAgvs((prev) =>
+        prev.map((agv) => {
+          if (agv.phase === "WAIT_START") {
+            const nextTick = agv.waitTick + 1
+            if (nextTick >= WAIT_START_TICK) {
+              return { ...agv, status: "MOVING", phase: "MOVING", waitTick: 0 }
+            }
+            return { ...agv, status: "WAITING", waitTick: nextTick }
+          }
 
-        if (newProgress >= 1) {
-          newProgress = 0
-          newPathIndex = nextIdx
-        }
+          if (agv.phase === "MOVING") {
+            const nextProgress = agv.progress + agv.speed
+            if (nextProgress >= 1) {
+              return { ...agv, progress: 1, status: "WAITING", phase: "WAIT_END", waitTick: 0 }
+            }
+            return { ...agv, progress: nextProgress, status: "MOVING" }
+          }
 
-        return {
-          pathIndex: newPathIndex,
-          progress: newProgress,
-        }
-      }))
-    }, 50)
+          if (agv.phase === "WAIT_END") {
+            const nextTick = agv.waitTick + 1
+            if (nextTick >= WAIT_END_TICK) {
+              return { ...agv, status: "RETURNING", phase: "RETURNING", waitTick: 0 }
+            }
+            return { ...agv, status: "WAITING", waitTick: nextTick }
+          }
+
+          if (agv.phase === "RETURNING") {
+            const nextProgress = agv.progress - agv.speed
+            if (nextProgress <= 0) {
+              return { ...agv, progress: 0, status: "WAITING", phase: "WAIT_START", waitTick: 0 }
+            }
+            return { ...agv, progress: nextProgress, status: "RETURNING" }
+          }
+
+          return agv
+        }),
+      )
+    }, 80)
 
     return () => clearInterval(interval)
   }, [])
 
-  // Calculate AGV positions
-  const getAgvPosition = (agv: { pathIndex: number; progress: number }) => {
-    const currentPoint = agvPath[agv.pathIndex]
-    const nextPoint = agvPath[(agv.pathIndex + 1) % agvPath.length]
-    return {
-      x: currentPoint.x + (nextPoint.x - currentPoint.x) * agv.progress,
-      y: currentPoint.y + (nextPoint.y - currentPoint.y) * agv.progress,
-    }
+  const movingCount = useMemo(() => agvs.filter((a) => a.status === "MOVING").length, [agvs])
+  const returningCount = useMemo(() => agvs.filter((a) => a.status === "RETURNING").length, [agvs])
+  const waitingCount = useMemo(() => agvs.filter((a) => a.status === "WAITING").length, [agvs])
+
+  const getAgvPosition = (agv: Agv) => {
+    const route = ROUTES[agv.routeIndex]
+    const x = route.fromX + (route.toX - route.fromX) * agv.progress
+    const y = LANE_START_Y + agv.laneIndex * LANE_GAP
+    return { x, y }
   }
 
   return (
     <div className="bg-card rounded-lg border border-border p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium">공정 흐름도</h2>
-        <div className="flex items-center gap-6 text-xs">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-medium">AGV 실시간 물류 흐름</h2>
+        <div className="flex gap-6 text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-0.5 bg-primary"></div>
-            <span className="text-muted-foreground">주행 경로</span>
+            <div className="h-3 w-3 rounded-full bg-cyan-400" />
+            <span>운반</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-0.5 border-t-2 border-dashed border-muted-foreground"></div>
-            <span className="text-muted-foreground">대기 경로</span>
+            <div className="h-3 w-3 rounded-full bg-purple-500" />
+            <span>복귀</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-full bg-yellow-400" />
+            <span>대기</span>
           </div>
         </div>
       </div>
 
-      {/* Process Flow 2D Map */}
-      <div className="relative h-[450px] rounded-lg overflow-hidden bg-[#0a1628]">
-        <svg viewBox="0 0 550 450" className="absolute inset-0 w-full h-full">
-          <defs>
-            <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-            <filter id="glow-warning" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-              <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
+      <div className="flex gap-4">
+        <div className="flex-1 rounded-lg bg-[#08111f] p-4">
+          <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="h-[200px] w-full">
 
-          {/* Connection Lines */}
-          {/* AGV저장소 to 프레스 (vertical line up) */}
-          <line x1="80" y1="320" x2="80" y2="140" stroke="#64748b" strokeWidth="2" />
-          
-          {/* 프레스 to 차체 (horizontal line) */}
-          <line x1="120" y1="100" x2="150" y2="100" stroke="#64748b" strokeWidth="2" />
-          
-          {/* 차체 to 도장 (vertical dashed line) */}
-          <line x1="200" y1="140" x2="200" y2="180" stroke="#64748b" strokeWidth="2" strokeDasharray="6 4" />
-          
-          {/* 도장 to 의장 (horizontal line) */}
-          <line x1="250" y1="230" x2="270" y2="230" stroke="#64748b" strokeWidth="2" />
-          
-          {/* 의장 to 최종 검사 (horizontal line) */}
-          <line x1="370" y1="230" x2="390" y2="230" stroke="#64748b" strokeWidth="2" />
-          
-          {/* 최종 검사 to bottom (vertical line down) */}
-          <line x1="440" y1="280" x2="440" y2="380" stroke="#64748b" strokeWidth="2" />
-          
-          {/* Bottom horizontal line from 최종 검사 to AGV저장소 */}
-          <line x1="440" y1="380" x2="120" y2="380" stroke="#64748b" strokeWidth="2" />
-          
-          {/* Bottom to AGV저장소 (short vertical) */}
-          <line x1="80" y1="380" x2="80" y2="410" stroke="#64748b" strokeWidth="2" />
-
-          {/* ========== STATION NODES ========== */}
-          
-          {/* 프레스 Station - Top Left */}
-          <g transform="translate(30, 50)">
-            <rect x="0" y="0" width="90" height="80" rx="8" fill="#0f1d32" stroke="#22d3ee" strokeWidth="1.5" filter="url(#glow-cyan)" />
-            <rect x="20" y="30" width="50" height="40" rx="4" fill="#1a2d4a" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Press Machine Icon */}
-            <g transform="translate(30, 36)">
-              <rect x="0" y="5" width="30" height="20" rx="2" fill="#22d3ee" fillOpacity="0.3" />
-              <rect x="5" y="0" width="20" height="8" rx="1" fill="#22d3ee" fillOpacity="0.5" />
-              <rect x="10" y="15" width="10" height="10" rx="1" fill="#22d3ee" fillOpacity="0.6" />
-            </g>
-            <text x="45" y="16" textAnchor="middle" fill="#22d3ee" fontSize="10" fontWeight="500">프레스</text>
-          </g>
-
-          {/* 차체 Station - Top Right */}
-          <g transform="translate(150, 50)">
-            <rect x="0" y="0" width="90" height="80" rx="8" fill="#0f1d32" stroke="#22d3ee" strokeWidth="1.5" filter="url(#glow-cyan)" />
-            <rect x="20" y="30" width="50" height="40" rx="4" fill="#1a2d4a" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Car Body Icon */}
-            <g transform="translate(30, 38)">
-              <path d="M 5 20 L 10 10 L 25 10 L 30 20 L 30 25 L 5 25 Z" fill="#22d3ee" fillOpacity="0.4" stroke="#22d3ee" strokeWidth="1" />
-              <circle cx="10" cy="25" r="4" fill="#22d3ee" fillOpacity="0.6" />
-              <circle cx="25" cy="25" r="4" fill="#22d3ee" fillOpacity="0.6" />
-            </g>
-            <text x="45" y="16" textAnchor="middle" fill="#22d3ee" fontSize="10" fontWeight="500">차체</text>
-          </g>
-
-          {/* 도장 Station - Center with Warning */}
-          <g transform="translate(150, 180)">
-            <rect x="0" y="0" width="90" height="90" rx="8" fill="#0f1d32" stroke="#f59e0b" strokeWidth="2" filter="url(#glow-warning)">
-              <animate attributeName="stroke-opacity" values="1;0.6;1" dur="1.5s" repeatCount="indefinite"/>
-            </rect>
-            <rect x="20" y="35" width="50" height="45" rx="4" fill="#1a2d4a" stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Paint Spray Icon */}
-            <g transform="translate(30, 42)">
-              <rect x="5" y="15" width="25" height="20" rx="3" fill="#f59e0b" fillOpacity="0.3" stroke="#f59e0b" strokeWidth="1" />
-              <path d="M 12 5 L 23 5 L 23 15 L 17 25 L 12 15 Z" fill="#f59e0b" fillOpacity="0.5" />
-            </g>
-            <text x="45" y="18" textAnchor="middle" fill="#f59e0b" fontSize="10" fontWeight="500">도장</text>
-            {/* Warning indicator */}
-            <g transform="translate(75, -10)">
-              <circle cx="10" cy="10" r="12" fill="#f59e0b" fillOpacity="0.3">
-                <animate attributeName="r" values="12;16;12" dur="1s" repeatCount="indefinite"/>
-              </circle>
-              <circle cx="10" cy="10" r="9" fill="#f59e0b" />
-              <text x="10" y="14" textAnchor="middle" fill="#0a1628" fontSize="12" fontWeight="bold">!</text>
-            </g>
-          </g>
-
-          {/* 의장 Station - Right */}
-          <g transform="translate(270, 180)">
-            <rect x="0" y="0" width="90" height="90" rx="8" fill="#0f1d32" stroke="#22d3ee" strokeWidth="1.5" filter="url(#glow-cyan)" />
-            <rect x="20" y="35" width="50" height="45" rx="4" fill="#1a2d4a" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Car Assembly Icon */}
-            <g transform="translate(30, 44)">
-              <path d="M 5 22 L 10 12 L 25 12 L 30 22 L 30 28 L 5 28 Z" fill="#22d3ee" fillOpacity="0.4" stroke="#22d3ee" strokeWidth="1" />
-              <circle cx="10" cy="28" r="4" fill="#22d3ee" fillOpacity="0.6" />
-              <circle cx="25" cy="28" r="4" fill="#22d3ee" fillOpacity="0.6" />
-            </g>
-            <text x="45" y="18" textAnchor="middle" fill="#22d3ee" fontSize="10" fontWeight="500">의장</text>
-          </g>
-
-          {/* 최종 검사 Station - Far Right */}
-          <g transform="translate(390, 180)">
-            <rect x="0" y="0" width="90" height="90" rx="8" fill="#0f1d32" stroke="#22d3ee" strokeWidth="1.5" filter="url(#glow-cyan)" />
-            <rect x="20" y="35" width="50" height="45" rx="4" fill="#1a2d4a" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Check Icon */}
-            <g transform="translate(30, 45)">
-              <rect x="5" y="5" width="25" height="25" rx="4" fill="#22d3ee" fillOpacity="0.3" stroke="#22d3ee" strokeWidth="1" />
-              <path d="M 10 18 L 15 23 L 25 12" stroke="#22d3ee" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <text x="45" y="18" textAnchor="middle" fill="#22d3ee" fontSize="9" fontWeight="500">최종 검사</text>
-          </g>
-
-          {/* AGV 저장소 Station - Bottom Left */}
-          <g transform="translate(30, 320)">
-            <rect x="0" y="0" width="90" height="80" rx="8" fill="#0f1d32" stroke="#22d3ee" strokeWidth="1.5" filter="url(#glow-cyan)" />
-            <rect x="20" y="30" width="50" height="40" rx="4" fill="#1a2d4a" stroke="#22d3ee" strokeWidth="1" strokeOpacity="0.3" />
-            {/* Forklift/AGV Icon */}
-            <g transform="translate(27, 35)">
-              <rect x="0" y="15" width="25" height="18" rx="2" fill="#22d3ee" fillOpacity="0.4" stroke="#22d3ee" strokeWidth="1" />
-              <rect x="25" y="10" width="8" height="23" rx="1" fill="#22d3ee" fillOpacity="0.3" />
-              <circle cx="6" cy="33" r="4" fill="#22d3ee" fillOpacity="0.6" />
-              <circle cx="19" cy="33" r="4" fill="#22d3ee" fillOpacity="0.6" />
-            </g>
-            <text x="45" y="16" textAnchor="middle" fill="#22d3ee" fontSize="9" fontWeight="500">AGV 저장소</text>
-          </g>
-
-          {/* ========== AGV Vehicles ========== */}
-          {agvPositions.map((agv, idx) => {
-            const pos = getAgvPosition(agv)
-            return (
-              <g key={idx} transform={`translate(${pos.x - 18}, ${pos.y - 15})`}>
-                {/* AGV glow effect */}
-                <ellipse cx="18" cy="20" rx="15" ry="12" fill="#22d3ee" fillOpacity="0.15">
-                  <animate attributeName="rx" values="15;20;15" dur="2s" repeatCount="indefinite"/>
-                  <animate attributeName="ry" values="12;16;12" dur="2s" repeatCount="indefinite"/>
-                </ellipse>
-                {/* AGV body */}
-                <rect x="6" y="12" width="24" height="16" fill="#1e293b" stroke="#22d3ee" strokeWidth="1.5" rx="3"/>
-                <rect x="9" y="15" width="18" height="10" fill="#22d3ee" fillOpacity="0.25" rx="1"/>
-                {/* Wheels */}
-                <circle cx="10" cy="28" r="3" fill="#22d3ee" fillOpacity="0.5" />
-                <circle cx="26" cy="28" r="3" fill="#22d3ee" fillOpacity="0.5" />
-                {/* AGV label */}
-                <rect x="2" y="-2" width="32" height="12" fill="#0f172a" fillOpacity="0.95" rx="3" stroke="#22d3ee" strokeWidth="0.5"/>
-                <text x="18" y="7" textAnchor="middle" fill="#22d3ee" fontSize="7" fontWeight="600">
-                  AGV-0{idx + 1}
+            {/* 공정 박스 */}
+            {PROCESS_NODES.map((node) => (
+              <g key={node.name}>
+                <rect
+                  x={node.x} y={PROCESS_Y}
+                  width={PROCESS_WIDTH} height={PROCESS_HEIGHT}
+                  rx={10}
+                  fill="#0f172a" stroke="#22d3ee" strokeWidth={2}
+                />
+                <text
+                  x={node.x + PROCESS_WIDTH / 2}
+                  y={PROCESS_Y + PROCESS_HEIGHT / 2 + 5}
+                  textAnchor="middle"
+                  fill="#22d3ee" fontSize={15} fontWeight={700}
+                >
+                  {node.name}
                 </text>
-                {/* Status indicator */}
-                <circle cx="30" cy="4" r="3" fill="#22c55e">
-                  <animate attributeName="opacity" values="1;0.4;1" dur="0.8s" repeatCount="indefinite"/>
-                </circle>
               </g>
-            )
-          })}
-        </svg>
+            ))}
 
-        {/* Mini Legend */}
-        <div className="absolute bottom-3 right-3 bg-slate-900/80 backdrop-blur-sm rounded-lg p-2 text-[10px]">
-          <div className="flex items-center gap-2 text-slate-400">
-            <Truck className="w-3 h-3 text-cyan-400"/>
-            <span>AGV 2대 운행중</span>
+            {/* 레인 라인 */}
+            {ROUTES.map((route, routeIndex) => (
+              <g key={route.routeName}>
+                {/* 루트 이름 라벨 — 박스 위에 표시 */}
+                <text
+                  x={route.fromX + (route.toX - route.fromX) / 2}
+                  y={PROCESS_Y - 6}
+                  textAnchor="middle"
+                  fill="#93c5fd" fontSize={10} fontWeight={700}
+                >
+                  {route.routeName}
+                </text>
+
+                {Array.from({ length: LANE_COUNT }, (_, laneIndex) => {
+                  const laneY = LANE_START_Y + laneIndex * LANE_GAP
+                  return (
+                    <g key={`${routeIndex}-${laneIndex}`}>
+                      {/* 레인 번호 */}
+                      <text
+                        x={route.fromX - 22} y={laneY + 4}
+                        fill="#64748b" fontSize={9}
+                      >
+                        L{laneIndex + 1}
+                      </text>
+
+                      {/* 정방향 레인 (운반) */}
+                      <line
+                        x1={route.fromX} y1={laneY - 3}
+                        x2={route.toX} y2={laneY - 3}
+                        stroke="#22d3ee" strokeWidth={1.5} strokeDasharray="8 5"
+                      />
+
+                      {/* 역방향 레인 (복귀) */}
+                      <line
+                        x1={route.toX} y1={laneY + 3}
+                        x2={route.fromX} y2={laneY + 3}
+                        stroke="#a855f7" strokeWidth={1.5} strokeDasharray="8 5"
+                      />
+                    </g>
+                  )
+                })}
+              </g>
+            ))}
+
+            {/* AGV 아이콘 */}
+            {agvs.map((agv) => {
+              const pos = getAgvPosition(agv)
+              const color = getStatusColor(agv.status)
+              const label = getStatusLabel(agv.status)
+
+              return (
+                <g key={agv.id} transform={`translate(${pos.x},${pos.y})`}>
+                  {agv.status !== "WAITING" && (
+                    <circle cx="0" cy="0" r="14" fill={color} opacity="0.15">
+                      <animate attributeName="r" values="14;20;14" dur="1.5s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+
+                  {/* 차체 */}
+                  <rect x="-13" y="-8" width="26" height="16" rx="4"
+                    fill="#1e293b" stroke={color} strokeWidth="1.5" />
+
+                  {/* 바퀴 */}
+                  <circle cx="-7" cy="9" r="3" fill={color} />
+                  <circle cx="7" cy="9" r="3" fill={color} />
+
+                  {/* AGV ID 라벨 */}
+                  <rect x="-22" y="-22" width="44" height="10" rx="3" fill="#020617" />
+                  <text x="0" y="-15" textAnchor="middle"
+                    fill={color} fontSize="7" fontWeight="700">
+                    {agv.id}
+                  </text>
+
+                  {/* 상태 라벨 */}
+                  <rect x="-18" y="15" width="36" height="10" rx="3" fill="#020617" />
+                  <text x="0" y="22" textAnchor="middle"
+                    fill={color} fontSize="7" fontWeight="700">
+                    {label}
+                  </text>
+                </g>
+              )
+            })}
+          </svg>
+        </div>
+
+        {/* 사이드 패널 */}
+        <div className="w-[180px] shrink-0 rounded-lg border border-slate-700 bg-slate-900/95 p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <Truck className="h-4 w-4 text-cyan-400" />
+            <span className="text-sm font-semibold text-white">AGV 현황</span>
+          </div>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-cyan-400">운반중</span>
+              <span className="text-white">{movingCount}대</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-purple-400">복귀중</span>
+              <span className="text-white">{returningCount}대</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-yellow-400">대기중</span>
+              <span className="text-white">{waitingCount}대</span>
+            </div>
+            <hr className="border-slate-700" />
+            <div className="text-xs text-slate-400">AGV 총 20대</div>
+            <div className="text-xs text-slate-400">공정 간 Route 4개</div>
+            <div className="text-xs text-slate-400">Route당 Lane 5개</div>
           </div>
         </div>
       </div>
