@@ -77,24 +77,6 @@ export default function SignupPage() {
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="employee-id" className="text-sm font-medium text-foreground">
-                    사번
-                  </label>
-                  <div className="relative">
-                    <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      id="employee-id"
-                      type="text"
-                      required
-                      value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      placeholder="사번을 입력하세요"
-                      className="w-full bg-input border border-border rounded-md py-2.5 pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
                   <label htmlFor="signup-email" className="text-sm font-medium text-foreground">
                     이메일
                   </label>
