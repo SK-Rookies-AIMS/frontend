@@ -37,7 +37,7 @@ import {
   fetchRiskHistory,
   fetchStatusDetail,
   fetchDriveDetail,
-} from "@/api/qualityApi"
+} from "@/lib/qualityApi"
 
 const PAGE_SIZE = 10
 
