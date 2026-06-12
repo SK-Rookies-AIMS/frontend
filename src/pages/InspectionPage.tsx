@@ -1,718 +1,715 @@
-"use client"
+import { useEffect, useMemo, useState } from "react"
 
-import { useState, useEffect } from "react"
 import { Header } from "@/components/dashboard/header"
-import { Mascot } from "@/components/dashboard/mascot"
 import { Footer } from "@/components/dashboard/footer"
+import { Mascot } from "@/components/dashboard/mascot"
 import { AuthGuard } from "@/components/auth-guard"
-import { ChevronDown, Car, Gauge, CheckCircle, X, Activity, Thermometer, Gauge as GaugeIcon } from "lucide-react"
+
 import {
+  Car,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Gauge,
+  PlayCircle,
+  CheckCircle2,
+  X,
+  Activity,
+  Battery,
+  Fuel,
+  ArrowRight,
+} from "lucide-react"
+
+import {
+  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
+  Legend,
 } from "recharts"
 
-type TimeRange = "1일" | "1주" | "1달"
+import {
+  fetchInspectionProcess,
+  fetchInspectionSummary,
+  fetchRiskHistory,
+  fetchStatusDetail,
+  fetchDriveDetail,
+} from "@/api/qualityApi"
 
-const inspectionStages = [
-  {
-    id: 1,
-    name: "외관 검사",
-    status: "진행 중",
-    icon: "car",
-    count: 256,
-    progress: 87,
-    color: "#22c55e",
-  },
-  {
-    id: 2,
-    name: "기능 검사",
-    status: "진행 중",
-    icon: "gear",
-    count: 198,
-    progress: 68,
-    color: "#22c55e",
-  },
-  {
-    id: 3,
-    name: "주행 검사",
-    status: "진행 중",
-    icon: "steering",
-    count: 142,
-    progress: null,
-    progressLabel: "중단됨",
-    color: "#f59e0b",
-    isSelected: true,
-  },
-  {
-    id: 4,
-    name: "최종 검사",
-    status: "대기 중",
-    icon: "check",
-    count: 0,
-    progress: 0,
-    color: "#64748b",
-  },
-]
+const PAGE_SIZE = 10
 
-const generateRiskTrendData = (range: TimeRange) => {
-  const length = range === "1일" ? 24 : range === "1주" ? 7 : 30
-  const labelFn = (i: number) => {
-    if (range === "1일") return `${String(i).padStart(2, "0")}:00`
-    if (range === "1주") return ["월", "화", "수", "목", "금", "토", "일"][i]
-    return `${i + 1}일`
-  }
-  
-  return Array.from({ length }, (_, i) => ({
-    time: labelFn(i),
-    exterior: 20 + Math.random() * 30,
-    function: 25 + Math.random() * 40,
-    driving: 30 + Math.random() * 50,
-    final: 10 + Math.random() * 30,
-  }))
-}
+// ─── 검사 코드(carCode) 기준 집계 헬퍼 ─────────────────────────────────────
+function groupByInspectionNo(data: any[], scoreKey: string) {
+  const map: Record<
+    string,
+    { inspectionNo: string; total: number; normal: number; abnormal: number; item: any }
+  > = {}
 
-const inspectionSummary = {
-  total: 596,
-  completed: 256,
-  completedPercent: 43,
-  normal: 231,
-  normalPercent: 90.2,
-  abnormal: 25,
-  abnormalPercent: 9.8,
-  waiting: 340,
-  waitingPercent: 57,
-}
-
-const riskDistribution = {
-  high: { count: 25, percent: 4.2 },
-  medium: { count: 78, percent: 13.1 },
-  low: { count: 493, percent: 82.7 },
-}
-
-const vehicleStatusData = [
-  { model: "K2", inspected: 128, normal: 116, abnormal: 12, rate: 9.4 },
-  { model: "K3", inspected: 156, normal: 142, abnormal: 14, rate: 9.0 },
-  { model: "K5", inspected: 98, normal: 88, abnormal: 10, rate: 10.2 },
-  { model: "K7", inspected: 102, normal: 92, abnormal: 10, rate: 9.8 },
-  { model: "EV6", inspected: 112, normal: 100, abnormal: 12, rate: 10.7 },
-]
-
-const driverInputData = [
-  { model: "K2", inspected: 128, normal: 118, abnormal: 10, rate: 7.8 },
-  { model: "K3", inspected: 156, normal: 139, abnormal: 17, rate: 10.9 },
-  { model: "K5", inspected: 98, normal: 87, abnormal: 11, rate: 11.2 },
-  { model: "K7", inspected: 102, normal: 90, abnormal: 12, rate: 11.8 },
-  { model: "EV6", inspected: 112, normal: 97, abnormal: 15, rate: 13.4 },
-]
-
-// Mock detailed vehicle data
-const vehicleDetailData = {
-  K2: {
-    exterior: {
-      safetyControl: {
-        abs: "정상",
-        esp: "정상",
-        airbag: "정상",
-        seatbelt: "정상",
-        blindSpot: "경고",
-      }
-    },
-    function: {
-      vehicleStatus: {
-        engineTemp: 92,
-        oilPressure: 45,
-        batteryVoltage: 12.6,
-        coolantLevel: "정상",
-        brakeFluid: "정상",
-      }
-    },
-    driving: {
-      dynamics: {
-        maxSpeed: 180,
-        acceleration: 8.2,
-        brakeDistance: 38.5,
-        steeringResponse: 0.12,
-        suspensionBalance: "정상",
-      }
-    },
-    driverInput: {
-      steeringAngle: 15.2,
-      brakeForce: 78,
-      acceleratorPosition: 45,
-      gearPosition: "D",
-      clutchEngagement: "N/A",
+  data.forEach((item) => {
+    // 원본 데이터 필드: carCode. inspectionNo 필드가 생기면 자동 우선 사용
+    const key = item.inspectionNo ?? item.carCode ?? item.id ?? "기타"
+    if (!map[key]) {
+      map[key] = { inspectionNo: key, total: 0, normal: 0, abnormal: 0, item }
     }
-  },
-  K3: {
-    exterior: {
-      safetyControl: {
-        abs: "정상",
-        esp: "정상",
-        airbag: "정상",
-        seatbelt: "정상",
-        blindSpot: "정상",
-      }
-    },
-    function: {
-      vehicleStatus: {
-        engineTemp: 88,
-        oilPressure: 42,
-        batteryVoltage: 12.8,
-        coolantLevel: "정상",
-        brakeFluid: "정상",
-      }
-    },
-    driving: {
-      dynamics: {
-        maxSpeed: 200,
-        acceleration: 7.8,
-        brakeDistance: 36.2,
-        steeringResponse: 0.10,
-        suspensionBalance: "정상",
-      }
-    },
-    driverInput: {
-      steeringAngle: 12.5,
-      brakeForce: 82,
-      acceleratorPosition: 52,
-      gearPosition: "D",
-      clutchEngagement: "N/A",
-    }
-  },
+    map[key].total++
+    if (item.inspectionResult === "NORMAL") map[key].normal++
+    else map[key].abnormal++
+  })
+
+  const rows = Object.values(map)
+  const totals = rows.reduce(
+    (acc, r) => ({
+      inspectionNo: "총 합계",
+      total: acc.total + r.total,
+      normal: acc.normal + r.normal,
+      abnormal: acc.abnormal + r.abnormal,
+      item: null,
+    }),
+    { inspectionNo: "총 합계", total: 0, normal: 0, abnormal: 0, item: null }
+  )
+  return { rows, totals }
 }
+
+
+// 기본 프로세스 카드 (API 실패 시 skeleton 표시용)
+const DEFAULT_PROCESSES = [
+  { id: "p1", processName: "외관 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p2", processName: "기능 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p3", processName: "주행 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p4", processName: "최종 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+]
 
 export default function InspectionPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [selectedLine, setSelectedLine] = useState("전체 라인 선택")
-  const [timeRange, setTimeRange] = useState<TimeRange>("1일")
-  const [riskTrendData, setRiskTrendData] = useState(generateRiskTrendData("1일"))
-  const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null)
-  const [detailType, setDetailType] = useState<"status" | "driver">("status")
+
+  const [processData, setProcessData] = useState<any[]>([])
+  const [summaryData, setSummaryData] = useState<any>({})
+  const [riskHistoryData, setRiskHistoryData] = useState<any[]>([])
+  const [statusDetailData, setStatusDetailData] = useState<any[]>([])
+  const [driveDetailData, setDriveDetailData] = useState<any[]>([])
+
+  const [statusPage, setStatusPage] = useState(1)
+  const [drivePage, setDrivePage] = useState(1)
+  const [selectedDetail, setSelectedDetail] = useState<any>(null)
+  const [detailType, setDetailType] = useState<'status'|'drive'>('status')
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000)
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
-    setRiskTrendData(generateRiskTrendData(timeRange))
-  }, [timeRange])
+    loadDashboard()
+  }, [])
 
-  const getTotals = (data: typeof vehicleStatusData) => ({
-    inspected: data.reduce((sum, item) => sum + item.inspected, 0),
-    normal: data.reduce((sum, item) => sum + item.normal, 0),
-    abnormal: data.reduce((sum, item) => sum + item.abnormal, 0),
-    rate: (data.reduce((sum, item) => sum + item.rate, 0) / data.length).toFixed(1),
-  })
+  async function loadDashboard() {
+    setIsLoading(true)
+    // 각 API를 독립적으로 호출 — 하나가 500이어도 나머지는 정상 렌더링
+    const safeCall = async (fn: () => Promise<any>, fallback: any) => {
+      try { return await fn() } catch (e) { console.error(e); return fallback }
+    }
 
-  const handleViewDetail = (model: string, type: "status" | "driver") => {
-    setSelectedVehicle(model)
-    setDetailType(type)
+    const [process, summary, riskHistory, statusDetail, driveDetail] =
+      await Promise.all([
+        safeCall(fetchInspectionProcess, []),
+        safeCall(fetchInspectionSummary, {}),
+        safeCall(fetchRiskHistory, []),
+        safeCall(fetchStatusDetail, []),
+        safeCall(fetchDriveDetail, []),
+      ])
+
+    setProcessData(Array.isArray(process) ? process : [])
+    setSummaryData(summary || {})
+    setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
+    setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
+    setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+    setIsLoading(false)
   }
 
-  const getVehicleDetail = (model: string) => {
-    return (vehicleDetailData as Record<string, typeof vehicleDetailData.K2>)[model] || vehicleDetailData.K2
+  // 최신 시간대 기준 최대 4개 추출
+  // createdAt 필드가 없으면 processData 전체를 그대로 사용
+  const latestProcesses = useMemo(() => {
+    if (!processData.length) return DEFAULT_PROCESSES
+    const hasTime = processData.some((item: any) => item.createdAt)
+    if (!hasTime) return processData.slice(0, 4)
+    const grouped = processData.reduce((acc: any, item: any) => {
+      const time = item.createdAt ?? "unknown"
+      if (!acc[time]) acc[time] = []
+      acc[time].push(item)
+      return acc
+    }, {})
+    const sortedTimes = Object.keys(grouped).sort()
+    const latestTime = sortedTimes[sortedTimes.length - 1]
+    return (grouped[latestTime] || []).slice(0, 4)
+  }, [processData])
+
+  // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
+  const derivedSummary = useMemo(() => {
+    const total = statusDetailData.length
+    if (!total && !summaryData?.totalCount) return null
+
+    // API 값이 있으면 그대로 사용, 없으면 detail 데이터로 계산
+    if (summaryData?.totalCount) return summaryData
+
+    const normal   = statusDetailData.filter((d) => d.inspectionResult === "NORMAL").length
+    const abnormal = statusDetailData.filter((d) => d.inspectionResult !== "NORMAL").length
+    return {
+      totalCount:      total,
+      inspectingCount: statusDetailData.filter((d) => d.processStatus === "RUNNING").length,
+      normalCount:     normal,
+      abnormalCount:   abnormal,
+      standbyCount:    statusDetailData.filter((d) => d.processStatus === "WAIT").length,
+    }
+  }, [summaryData, statusDetailData])
+
+  // derivedSummary가 있으면 우선 사용
+  const activeSummary = derivedSummary ?? summaryData ?? {}
+
+  // 위험도 그래프 데이터 변환
+  const chartData = useMemo(() => {
+    const grouped: any = {}
+    riskHistoryData.forEach((item) => {
+      const time = item.recordTime
+      if (!grouped[time]) grouped[time] = { time }
+      grouped[time][item.inspectionType] = item.riskScore
+    })
+    return Object.values(grouped)
+  }, [riskHistoryData])
+
+  // 위험도 분포 계산
+  const riskDistribution = useMemo(() => {
+    const total = statusDetailData.length || 1
+    const high = statusDetailData.filter((d) => (d.statusScore ?? 0) >= 75).length
+    const medium = statusDetailData.filter(
+      (d) => (d.statusScore ?? 0) >= 40 && (d.statusScore ?? 0) < 75
+    ).length
+    const low = statusDetailData.filter((d) => (d.statusScore ?? 0) < 40).length
+    return {
+      high,
+      medium,
+      low,
+      highPct: Math.round((high / total) * 100),
+      mediumPct: Math.round((medium / total) * 100),
+      lowPct: Math.round((low / total) * 100),
+    }
+  }, [statusDetailData])
+
+  // 집계 테이블 데이터
+  const statusGrouped = useMemo(
+    () => groupByInspectionNo(statusDetailData, "statusScore"),
+    [statusDetailData]
+  )
+  const driveGrouped = useMemo(
+    () => groupByInspectionNo(driveDetailData, "driveScore"),
+    [driveDetailData]
+  )
+
+  // 페이지네이션
+  const pagedStatusRows = useMemo(() => {
+    const start = (statusPage - 1) * PAGE_SIZE
+    return statusGrouped.rows.slice(start, start + PAGE_SIZE)
+  }, [statusGrouped.rows, statusPage])
+
+  const pagedDriveRows = useMemo(() => {
+    const start = (drivePage - 1) * PAGE_SIZE
+    return driveGrouped.rows.slice(start, start + PAGE_SIZE)
+  }, [driveGrouped.rows, drivePage])
+
+  const statusTotalPage = Math.ceil(statusGrouped.rows.length / PAGE_SIZE)
+  const driveTotalPage = Math.ceil(driveGrouped.rows.length / PAGE_SIZE)
+
+  function renderProcessIcon(name: string) {
+    if (name.includes("외관")) return <Car className="w-5 h-5" />
+    if (name.includes("기능")) return <Gauge className="w-5 h-5" />
+    if (name.includes("주행")) return <PlayCircle className="w-5 h-5" />
+    return <CheckCircle2 className="w-5 h-5" />
+  }
+
+  function getStatusColor(status: string) {
+    switch (status) {
+      case "RUNNING": return "text-green-400"
+      case "WAIT":    return "text-yellow-400"
+      case "COMPLETE": return "text-cyan-400"
+      default:        return "text-slate-400"
+    }
+  }
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case "RUNNING": return "진행 중"
+      case "WAIT":    return "대기 중"
+      case "COMPLETE": return "완료"
+      default:        return status
+    }
   }
 
   return (
     <AuthGuard>
-    <div className="min-h-screen bg-background flex flex-col">
-      <Header currentTime={currentTime} />
-      <main className="flex-1 p-4 overflow-auto relative">
-        {/* Page Title */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-lg font-semibold">검사 단계 모니터링</h1>
-            <p className="text-sm text-muted-foreground">각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.</p>
-          </div>
-          <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg">
-              <span className="text-sm">{selectedLine}</span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header currentTime={currentTime} />
 
-        {/* Inspection Stages */}
-        <div className="flex items-center gap-2 mb-6">
-          {inspectionStages.map((stage, index) => (
-            <div key={stage.id} className="flex items-center">
-              <div
-                className={`relative rounded-xl border p-4 min-w-[180px] ${
-                  stage.isSelected
-                    ? "border-warning bg-warning/10"
-                    : "border-border bg-card"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    stage.isSelected ? "bg-warning text-warning-foreground" : "bg-primary/20 text-primary"
-                  }`}>
-                    {stage.id}
-                  </div>
-                  <span className="font-medium">{stage.name}</span>
-                </div>
-                <p className={`text-xs mb-3 ${
-                  stage.status === "진행 중" ? "text-success" : "text-muted-foreground"
-                }`}>{stage.status}</p>
-                
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-secondary/50 flex items-center justify-center">
-                    {stage.icon === "car" && <Car className="w-6 h-6" />}
-                    {stage.icon === "gear" && <Gauge className="w-6 h-6" />}
-                    {stage.icon === "steering" && <SteeringIcon />}
-                    {stage.icon === "check" && <CheckCircle className="w-6 h-6" />}
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">차량 대수</p>
-                    <p className="text-xl font-bold">{stage.count} <span className="text-sm font-normal text-muted-foreground">대</span></p>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <p className="text-xs text-muted-foreground mb-1">진행률</p>
-                    {stage.progress !== null ? (
-                      <div className="relative w-12 h-12">
-                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                          <circle cx="18" cy="18" r="16" fill="none" stroke="#1e293b" strokeWidth="3" />
-                          <circle
-                            cx="18"
-                            cy="18"
-                            r="16"
-                            fill="none"
-                            stroke={stage.color}
-                            strokeWidth="3"
-                            strokeDasharray={`${stage.progress} 100`}
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-                          {stage.progress}%
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="relative w-12 h-12">
-                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                          <circle cx="18" cy="18" r="16" fill="none" stroke="#1e293b" strokeWidth="3" />
-                          <circle
-                            cx="18"
-                            cy="18"
-                            r="16"
-                            fill="none"
-                            stroke={stage.color}
-                            strokeWidth="3"
-                            strokeDasharray="50 100"
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-warning">
-                          {stage.progressLabel}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {index < inspectionStages.length - 1 && (
-                <div className="mx-2 text-primary">→</div>
-              )}
-            </div>
-          ))}
-        </div>
+        <main className="flex-1 p-6 overflow-auto">
 
-        {/* Middle Section - Chart and Summary */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {/* Risk Trend Chart */}
-          <div className="col-span-2 bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium">검사 단계별 위험도 추이</h3>
-              <div className="flex items-center gap-2">
-                {(["1일", "1주", "1달"] as TimeRange[]).map((range) => (
-                  <button
-                    key={range}
-                    onClick={() => setTimeRange(range)}
-                    className={`px-3 py-1 text-xs rounded ${
-                      timeRange === range
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                    }`}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-4 mb-4 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-0.5 bg-success" />
-                <span>외관 검사</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-0.5 bg-primary" />
-                <span>기능 검사</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-0.5 bg-warning" />
-                <span>주행 검사</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-0.5 bg-destructive" />
-                <span>최종 검사</span>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={riskTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
-                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, 100]} />
-                <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }} />
-                <Line type="monotone" dataKey="exterior" stroke="#22c55e" name="외관 검사" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="function" stroke="#00d4ff" name="기능 검사" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="driving" stroke="#f59e0b" name="주행 검사" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="final" stroke="#ef4444" name="최종 검사" dot={false} strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* ── TITLE ── */}
+          <div className="mb-5">
+            <h1 className="text-xl font-bold mb-1">품질 / 검사 단계 모니터링</h1>
+            <p className="text-sm text-muted-foreground">
+              각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.
+            </p>
           </div>
 
-          {/* Summary */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-4">검사 단계 요약</h3>
-            <div className="grid grid-cols-4 gap-2 mb-6">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">전체 차량 대수</p>
-                <p className="text-2xl font-bold">{inspectionSummary.total}</p>
-                <p className="text-xs text-muted-foreground">대</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">검사 완료</p>
-                <p className="text-2xl font-bold">{inspectionSummary.completed}</p>
-                <p className="text-xs text-muted-foreground">대 ({inspectionSummary.completedPercent}%)</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-success mb-1">정상</p>
-                <p className="text-2xl font-bold text-success">{inspectionSummary.normal}</p>
-                <p className="text-xs text-muted-foreground">대 ({inspectionSummary.normalPercent}%)</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-destructive mb-1">이상</p>
-                <p className="text-2xl font-bold text-destructive">{inspectionSummary.abnormal}</p>
-                <p className="text-xs text-muted-foreground">대 ({inspectionSummary.abnormalPercent}%)</p>
-              </div>
-            </div>
-            <div className="text-center mb-6">
-              <p className="text-xs text-warning mb-1">대기 중</p>
-              <p className="text-2xl font-bold text-warning">{inspectionSummary.waiting}</p>
-              <p className="text-xs text-muted-foreground">대 ({inspectionSummary.waitingPercent}%)</p>
-            </div>
-
-            <h4 className="text-sm font-medium mb-3">위험��� 분포</h4>
-            <div className="flex gap-2 mb-2 text-xs">
-              <span className="text-destructive">High</span>
-              <span className="text-warning">Medium</span>
-              <span className="text-success">Low</span>
-            </div>
-            <div className="flex h-6 rounded overflow-hidden">
-              <div
-                className="bg-destructive flex items-center justify-center text-[10px] text-destructive-foreground"
-                style={{ width: `${riskDistribution.high.percent}%` }}
-              >
-                {riskDistribution.high.count} 대 ({riskDistribution.high.percent}%)
-              </div>
-              <div
-                className="bg-warning flex items-center justify-center text-[10px] text-warning-foreground"
-                style={{ width: `${riskDistribution.medium.percent}%` }}
-              >
-                {riskDistribution.medium.count} 대 ({riskDistribution.medium.percent}%)
-              </div>
-              <div
-                className="bg-success flex items-center justify-center text-[10px] text-success-foreground"
-                style={{ width: `${riskDistribution.low.percent}%` }}
-              >
-                {riskDistribution.low.count} 대 ({riskDistribution.low.percent}%)
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Tables */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Vehicle Status Results */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-sm font-medium">차량 상태 결과</h3>
-              <button className="w-4 h-4 rounded-full bg-secondary flex items-center justify-center text-xs">?</button>
-              <span className="text-xs text-muted-foreground ml-2">외관(안전 제어), 기능(차량 상태), 주행(동역학)</span>
-            </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="text-left py-2">차종</th>
-                  <th className="text-center py-2">검사 받은 차량 대수</th>
-                  <th className="text-center py-2">정상</th>
-                  <th className="text-center py-2">이상</th>
-                  <th className="text-center py-2">이상률</th>
-                  <th className="text-center py-2">상세 보기</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vehicleStatusData.map((row) => (
-                  <tr key={row.model} className="border-t border-border">
-                    <td className="py-2">{row.model}</td>
-                    <td className="text-center">{row.inspected} 대</td>
-                    <td className="text-center text-success">{row.normal} 대</td>
-                    <td className="text-center text-destructive">{row.abnormal} 대</td>
-                    <td className="text-center text-warning">{row.rate}%</td>
-                    <td className="text-center">
-                      <button 
-                        onClick={() => handleViewDetail(row.model, "status")}
-                        className="px-2 py-1 text-xs bg-secondary rounded hover:bg-secondary/80"
-                      >
-                        보기
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t border-border font-medium">
-                  <td className="py-2">총 합계</td>
-                  <td className="text-center">{getTotals(vehicleStatusData).inspected} 대</td>
-                  <td className="text-center text-success">{getTotals(vehicleStatusData).normal} 대</td>
-                  <td className="text-center text-destructive">{getTotals(vehicleStatusData).abnormal} 대</td>
-                  <td className="text-center text-warning">{getTotals(vehicleStatusData).rate}%</td>
-                  <td className="text-center">-</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Driver Input Results */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-sm font-medium">운전자 입력 결과</h3>
-              <button className="w-4 h-4 rounded-full bg-secondary flex items-center justify-center text-xs">?</button>
-              <span className="text-xs text-muted-foreground ml-2">최종 검사(운전자 입력 데이터)</span>
-            </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="text-left py-2">차종</th>
-                  <th className="text-center py-2">검사 받은 차량 대수</th>
-                  <th className="text-center py-2">정상</th>
-                  <th className="text-center py-2">이상</th>
-                  <th className="text-center py-2">이상률</th>
-                  <th className="text-center py-2">상세 보기</th>
-                </tr>
-              </thead>
-              <tbody>
-                {driverInputData.map((row) => (
-                  <tr key={row.model} className="border-t border-border">
-                    <td className="py-2">{row.model}</td>
-                    <td className="text-center">{row.inspected} 대</td>
-                    <td className="text-center text-success">{row.normal} 대</td>
-                    <td className="text-center text-destructive">{row.abnormal} 대</td>
-                    <td className="text-center text-warning">{row.rate}%</td>
-                    <td className="text-center">
-                      <button 
-                        onClick={() => handleViewDetail(row.model, "driver")}
-                        className="px-2 py-1 text-xs bg-secondary rounded hover:bg-secondary/80"
-                      >
-                        보기
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t border-border font-medium">
-                  <td className="py-2">총 합계</td>
-                  <td className="text-center">{getTotals(driverInputData).inspected} 대</td>
-                  <td className="text-center text-success">{getTotals(driverInputData).normal} 대</td>
-                  <td className="text-center text-destructive">{getTotals(driverInputData).abnormal} 대</td>
-                  <td className="text-center text-warning">{getTotals(driverInputData).rate}%</td>
-                  <td className="text-center">-</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Vehicle Detail Modal */}
-        {selectedVehicle && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-card border border-border rounded-lg w-[800px] max-h-[90vh] overflow-auto">
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">
-                  {selectedVehicle} {detailType === "status" ? "차량 상태 상��" : "운전자 입력 상세"}
-                </h2>
-                <button 
-                  onClick={() => setSelectedVehicle(null)}
-                  className="p-1 hover:bg-secondary rounded"
+          {/* ── PROCESS CARDS (4개, 화살표 연결) ── */}
+          <div className="flex items-center gap-2 mb-6">
+            {latestProcesses.map((process: any, index: number) => (
+              <div key={process.id} className="flex items-center flex-1 min-w-0">
+                <div
+                  className={`flex-1 bg-card border rounded-xl p-4 transition-all ${
+                    isLoading
+                      ? "border-border opacity-50 animate-pulse"
+                      : process.processStatus === "RUNNING"
+                      ? "border-cyan-500 shadow-[0_0_12px_rgba(0,212,255,0.2)]"
+                      : "border-border"
+                  }`}
                 >
-                  <X className="w-5 h-5" />
-                </button>
+                  {/* 카드 헤더 */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-cyan-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm font-semibold truncate">
+                        {process.processName}
+                      </span>
+                    </div>
+                    <span className={`text-xs font-medium shrink-0 ${getStatusColor(process.processStatus)}`}>
+                      {getStatusLabel(process.processStatus)}
+                    </span>
+                  </div>
+
+                  {/* 카드 바디 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300">
+                        {renderProcessIcon(process.processName)}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">차량 대수</p>
+                        <p className="text-2xl font-bold leading-tight">
+                          {process.totalVehicleCount}
+                          <span className="text-sm font-normal ml-1 text-muted-foreground">대</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 원형 진행률 */}
+                    <div className="relative w-12 h-12 shrink-0">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="15" fill="none" stroke="#1e293b" strokeWidth="3" />
+                        <circle
+                          cx="18" cy="18" r="15" fill="none"
+                          stroke={process.processStatus === "RUNNING" ? "#00d4ff" : process.processStatus === "COMPLETE" ? "#22c55e" : "#f59e0b"}
+                          strokeWidth="3"
+                          strokeDasharray={`${process.progressRate} 100`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold">
+                        {process.progressRate}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 화살표 (마지막 카드 제외) */}
+                {index < latestProcesses.length - 1 && (
+                  <ArrowRight className="w-4 h-4 text-slate-500 shrink-0 mx-1" />
+                )}
               </div>
-              
-              <div className="p-4">
-                {detailType === "status" ? (
-                  <div className="space-y-6">
-                    {/* 외관 검사 - 안전 제어 시스템 */}
-                    <div>
-                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Car className="w-4 h-4 text-primary" />
-                        외관 검사 (안전 제어 시스템)
-                      </h3>
-                      <div className="grid grid-cols-5 gap-3">
-                        {Object.entries(getVehicleDetail(selectedVehicle).exterior.safetyControl).map(([key, value]) => (
-                          <div key={key} className="bg-secondary/30 rounded-lg p-3 text-center">
-                            <p className="text-xs text-muted-foreground mb-1">{key.toUpperCase()}</p>
-                            <p className={`font-medium ${value === "정상" ? "text-success" : "text-warning"}`}>
-                              {value}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+            ))}
+          </div>
 
-                    {/* 기능 검사 - 차량 상태 데이터 */}
-                    <div>
-                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Gauge className="w-4 h-4 text-primary" />
-                        기능 검사 (차량 상태 데이터)
-                      </h3>
-                      <div className="grid grid-cols-5 gap-3">
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <div className="flex justify-center mb-1">
-                            <Thermometer className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">엔진 온도</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).function.vehicleStatus.engineTemp}°C</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <div className="flex justify-center mb-1">
-                            <GaugeIcon className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">오일 압력</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).function.vehicleStatus.oilPressure} PSI</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <div className="flex justify-center mb-1">
-                            <Activity className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">배터리 전압</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).function.vehicleStatus.batteryVoltage}V</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">냉각수</p>
-                          <p className={`font-medium ${getVehicleDetail(selectedVehicle).function.vehicleStatus.coolantLevel === "정상" ? "text-success" : "text-warning"}`}>
-                            {getVehicleDetail(selectedVehicle).function.vehicleStatus.coolantLevel}
-                          </p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">브레이크 오일</p>
-                          <p className={`font-medium ${getVehicleDetail(selectedVehicle).function.vehicleStatus.brakeFluid === "정상" ? "text-success" : "text-warning"}`}>
-                            {getVehicleDetail(selectedVehicle).function.vehicleStatus.brakeFluid}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+          {/* ── CHART + SUMMARY (좌우 분할) ── */}
+          <div className="grid grid-cols-[1fr_300px] gap-4 mb-6">
 
-                    {/* 주행 검사 - 차량 동역학 데이터 */}
-                    <div>
-                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                        <SteeringIcon />
-                        주행 검사 (차량 동역학 데이터)
-                      </h3>
-                      <div className="grid grid-cols-5 gap-3">
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">최고 속도</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).driving.dynamics.maxSpeed} km/h</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">가속력 (0-100)</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).driving.dynamics.acceleration}초</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">제동 거리</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).driving.dynamics.brakeDistance}m</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">조향 반응</p>
-                          <p className="font-medium">{getVehicleDetail(selectedVehicle).driving.dynamics.steeringResponse}초</p>
-                        </div>
-                        <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">서스펜션</p>
-                          <p className={`font-medium ${getVehicleDetail(selectedVehicle).driving.dynamics.suspensionBalance === "정상" ? "text-success" : "text-warning"}`}>
-                            {getVehicleDetail(selectedVehicle).driving.dynamics.suspensionBalance}
-                          </p>
-                        </div>
-                      </div>
+            {/* 차트 */}
+            <div className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
+                  <Tooltip
+                    contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}
+                    labelStyle={{ color: "#94a3b8", fontSize: 11 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="DYNAMICS" name="외관 검사" stroke="#22c55e" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="STATUS"   name="기능 검사" stroke="#00d4ff" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="CONTROL"  name="주행 검사" stroke="#f59e0b" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="DRIVE"    name="최종 검사" stroke="#ef4444" dot={false} strokeWidth={1.5} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* 검사 단계 요약 */}
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
+              <h3 className="text-sm font-semibold">검사 단계 요약</h3>
+
+              {/* 카운트 그리드 */}
+              <div className="grid grid-cols-2 gap-3">
+                <SummaryBox
+                  label="전체 차량 대수"
+                  value={activeSummary?.totalCount ?? 0}
+                  sub="대"
+                  size="lg"
+                />
+                <SummaryBox
+                  label="검사 진행"
+                  value={activeSummary?.inspectingCount ?? 0}
+                  sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.inspectingCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
+                />
+                <SummaryBox
+                  label="정상"
+                  value={activeSummary?.normalCount ?? 0}
+                  sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.normalCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
+                  color="text-green-400"
+                />
+                <SummaryBox
+                  label="이상"
+                  value={activeSummary?.abnormalCount ?? 0}
+                  sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.abnormalCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
+                  color="text-red-400"
+                />
+              </div>
+
+              {/* 대기 */}
+              <div className="bg-slate-800/60 rounded-lg p-3 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">대기 중</span>
+                <div className="text-right">
+                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.standbyCount ?? 0}</span>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.standbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
+                  </span>
+                </div>
+              </div>
+
+              {/* 위험도 분포 */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">위험도 분포</p>
+                <div className="flex gap-3 text-xs mb-1.5">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                    High
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
+                    Medium
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                    Low
+                  </span>
+                </div>
+
+                {/* 가로 막대 */}
+                <div className="w-full h-5 rounded-full overflow-hidden flex">
+                  {riskDistribution.highPct > 0 && (
+                    <div
+                      className="bg-red-500 flex items-center justify-center text-[10px] font-medium text-white"
+                      style={{ width: `${riskDistribution.highPct}%` }}
+                    >
+                      {riskDistribution.highPct}%
                     </div>
+                  )}
+                  {riskDistribution.mediumPct > 0 && (
+                    <div
+                      className="bg-yellow-400 flex items-center justify-center text-[10px] font-medium text-black"
+                      style={{ width: `${riskDistribution.mediumPct}%` }}
+                    >
+                      {riskDistribution.mediumPct}%
+                    </div>
+                  )}
+                  {riskDistribution.lowPct > 0 && (
+                    <div
+                      className="bg-green-500 flex items-center justify-center text-[10px] font-medium text-white"
+                      style={{ width: `${riskDistribution.lowPct}%` }}
+                    >
+                      {riskDistribution.lowPct}%
+                    </div>
+                  )}
+                  {/* 데이터 없을 때 placeholder */}
+                  {riskDistribution.high + riskDistribution.medium + riskDistribution.low === 0 && (
+                    <div className="w-full bg-slate-700" />
+                  )}
+                </div>
+
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                  <span>{riskDistribution.high}대</span>
+                  <span>{riskDistribution.medium}대</span>
+                  <span>{riskDistribution.low}대</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── TABLES ── */}
+          <div className="grid grid-cols-2 gap-4">
+
+            {/* 차량 상태 결과 */}
+            <AggregateTable
+              title="차량 상태 결과"
+              rows={pagedStatusRows}
+              totals={statusGrouped.totals}
+              page={statusPage}
+              totalPage={statusTotalPage}
+              setPage={setStatusPage}
+              onSelect={(item: any) => { setDetailType('status'); setSelectedDetail(item) }}
+            />
+
+            {/* 운전자 입력 결과 */}
+            <AggregateTable
+              title="운전자 입력 결과"
+              rows={pagedDriveRows}
+              totals={driveGrouped.totals}
+              page={drivePage}
+              totalPage={driveTotalPage}
+              setPage={setDrivePage}
+              onSelect={(item: any) => { setDetailType('drive'); setSelectedDetail(item) }}
+            />
+          </div>
+
+          {/* ── DETAIL MODAL ── */}
+          {selectedDetail && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+              <div className="w-[850px] bg-card border border-border rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold">
+                      {detailType === 'status' ? '차량 상태 상세' : '운전자 입력 상세'}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedDetail.inspectionNo ?? selectedDetail.carCode}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelectedDetail(null)}>
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {detailType === 'status' ? (
+                  /* ── 차량 상태 결과 (fetchStatusDetail 데이터) ── */
+                  <div className="grid grid-cols-3 gap-4">
+                    <DetailCard icon={<Activity />} label="속도"         value={selectedDetail.speed} />
+                    <DetailCard icon={<Battery />}  label="배터리 전압"  value={selectedDetail.batteryVoltage} />
+                    <DetailCard icon={<Fuel />}     label="연료율"       value={selectedDetail.fuelRate} />
+                    <DetailCard icon={<Gauge />}    label="스로틀 포지션" value={selectedDetail.throttlePosition} />
+                    <DetailCard icon={<Gauge />}    label="조향각"       value={selectedDetail.steeringAngle} />
+                    <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 ) : (
-                  <div>
-                    {/* 운전자 입력 데이터 */}
-                    <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-primary" />
-                      최종 검사 (운전자 입력 데이터)
-                    </h3>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      기능 검사, 주행 검사 단계에서 입력된 시나리오 정보입니다.
-                    </p>
-                    <div className="grid grid-cols-5 gap-3">
-                      <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                        <p className="text-xs text-muted-foreground">핸들 각도</p>
-                        <p className="font-medium">{getVehicleDetail(selectedVehicle).driverInput.steeringAngle}°</p>
-                      </div>
-                      <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                        <p className="text-xs text-muted-foreground">브레이크 눌림 강도</p>
-                        <p className="font-medium">{getVehicleDetail(selectedVehicle).driverInput.brakeForce}%</p>
-                      </div>
-                      <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                        <p className="text-xs text-muted-foreground">액셀 위치</p>
-                        <p className="font-medium">{getVehicleDetail(selectedVehicle).driverInput.acceleratorPosition}%</p>
-                      </div>
-                      <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                        <p className="text-xs text-muted-foreground">기어 위치</p>
-                        <p className="font-medium">{getVehicleDetail(selectedVehicle).driverInput.gearPosition}</p>
-                      </div>
-                      <div className="bg-secondary/30 rounded-lg p-3 text-center">
-                        <p className="text-xs text-muted-foreground">클러치</p>
-                        <p className="font-medium">{getVehicleDetail(selectedVehicle).driverInput.clutchEngagement}</p>
-                      </div>
-                    </div>
+                  /* ── 운전자 입력 결과 (fetchDriveDetail 데이터) ── */
+                  <div className="grid grid-cols-3 gap-4">
+                    <DetailCard icon={<Activity />} label="주행 거리"    value={selectedDetail.driveDistance} />
+                    <DetailCard icon={<Gauge />}    label="평균 속도"    value={selectedDetail.avgSpeed} />
+                    <DetailCard icon={<PlayCircle />} label="급가속 횟수" value={selectedDetail.suddenAccelCount} />
+                    <DetailCard icon={<PlayCircle />} label="급감속 횟수" value={selectedDetail.suddenBrakeCount} />
+                    <DetailCard icon={<Clock />}    label="주행 시간"    value={selectedDetail.driveDuration} />
+                    <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 )}
 
-                <div className="flex justify-end mt-6">
-                  <button 
-                    onClick={() => setSelectedVehicle(null)}
-                    className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-secondary"
-                  >
-                    닫기
-                  </button>
+                <div className="mt-6 p-4 rounded-xl bg-slate-900">
+                  <p className="text-sm text-muted-foreground mb-2">검사 결과</p>
+                  <p className={`text-lg font-bold ${
+                    selectedDetail.inspectionResult === 'NORMAL' ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {selectedDetail.inspectionResult === 'NORMAL' ? '정상' : '이상'}
+                  </p>
+                  <p className="mt-4 text-sm text-slate-300">
+                    {selectedDetail.issueMessage || "이상 메시지 없음"}
+                  </p>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Mascot */}
-        <Mascot />
-      </main>
-      <Footer />
-    </div>
+          <Mascot />
+        </main>
+
+        <Footer />
+      </div>
     </AuthGuard>
   )
 }
 
-function SteeringIcon() {
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  SUB-COMPONENTS                                                             */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function SummaryBox({
+  label,
+  value,
+  sub = "",
+  color = "",
+  size = "md",
+}: {
+  label: string
+  value: number
+  sub?: string
+  color?: string
+  size?: "md" | "lg"
+}) {
   return (
-    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3" />
-      <line x1="12" y1="3" x2="12" y2="9" />
-      <line x1="3" y1="12" x2="9" y2="12" />
-      <line x1="15" y1="12" x2="21" y2="12" />
-    </svg>
+    <div className="bg-slate-800/60 rounded-lg p-3">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className={`font-bold leading-tight ${color} ${size === "lg" ? "text-3xl" : "text-2xl"}`}>
+        {value}
+      </p>
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
+function AggregateTable({
+  title,
+  rows,
+  totals,
+  page,
+  totalPage,
+  setPage,
+  onSelect,
+}: {
+  title: string
+  rows: any[]
+  totals: any
+  page: number
+  totalPage: number
+  setPage: (p: number) => void
+  onSelect: (item: any) => void
+}) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <h3 className="text-sm font-semibold mb-4">{title}</h3>
+
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          {/* 1행: 그룹 헤더 */}
+          <tr className="text-xs text-muted-foreground">
+            <th rowSpan={2} className="text-left py-2 pr-3 border-b border-border align-bottom">검사 코드</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">차량 대수</th>
+            <th colSpan={2} className="text-center py-1 px-2 border border-border bg-slate-800/50 rounded-t">상태</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom text-red-400 whitespace-nowrap">이상률</th>
+            <th rowSpan={2} className="text-center py-2 pl-2 border-b border-border align-bottom">상세</th>
+          </tr>
+          {/* 2행: 상태 하위 헤더 */}
+          <tr className="text-xs">
+            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-green-400 font-medium">정상</th>
+            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-red-400 font-medium">이상</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {rows.map((row) => {
+            const abnormalPct =
+              row.total > 0 ? ((row.abnormal / row.total) * 100).toFixed(1) : "0.0"
+            const isAbnormal = row.abnormal > 0
+            return (
+              <tr key={row.inspectionNo} className="border-b border-border hover:bg-slate-800/40 transition-colors">
+                <td className="py-2.5 pr-3 font-mono text-xs">{row.inspectionNo}</td>
+                <td className="text-center px-2">{row.total}<span className="text-xs text-muted-foreground ml-0.5">대</span></td>
+                {/* 상태: 정상 / 이상 묶음 */}
+                <td className="text-center px-3 text-green-400 font-medium">
+                  {row.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+                </td>
+                <td className="text-center px-3 text-red-400 font-medium">
+                  {row.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+                </td>
+                <td className={`text-center px-2 font-medium ${isAbnormal ? "text-red-400" : "text-green-400"}`}>
+                  {abnormalPct}%
+                </td>
+                <td className="text-center pl-2">
+                  <button
+                    onClick={() => onSelect(row.item)}
+                    className="px-3 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 text-xs hover:bg-cyan-500/30 transition-colors"
+                  >
+                    보기
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+
+        {/* 총합계 행 */}
+        <tfoot>
+          <tr className="border-t-2 border-slate-600 bg-slate-800/30">
+            <td className="py-2.5 pr-3 font-semibold text-xs">총 합계</td>
+            <td className="text-center px-2 font-semibold">
+              {totals.total}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+            </td>
+            <td className="text-center px-3 text-green-400 font-semibold">
+              {totals.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+            </td>
+            <td className="text-center px-3 text-red-400 font-semibold">
+              {totals.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+            </td>
+            <td className="text-center px-2 text-red-400 font-semibold">
+              {totals.total > 0 ? ((totals.abnormal / totals.total) * 100).toFixed(1) : "0.0"}%
+            </td>
+            <td className="text-center pl-2 text-muted-foreground text-xs">-</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* PAGINATION */}
+      {totalPage > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage(page - 1)}
+            className="p-1.5 rounded bg-secondary disabled:opacity-30 hover:bg-slate-700 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {page} / {totalPage}
+          </span>
+          <button
+            disabled={page >= totalPage}
+            onClick={() => setPage(page + 1)}
+            className="p-1.5 rounded bg-secondary disabled:opacity-30 hover:bg-slate-700 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: any
+}) {
+  return (
+    <div className="bg-slate-900 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-2 text-cyan-400">
+        {icon}
+        <span className="text-sm">{label}</span>
+      </div>
+      <p className="text-xl font-bold">{value ?? "-"}</p>
+    </div>
   )
 }
