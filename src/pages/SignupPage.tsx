@@ -16,10 +16,39 @@ export default function SignupPage() {
 
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (passwordMismatch) return
     setIsSubmitting(true)
+
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: userName,
+          email,
+          password,
+          workExperience: parseInt(yearsOfExperience),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        alert(data.message || "회원가입에 성공했습니다. 로그인 페이지로 이동합니다.")
+        window.location.href = "/login"
+      } else {
+        alert(data.message || "회원가입 실패: 알 수 없는 오류입니다.")
+      }
+    } catch (error) {
+      console.error("회원가입 중 오류 발생:", error)
+      alert("회원가입 중 네트워크 오류가 발생했습니다.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
