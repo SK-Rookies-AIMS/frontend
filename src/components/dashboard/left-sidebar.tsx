@@ -2,6 +2,14 @@
 
 import { CheckCircle, Truck, Clock } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
+import { useState, useEffect } from "react"
+
+interface Task {
+  taskId: number
+  taskTitle: string
+  taskStatus: "PROGRESS" | "TODO" | "DONE"
+  scheduledAt: string
+}
 
 const productionData = [
   { time: "09:00", value: 2000 },
@@ -12,36 +20,99 @@ const productionData = [
   { time: "15:00", value: 12540 },
 ]
 
-// 시간별 담당업무 알림
-const scheduleAlerts = [
-  { time: "14:00", task: "프레스 라인 점검", status: "완료" },
-  { time: "15:00", task: "도장 부스 온도 확인", status: "진행 중" },
-  { time: "16:00", task: "AGV 배터리 점검", status: "예정" },
-]
-
 export function LeftSidebar() {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchUserTasks = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+        if (!accessToken) {
+          setError("로그인이 필요합니다.")
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch("/api/main/task-user", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+        })
+
+        const result = await response.json()
+
+        if (response.ok && result.success) {
+          setTasks(result.data)
+        } else {
+          setError(result.message || "담당 업무를 불러오지 못했습니다.")
+          if (response.status === 401 || response.status === 403) {
+            alert("인증이 만료되었습니다. 다시 로그인해주세요.")
+            sessionStorage.removeItem("aims-auth-accessToken")
+            sessionStorage.removeItem("aims-auth-refreshToken")
+            window.location.href = "/login"
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("알 수 없는 오류가 발생했습니다.")
+        }
+        console.error("담당 업무를 가져오는 중 오류:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserTasks()
+  }, [])
+
+  const getStatusDisplay = (status: Task["taskStatus"]) => {
+    switch (status) {
+      case "DONE":
+        return { label: "완료", className: "bg-emerald-100 text-emerald-800" }
+      case "PROGRESS":
+        return { label: "진행 중", className: "bg-blue-100 text-blue-800" }
+      case "TODO":
+        return { label: "대기 중", className: "bg-amber-100 text-amber-800" }
+      default:
+        return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
+    }
+  }
+
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col">
-      {/* Schedule Alerts - 시간별 담당업무 알림 */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2 mb-2">
           <Clock className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-medium">시간별 담당업무</h3>
         </div>
         <div className="space-y-2">
-          {scheduleAlerts.map((alert, index) => (
-            <div key={index} className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground w-12">{alert.time}</span>
-              <span className="flex-1 truncate">{alert.task}</span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                alert.status === "완료" ? "bg-success/20 text-success" :
-                alert.status === "진행 중" ? "bg-primary/20 text-primary" :
-                "bg-secondary text-muted-foreground"
-              }`}>
-                {alert.status}
-              </span>
-            </div>
-          ))}
+          {loading && <div className="text-xs text-muted-foreground">로딩 중...</div>}
+          {error && <div className="text-xs text-destructive">오류: {error}</div>}
+          {!loading && !error && tasks.length === 0 && (
+            <div className="text-xs text-muted-foreground">할당된 업무가 없습니다.</div>
+          )}
+          {!loading && !error && tasks.length > 0 && tasks.map((task) => {
+            const statusDisplay = getStatusDisplay(task.taskStatus)
+            return (
+              <div key={task.taskId} className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground w-12">
+                  {task.scheduledAt.substring(11, 16)}
+                </span>
+                <span className="flex-1 truncate">{task.taskTitle}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusDisplay.className}`}>
+                  {statusDisplay.label}
+                </span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
