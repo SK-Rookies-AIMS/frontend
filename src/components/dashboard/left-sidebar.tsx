@@ -11,9 +11,10 @@ interface Task {
   scheduledAt: string
 }
 
-interface AgvStatus {
-  agvStatus: string
-  count: number
+interface AgvStatusSummary {
+    movingCount: number
+    waitingCount: number
+    returningCount: number
 }
 
 const productionData = [
@@ -29,9 +30,9 @@ export function LeftSidebar() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [agvStatuses, setAgvStatuses] = useState<AgvStatus[]>([])
+  const [agvStatus, setAgvStatus] = useState<AgvStatusSummary | null>(null)
 
-  const fetchAgvStatuses = async () => {
+  const fetchAgvStatus = async () => {
     try {
       const accessToken = sessionStorage.getItem("aims-auth-accessToken")
 
@@ -39,7 +40,7 @@ export function LeftSidebar() {
         return
       }
 
-      const response = await fetch("/api/main/agv-status-counts", {
+      const response = await fetch("/api/main/agv-status", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -50,7 +51,7 @@ export function LeftSidebar() {
       const result = await response.json()
 
       if (response.ok && result.success) {
-        setAgvStatuses(result.data)
+        setAgvStatus(result.data)
       }
     } catch (err) {
       console.error("AGV 상태 조회 실패:", err)
@@ -103,7 +104,7 @@ export function LeftSidebar() {
     }
 
     fetchUserTasks()
-    fetchAgvStatuses()
+    fetchAgvStatus()
   }, [])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
@@ -199,29 +200,33 @@ export function LeftSidebar() {
             <Truck className="w-8 h-8 text-primary" />
           </div>
           <div className="flex-1 space-y-1.5 text-sm">
-            {agvStatuses.length === 0 ? (
+            {agvStatus ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">운행 중</span>
+                  <span className="font-medium text-success">
+                    {agvStatus.movingCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">대기 중</span>
+                  <span className="font-medium">
+                    {agvStatus.waitingCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">복귀 중</span>
+                  <span className="font-medium text-primary">
+                    {agvStatus.returningCount} 대
+                  </span>
+                </div>
+              </>
+            ) : (
               <div className="text-xs text-muted-foreground">
                 운반 현황 정보 없음
               </div>
-            ) : (
-              agvStatuses.map((agv) => {
-                const display = getAgvStatusDisplay(agv.agvStatus)
-
-                return (
-                  <div
-                    key={agv.agvStatus}
-                    className="flex justify-between items-center"
-                  >
-                    <span className={display.labelClass}>
-                      {display.label}
-                    </span>
-
-                    <span className={display.valueClass}>
-                      {agv.count} 대
-                    </span>
-                  </div>
-                )
-              })
             )}
           </div>
         </div>
