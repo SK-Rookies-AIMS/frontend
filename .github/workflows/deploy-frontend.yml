@@ -70,6 +70,17 @@ jobs:
             --region "$AWS_REGION" \
             --name "$EKS_CLUSTER_NAME"
 
+      - name: Load deploy parameters from SSM
+        run: |
+          CERTIFICATE_ARN=$(aws ssm get-parameter --name "/aims/dev/acm/certificate-arn" --query "Parameter.Value" --output text)
+          ALB_SECURITY_GROUPS=$(aws ssm get-parameter --name "/aims/dev/alb/security-groups" --query "Parameter.Value" --output text)
+
+          echo "::add-mask::$CERTIFICATE_ARN"
+          echo "::add-mask::$ALB_SECURITY_GROUPS"
+
+          echo "CERTIFICATE_ARN=$CERTIFICATE_ARN" >> "$GITHUB_ENV"
+          echo "ALB_SECURITY_GROUPS=$ALB_SECURITY_GROUPS" >> "$GITHUB_ENV"
+
       - name: Deploy to EKS
         run: |
           kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -77,7 +88,11 @@ jobs:
           sed "s|IMAGE_PLACEHOLDER|${{ steps.build-image.outputs.image_uri }}|g" \
             infra/k8s/frontend/frontend.yaml > /tmp/frontend.yaml
 
+          sed -e "s|CERTIFICATE_ARN_PLACEHOLDER|$CERTIFICATE_ARN|g" \
+              -e "s|ALB_SECURITY_GROUPS_PLACEHOLDER|$ALB_SECURITY_GROUPS|g" \
+            infra/k8s/ingress/frontend-ingress.yaml > /tmp/frontend-ingress.yaml
+
           kubectl apply -f /tmp/frontend.yaml
-          kubectl apply -f infra/k8s/ingress/frontend-ingress.yaml
+          kubectl apply -f /tmp/frontend-ingress.yaml
 
           kubectl rollout status deployment/frontend -n "$NAMESPACE" --timeout=180s
