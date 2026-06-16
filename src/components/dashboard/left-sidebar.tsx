@@ -11,6 +11,11 @@ interface Task {
   scheduledAt: string
 }
 
+interface AgvStatus {
+  agvStatus: string
+  count: number
+}
+
 const productionData = [
   { time: "09:00", value: 2000 },
   { time: "10:00", value: 4500 },
@@ -24,6 +29,33 @@ export function LeftSidebar() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [agvStatuses, setAgvStatuses] = useState<AgvStatus[]>([])
+
+  const fetchAgvStatuses = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch("/api/main/agv-status-counts", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setAgvStatuses(result.data)
+      }
+    } catch (err) {
+      console.error("AGV 상태 조회 실패:", err)
+    }
+  }
 
   useEffect(() => {
     const fetchUserTasks = async () => {
@@ -71,6 +103,7 @@ export function LeftSidebar() {
     }
 
     fetchUserTasks()
+    fetchAgvStatuses()
   }, [])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
@@ -83,6 +116,38 @@ export function LeftSidebar() {
         return { label: "대기 중", className: "bg-amber-100 text-amber-800" }
       default:
         return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
+    }
+  }
+
+  const getAgvStatusDisplay = (status: string) => {
+    switch (status) {
+      case "MOVING":
+        return {
+          label: "운행 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium text-success",
+        }
+
+      case "WAITING":
+        return {
+          label: "대기 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium",
+        }
+
+      case "RETURNING":
+        return {
+          label: "복귀 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium text-primary",
+        }
+
+      default:
+        return {
+          label: status,
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium",
+        }
     }
   }
 
@@ -134,22 +199,30 @@ export function LeftSidebar() {
             <Truck className="w-8 h-8 text-primary" />
           </div>
           <div className="flex-1 space-y-1.5 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">운행 중</span>
-              <span className="font-medium text-success">8 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">대기 중</span>
-              <span className="font-medium">3 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">작업 중</span>
-              <span className="font-medium text-primary">4 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-destructive">고장</span>
-              <span className="font-medium text-destructive">0 대</span>
-            </div>
+            {agvStatuses.length === 0 ? (
+              <div className="text-xs text-muted-foreground">
+                운반 현황 정보 없음
+              </div>
+            ) : (
+              agvStatuses.map((agv) => {
+                const display = getAgvStatusDisplay(agv.agvStatus)
+
+                return (
+                  <div
+                    key={agv.agvStatus}
+                    className="flex justify-between items-center"
+                  >
+                    <span className={display.labelClass}>
+                      {display.label}
+                    </span>
+
+                    <span className={display.valueClass}>
+                      {agv.count} 대
+                    </span>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
