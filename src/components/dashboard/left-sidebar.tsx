@@ -17,6 +17,11 @@ interface AgvStatusSummary {
     returningCount: number
 }
 
+interface EquipmentStatusItem {
+  status: string
+  count: number
+}
+
 const productionData = [
   { time: "09:00", value: 2000 },
   { time: "10:00", value: 4500 },
@@ -31,6 +36,7 @@ export function LeftSidebar() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [agvStatus, setAgvStatus] = useState<AgvStatusSummary | null>(null)
+  const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatusItem[]>([])
 
   const fetchAgvStatus = async () => {
     try {
@@ -56,6 +62,58 @@ export function LeftSidebar() {
     } catch (err) {
       console.error("AGV 상태 조회 실패:", err)
     }
+  }
+  
+  const fetchEquipmentStatus = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch(
+        "/api/main/equipment-status-counts",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setEquipmentStatus(result.data)
+      }
+    } catch (err) {
+      console.error("설비 상태 조회 실패:", err)
+    }
+  }
+
+  const getCountByStatus = (status: string) => {
+    return (
+      equipmentStatus.find(
+        item => item.status === status
+      )?.count ?? 0
+    )
+  }
+
+  const totalCount = equipmentStatus.reduce(
+    (sum, item) => sum + item.count,
+    0
+  )
+
+  const getPercentByStatus = (status: string) => {
+    const count = getCountByStatus(status)
+
+    if (totalCount === 0) {
+      return 0
+    }
+
+    return Math.round((count / totalCount) * 100)
   }
 
   useEffect(() => {
@@ -105,6 +163,7 @@ export function LeftSidebar() {
 
     fetchUserTasks()
     fetchAgvStatus()
+    fetchEquipmentStatus()
   }, [])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
@@ -236,10 +295,33 @@ export function LeftSidebar() {
       <div className="p-4 border-b border-border">
         <h3 className="text-sm font-medium mb-3">설비 상태 요약</h3>
         <div className="space-y-2">
-          <StatusRow color="bg-success" label="정상" count={196} percent={77} />
-          <StatusRow color="bg-warning" label="경고" count={35} percent={14} />
-          <StatusRow color="bg-destructive" label="고장" count={5} percent={2} />
-          <StatusRow color="bg-primary" label="점검" count={18} percent={7} />
+          <StatusRow
+            color="bg-success"
+            label="정상"
+            count={getCountByStatus("NORMAL")}
+            percent={getPercentByStatus("NORMAL")}
+          />
+
+          <StatusRow
+            color="bg-warning"
+            label="경고"
+            count={getCountByStatus("WARNING")}
+            percent={getPercentByStatus("WARNING")}
+          />
+
+          <StatusRow
+            color="bg-destructive"
+            label="고장"
+            count={getCountByStatus("FAULT")}
+            percent={getPercentByStatus("FAULT")}
+          />
+
+          <StatusRow
+            color="bg-primary"
+            label="점검"
+            count={getCountByStatus("MAINTENANCE")}
+            percent={getPercentByStatus("MAINTENANCE")}
+          />
         </div>
       </div>
 
