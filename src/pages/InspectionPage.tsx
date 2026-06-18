@@ -522,11 +522,23 @@ export default function InspectionPage() {
 
                 <div className="mt-6 p-4 rounded-xl bg-slate-900">
                   <p className="text-sm text-muted-foreground mb-2">검사 결과</p>
-                  <p className={`text-lg font-bold ${
-                    selectedDetail.inspectionResult === 'NORMAL' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {selectedDetail.inspectionResult === 'NORMAL' ? '정상' : '이상'}
+
+                  <p
+                    className={`text-lg font-bold ${
+                      selectedDetail.inspectionResult === "NORMAL"
+                        ? "text-green-400"
+                        : selectedDetail.inspectionResult === "WARNING"
+                        ? "text-yellow-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {selectedDetail.inspectionResult === "NORMAL"
+                      ? "정상"
+                      : selectedDetail.inspectionResult === "WARNING"
+                      ? "주의"
+                      : "이상"}
                   </p>
+
                   <p className="mt-4 text-sm text-slate-300">
                     {selectedDetail.issueMessage || "이상 메시지 없음"}
                   </p>
@@ -625,10 +637,20 @@ function AggregateTable({
 
                 <td
                   className={`text-center px-2 font-medium ${
-                    isFail ? "text-red-400" : "text-green-400"
+                    row.inspectionResult === "NORMAL" ||
+                    row.inspectionResult === "PASS"
+                      ? "text-green-400"
+                      : row.inspectionResult === "WARNING"
+                      ? "text-yellow-400"
+                      : "text-red-400"
                   }`}
                 >
-                  {row.inspectionResult}
+                  {row.inspectionResult === "NORMAL" ||
+                  row.inspectionResult === "PASS"
+                    ? "정상"
+                    : row.inspectionResult === "WARNING"
+                    ? "주의"
+                    : "이상"}
                 </td>
 
                 <td className="text-center pl-2">
