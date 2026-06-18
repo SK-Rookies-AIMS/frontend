@@ -651,7 +651,7 @@ function AggregateTable({
                     : row.inspectionResult === "WARNING"
                     ? "주의"
                     : "이상"}
-                </td>
+                </td> 
 
                 <td className="text-center pl-2">
                   <button
