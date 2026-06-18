@@ -74,11 +74,6 @@ export default function InspectionPage() {
     loadDashboard()
   }, [])
 
-  useEffect(() => {
-    console.log("STATUS", statusDetailData[0])
-    console.log("DRIVE", driveDetailData[0])
-  }, [statusDetailData, driveDetailData])
-
   async function loadDashboard() {
     setIsLoading(true)
     // 각 API를 독립적으로 호출 — 하나가 500이어도 나머지는 정상 렌더링
@@ -96,7 +91,11 @@ export default function InspectionPage() {
       ])
 
     setProcessData(Array.isArray(process) ? process : [])
-    setSummaryData(summary || {})
+    if (Array.isArray(summary) && summary.length > 0) {
+      setSummaryData(summary[summary.length - 1])
+    } else {
+      setSummaryData(summary || {})
+    }
     setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
     setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
     setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
@@ -122,22 +121,28 @@ export default function InspectionPage() {
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
   const derivedSummary = useMemo(() => {
-    const total = statusDetailData.length
-    if (!total && !summaryData?.totalCount) return null
 
-    // API 값이 있으면 그대로 사용, 없으면 detail 데이터로 계산
-    if (summaryData?.totalCount) return summaryData
+    if (Array.isArray(summaryData) && summaryData.length > 0) {
 
-    const normal   = statusDetailData.filter((d) => d.inspectionResult === "NORMAL").length
-    const abnormal = statusDetailData.filter((d) => d.inspectionResult !== "NORMAL").length
-    return {
-      totalCount:      total,
-      inspectingCount: statusDetailData.filter((d) => d.processStatus === "RUNNING").length,
-      normalCount:     normal,
-      abnormalCount:   abnormal,
-      standbyCount:    statusDetailData.filter((d) => d.processStatus === "WAIT").length,
+      const latest = summaryData[summaryData.length - 1]
+
+      return {
+        totalCount: latest.totalCount ?? 0,
+        inspectingCount:
+          (latest.normalCount ?? 0) +
+          (latest.abnormalCount ?? 0),
+        normalCount: latest.normalCount ?? 0,
+        abnormalCount: latest.abnormalCount ?? 0,
+        standbyCount:
+          latest.standbyCount ??
+          latest.stanbyCount ??
+          0,
+      }
     }
-  }, [summaryData, statusDetailData])
+
+    return null
+
+  }, [summaryData])
 
   // derivedSummary가 있으면 우선 사용
   const activeSummary = derivedSummary ?? summaryData ?? {}
@@ -358,7 +363,7 @@ export default function InspectionPage() {
                 />
                 <SummaryBox
                   label="검사 진행"
-                  value={activeSummary?.inspectingCount ?? 0}
+                  value={(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}
                   sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.inspectingCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
                 />
                 <SummaryBox
@@ -379,9 +384,9 @@ export default function InspectionPage() {
               <div className="bg-slate-800/60 rounded-lg p-3 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">대기 중</span>
                 <div className="text-right">
-                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.standbyCount ?? 0}</span>
+                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.stanbyCount ?? 0}</span>
                   <span className="text-xs text-muted-foreground ml-1">
-                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.standbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
+                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.stanbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
                   </span>
                 </div>
               </div>
@@ -499,18 +504,18 @@ export default function InspectionPage() {
                     <DetailCard icon={<Activity />} label="속도"         value={selectedDetail.speed} />
                     <DetailCard icon={<Battery />}  label="배터리 전압"  value={selectedDetail.batteryVoltage} />
                     <DetailCard icon={<Fuel />}     label="연료율"       value={selectedDetail.fuelRate} />
-                    <DetailCard icon={<Gauge />}    label="스로틀 포지션" value={selectedDetail.throttlePosition} />
-                    <DetailCard icon={<Gauge />}    label="조향각"       value={selectedDetail.steeringAngle} />
+                    <DetailCard icon={<Gauge />}    label="진동량" value={selectedDetail.att} />
+                    <DetailCard icon={<Gauge />}    label="차량 종류"       value={selectedDetail.carCode} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 ) : (
                   /* ── 운전자 입력 결과 (fetchDriveDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="주행 거리"    value={selectedDetail.driveDistance} />
-                    <DetailCard icon={<Gauge />}    label="평균 속도"    value={selectedDetail.avgSpeed} />
-                    <DetailCard icon={<PlayCircle />} label="급가속 횟수" value={selectedDetail.suddenAccelCount} />
-                    <DetailCard icon={<PlayCircle />} label="급감속 횟수" value={selectedDetail.suddenBrakeCount} />
-                    <DetailCard icon={<Clock />}    label="주행 시간"    value={selectedDetail.driveDuration} />
+                    <DetailCard icon={<Activity />} label="조향각"    value={selectedDetail.steeringAngle} />
+                    <DetailCard icon={<Gauge />}    label="브레이크 강도"    value={selectedDetail.brakePressure} />
+                    <DetailCard icon={<PlayCircle />} label="운전 방식" value={selectedDetail.drivingPattern} />
+                    <DetailCard icon={<PlayCircle />} label="운행 점수" value={selectedDetail.driveScore} />
+                    <DetailCard icon={<Activity />}    label="가속량"    value={selectedDetail.throttlePosition} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 )}
