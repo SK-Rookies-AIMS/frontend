@@ -16,10 +16,39 @@ export default function SignupPage() {
 
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (passwordMismatch) return
     setIsSubmitting(true)
+
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: userName,
+          email,
+          password,
+          workExperience: parseInt(yearsOfExperience),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        alert(data.message || "회원가입에 성공했습니다. 로그인 페이지로 이동합니다.")
+        window.location.href = "/login"
+      } else {
+        alert(data.message || "회원가입 실패: 알 수 없는 오류입니다.")
+      }
+    } catch (error) {
+      console.error("회원가입 중 오류 발생:", error)
+      alert("회원가입 중 네트워크 오류가 발생했습니다.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -47,24 +76,6 @@ export default function SignupPage() {
               <h2 className="text-lg font-bold text-foreground mb-5">회원가입</h2>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="employee-id" className="text-sm font-medium text-foreground">
-                    사번
-                  </label>
-                  <div className="relative">
-                    <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      id="employee-id"
-                      type="text"
-                      required
-                      value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      placeholder="사번을 입력하세요"
-                      className="w-full bg-input border border-border rounded-md py-2.5 pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-                    />
-                  </div>
-                </div>
-
                 <div className="flex flex-col gap-2">
                   <label htmlFor="signup-email" className="text-sm font-medium text-foreground">
                     이메일

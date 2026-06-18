@@ -12,7 +12,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const [checked, setChecked] = useState(false)
 
   
-  const authed = sessionStorage.getItem("aims-auth") === "1"
+  const authed = sessionStorage.getItem("aims-auth-accessToken") !== null
   if (!authed) return <Navigate to="/login" replace />
   return <>{children}</>
 }

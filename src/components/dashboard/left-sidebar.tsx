@@ -2,6 +2,25 @@
 
 import { CheckCircle, Truck, Clock } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
+import { useState, useEffect } from "react"
+
+interface Task {
+  taskId: number
+  taskTitle: string
+  taskStatus: "PROGRESS" | "TODO" | "DONE"
+  scheduledAt: string
+}
+
+interface AgvStatusSummary {
+    movingCount: number
+    waitingCount: number
+    returningCount: number
+}
+
+interface EquipmentStatusItem {
+  status: string
+  count: number
+}
 
 const productionData = [
   { time: "09:00", value: 2000 },
@@ -12,36 +31,213 @@ const productionData = [
   { time: "15:00", value: 12540 },
 ]
 
-// 시간별 담당업무 알림
-const scheduleAlerts = [
-  { time: "14:00", task: "프레스 라인 점검", status: "완료" },
-  { time: "15:00", task: "도장 부스 온도 확인", status: "진행 중" },
-  { time: "16:00", task: "AGV 배터리 점검", status: "예정" },
-]
-
 export function LeftSidebar() {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [agvStatus, setAgvStatus] = useState<AgvStatusSummary | null>(null)
+  const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatusItem[]>([])
+
+  const fetchAgvStatus = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch("/api/main/agv-status", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setAgvStatus(result.data)
+      }
+    } catch (err) {
+      console.error("AGV 상태 조회 실패:", err)
+    }
+  }
+  
+  const fetchEquipmentStatus = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch(
+        "/api/main/equipment-status-counts",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setEquipmentStatus(result.data)
+      }
+    } catch (err) {
+      console.error("설비 상태 조회 실패:", err)
+    }
+  }
+
+  const getCountByStatus = (status: string) => {
+    return (
+      equipmentStatus.find(
+        item => item.status === status
+      )?.count ?? 0
+    )
+  }
+
+  const totalCount = equipmentStatus.reduce(
+    (sum, item) => sum + item.count,
+    0
+  )
+
+  const getPercentByStatus = (status: string) => {
+    const count = getCountByStatus(status)
+
+    if (totalCount === 0) {
+      return 0
+    }
+
+    return Math.round((count / totalCount) * 100)
+  }
+
+  useEffect(() => {
+    const fetchUserTasks = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+        if (!accessToken) {
+          setError("로그인이 필요합니다.")
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch("/api/main/task-user", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+        })
+
+        const result = await response.json()
+
+        if (response.ok && result.success) {
+          setTasks(result.data)
+        } else {
+          setError(result.message || "담당 업무를 불러오지 못했습니다.")
+          if (response.status === 401 || response.status === 403) {
+            alert("인증이 만료되었습니다. 다시 로그인해주세요.")
+            sessionStorage.removeItem("aims-auth-accessToken")
+            sessionStorage.removeItem("aims-auth-refreshToken")
+            window.location.href = "/login"
+          }
+        }
+      } catch (err) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("알 수 없는 오류가 발생했습니다.")
+        }
+        console.error("담당 업무를 가져오는 중 오류:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserTasks()
+    fetchAgvStatus()
+    fetchEquipmentStatus()
+  }, [])
+
+  const getStatusDisplay = (status: Task["taskStatus"]) => {
+    switch (status) {
+      case "DONE":
+        return { label: "완료", className: "bg-emerald-100 text-emerald-800" }
+      case "PROGRESS":
+        return { label: "진행 중", className: "bg-blue-100 text-blue-800" }
+      case "TODO":
+        return { label: "대기 중", className: "bg-amber-100 text-amber-800" }
+      default:
+        return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
+    }
+  }
+
+  const getAgvStatusDisplay = (status: string) => {
+    switch (status) {
+      case "MOVING":
+        return {
+          label: "운행 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium text-success",
+        }
+
+      case "WAITING":
+        return {
+          label: "대기 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium",
+        }
+
+      case "RETURNING":
+        return {
+          label: "복귀 중",
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium text-primary",
+        }
+
+      default:
+        return {
+          label: status,
+          labelClass: "text-muted-foreground",
+          valueClass: "font-medium",
+        }
+    }
+  }
+
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col">
-      {/* Schedule Alerts - 시간별 담당업무 알림 */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center gap-2 mb-2">
           <Clock className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-medium">시간별 담당업무</h3>
         </div>
         <div className="space-y-2">
-          {scheduleAlerts.map((alert, index) => (
-            <div key={index} className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground w-12">{alert.time}</span>
-              <span className="flex-1 truncate">{alert.task}</span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                alert.status === "완료" ? "bg-success/20 text-success" :
-                alert.status === "진행 중" ? "bg-primary/20 text-primary" :
-                "bg-secondary text-muted-foreground"
-              }`}>
-                {alert.status}
-              </span>
-            </div>
-          ))}
+          {loading && <div className="text-xs text-muted-foreground">로딩 중...</div>}
+          {error && <div className="text-xs text-destructive">오류: {error}</div>}
+          {!loading && !error && tasks.length === 0 && (
+            <div className="text-xs text-muted-foreground">할당된 업무가 없습니다.</div>
+          )}
+          {!loading && !error && tasks.length > 0 && tasks.map((task) => {
+            const statusDisplay = getStatusDisplay(task.taskStatus)
+            return (
+              <div key={task.taskId} className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground w-12">
+                  {task.scheduledAt.substring(11, 16)}
+                </span>
+                <span className="flex-1 truncate">{task.taskTitle}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusDisplay.className}`}>
+                  {statusDisplay.label}
+                </span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -63,22 +259,34 @@ export function LeftSidebar() {
             <Truck className="w-8 h-8 text-primary" />
           </div>
           <div className="flex-1 space-y-1.5 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">운행 중</span>
-              <span className="font-medium text-success">8 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">대기 중</span>
-              <span className="font-medium">3 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">작업 중</span>
-              <span className="font-medium text-primary">4 대</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-destructive">고장</span>
-              <span className="font-medium text-destructive">0 대</span>
-            </div>
+            {agvStatus ? (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">운행 중</span>
+                  <span className="font-medium text-success">
+                    {agvStatus.movingCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">대기 중</span>
+                  <span className="font-medium">
+                    {agvStatus.waitingCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">복귀 중</span>
+                  <span className="font-medium text-primary">
+                    {agvStatus.returningCount} 대
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                운반 현황 정보 없음
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -87,10 +295,40 @@ export function LeftSidebar() {
       <div className="p-4 border-b border-border">
         <h3 className="text-sm font-medium mb-3">설비 상태 요약</h3>
         <div className="space-y-2">
-          <StatusRow color="bg-success" label="정상" count={196} percent={77} />
-          <StatusRow color="bg-warning" label="경고" count={35} percent={14} />
-          <StatusRow color="bg-destructive" label="고장" count={5} percent={2} />
-          <StatusRow color="bg-primary" label="점검" count={18} percent={7} />
+          <StatusRow
+            color="bg-success"
+            label="RUNNING"
+            count={getCountByStatus("RUNNING")}
+            percent={getPercentByStatus("RUNNING")}
+          />
+
+          <StatusRow
+            color="bg-warning"
+            label="ERROR"
+            count={getCountByStatus("ERROR")}
+            percent={getPercentByStatus("ERROR")}
+          />
+
+          <StatusRow
+            color="bg-destructive"
+            label="IDLE"
+            count={getCountByStatus("IDLE")}
+            percent={getPercentByStatus("IDLE")}
+          />
+
+          <StatusRow
+            color="bg-primary"
+            label="MAINTENANCE"
+            count={getCountByStatus("MAINTENANCE")}
+            percent={getPercentByStatus("MAINTENANCE")}
+          />
+
+          <StatusRow
+            color="bg-primary"
+            label="STOPPED"
+            count={getCountByStatus("STOPPED")}
+            percent={getPercentByStatus("STOPPED")}
+          />
         </div>
       </div>
 
