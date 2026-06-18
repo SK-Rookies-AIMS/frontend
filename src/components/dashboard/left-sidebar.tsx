@@ -387,7 +387,7 @@ export function LeftSidebar() {
       <div className="p-4 flex-1">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">생산 추이 (EA)</h3>
-          <span className="text-xs text-muted-foreground">오늘</span>
+          <span className="text-xs text-muted-foreground">최근 7일</span>
         </div>
         <div className="h-32">
           <ResponsiveContainer width="100%" height="100%">
