@@ -1,6 +1,6 @@
-"use client"
+﻿"use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Header } from "@/components/dashboard/header"
 import { Mascot } from "@/components/dashboard/mascot"
 import { Footer } from "@/components/dashboard/footer"
@@ -15,8 +15,6 @@ import {
   ResponsiveContainer,
   Tooltip,
   Legend,
-  AreaChart,
-  Area,
 } from "recharts"
 
 const processStages = [
@@ -51,12 +49,119 @@ const aiAnalysisFactors = [
   { name: "센서 통신 지연 (3ms)", impact: 0.08 },
 ]
 
-const pressData = Array.from({ length: 20 }, (_, i) => ({
-  time: `${String(Math.floor(i * 1.2) + 6).padStart(2, "0")}:00`,
-  normal: 5000 + Math.random() * 5000,
-  abnormal: Math.random() * 2000,
-  max: 10000 + Math.random() * 5000,
-}))
+// 백엔드 연동 전 press_analysis_result 형태를 반영한 최신 5분 기준 목 데이터
+const latestPressAnchorData = [
+  { time: "12:30", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 11.9, cycle_time_gap_sec: -0.1, timestamp_delay_sec: 0.2, risk_score: 16, overall_risk_score: 20 },
+  { time: "12:35", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.0, cycle_time_gap_sec: 0.0, timestamp_delay_sec: 0.3, risk_score: 18, overall_risk_score: 22 },
+  { time: "12:40", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.2, cycle_time_gap_sec: 0.2, timestamp_delay_sec: 0.5, risk_score: 24, overall_risk_score: 26 },
+  { time: "12:45", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 11.8, cycle_time_gap_sec: -0.2, timestamp_delay_sec: 0.2, risk_score: 17, overall_risk_score: 21 },
+  { time: "12:50", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.3, cycle_time_gap_sec: 0.3, timestamp_delay_sec: 0.6, risk_score: 27, overall_risk_score: 29 },
+  { time: "12:55", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.1, cycle_time_gap_sec: 0.1, timestamp_delay_sec: 0.4, risk_score: 22, overall_risk_score: 25 },
+  { time: "13:00", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.4, cycle_time_gap_sec: 0.4, timestamp_delay_sec: 0.7, risk_score: 30, overall_risk_score: 32 },
+  { time: "13:05", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.2, cycle_time_gap_sec: 0.2, timestamp_delay_sec: 0.5, risk_score: 26, overall_risk_score: 29 },
+  { time: "13:10", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.6, cycle_time_gap_sec: 0.6, timestamp_delay_sec: 0.9, risk_score: 35, overall_risk_score: 36 },
+  { time: "13:15", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.3, cycle_time_gap_sec: 0.3, timestamp_delay_sec: 0.6, risk_score: 28, overall_risk_score: 31 },
+  { time: "13:20", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.7, cycle_time_gap_sec: 0.7, timestamp_delay_sec: 1.1, risk_score: 38, overall_risk_score: 39 },
+  { time: "13:25", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.2, cycle_time_gap_sec: 0.2, timestamp_delay_sec: 0.5, risk_score: 25, overall_risk_score: 28 },
+  { time: "13:30", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 11.8, cycle_time_gap_sec: -0.2, timestamp_delay_sec: 0.3, risk_score: 18, overall_risk_score: 24 },
+  { time: "13:35", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.1, cycle_time_gap_sec: 0.1, timestamp_delay_sec: 0.4, risk_score: 23, overall_risk_score: 27 },
+  { time: "13:40", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.4, cycle_time_gap_sec: 0.4, timestamp_delay_sec: 0.8, risk_score: 31, overall_risk_score: 33 },
+  { time: "13:45", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 13.2, cycle_time_gap_sec: 1.2, timestamp_delay_sec: 1.6, risk_score: 47, overall_risk_score: 45 },
+  { time: "13:50", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 14.7, cycle_time_gap_sec: 2.7, timestamp_delay_sec: 3.4, risk_score: 68, overall_risk_score: 61 },
+  { time: "13:55", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 13.8, cycle_time_gap_sec: 1.8, timestamp_delay_sec: 2.1, risk_score: 59, overall_risk_score: 55 },
+  { time: "14:00", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 15.6, cycle_time_gap_sec: 3.6, timestamp_delay_sec: 5.8, risk_score: 86, overall_risk_score: 79 },
+  { time: "14:05", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 14.2, cycle_time_gap_sec: 2.2, timestamp_delay_sec: 4.1, risk_score: 74, overall_risk_score: 70 },
+  { time: "14:10", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.9, cycle_time_gap_sec: 0.9, timestamp_delay_sec: 1.2, risk_score: 42, overall_risk_score: 43 },
+  { time: "14:15", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 13.4, cycle_time_gap_sec: 1.4, timestamp_delay_sec: 2.7, risk_score: 57, overall_risk_score: 54 },
+  { time: "14:20", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 14.8, cycle_time_gap_sec: 2.8, timestamp_delay_sec: 4.6, risk_score: 78, overall_risk_score: 74 },
+  { time: "14:25", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 14.6, cycle_time_gap_sec: 2.6, timestamp_delay_sec: 4.2, risk_score: 78, overall_risk_score: 74 },
+]
+
+type PressAnchor = (typeof latestPressAnchorData)[number] & {
+  dateTime: string
+  timestamp: number
+}
+
+const formatDateTime = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+
+const formatChartTick = (dateTime: string) => `${dateTime.slice(5, 10)} ${dateTime.slice(11)}`
+
+// 드래그 시 전날 데이터까지 조회할 수 있도록 이전 24시간의 5분 기준값을 만든다.
+const historicalPressAnchorData: PressAnchor[] = Array.from({ length: 288 }, (_, index) => {
+  const date = new Date(2026, 5, 17, 12, 30 + index * 5)
+  const wave = Math.sin(index / 12)
+  const actualCycleTime = Number((12.1 + wave * 0.45 + (index % 37 === 0 ? 1.1 : 0)).toFixed(1))
+  const timestampDelay = Number(Math.max(0.2, 0.6 + Math.cos(index / 9) * 0.35 + (index % 53 === 0 ? 1.5 : 0)).toFixed(1))
+  const riskScore = Math.round(Math.min(69, Math.max(14, 24 + Math.abs(wave) * 20 + timestampDelay * 4)))
+
+  return {
+    time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
+    dateTime: formatDateTime(date),
+    timestamp: date.getTime(),
+    target_cycle_time_sec: 12,
+    actual_cycle_time_sec: actualCycleTime,
+    cycle_time_gap_sec: Number((actualCycleTime - 12).toFixed(1)),
+    timestamp_delay_sec: timestampDelay,
+    risk_score: riskScore,
+    overall_risk_score: Math.max(18, riskScore - 4),
+  }
+})
+
+const datedLatestPressAnchorData: PressAnchor[] = latestPressAnchorData.map((item) => {
+  const [hour, minute] = item.time.split(":").map(Number)
+  const date = new Date(2026, 5, 18, hour, minute)
+
+  return {
+    ...item,
+    dateTime: formatDateTime(date),
+    timestamp: date.getTime(),
+  }
+})
+
+const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchorData]
+
+type PressDataPoint = PressAnchor
+
+// 5분 기준값 사이를 1분 단위로 보간해 모든 시각에서 상세 값을 확인할 수 있게 한다.
+const pressData: PressDataPoint[] = pressAnchorData.flatMap((current, index) => {
+  const next = pressAnchorData[index + 1]
+  if (!next) return [current]
+
+  return Array.from({ length: 5 }, (_, minuteOffset) => {
+    const ratio = minuteOffset / 5
+    const date = new Date(current.timestamp + minuteOffset * 60_000)
+    const interpolate = (key: "target_cycle_time_sec" | "actual_cycle_time_sec" | "cycle_time_gap_sec" | "timestamp_delay_sec" | "risk_score" | "overall_risk_score") =>
+      Number((current[key] + (next[key] - current[key]) * ratio).toFixed(1))
+
+    return {
+      time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
+      dateTime: formatDateTime(date),
+      timestamp: date.getTime(),
+      target_cycle_time_sec: interpolate("target_cycle_time_sec"),
+      actual_cycle_time_sec: interpolate("actual_cycle_time_sec"),
+      cycle_time_gap_sec: interpolate("cycle_time_gap_sec"),
+      timestamp_delay_sec: interpolate("timestamp_delay_sec"),
+      risk_score: interpolate("risk_score"),
+      overall_risk_score: interpolate("overall_risk_score"),
+    }
+  })
+})
+
+const latestPressData = pressData[pressData.length - 1]
+
+const getRiskSeverity = (score: number) => {
+  if (score >= 70) return { label: "심각", className: "text-destructive" }
+  if (score >= 50) return { label: "경고", className: "text-warning" }
+  if (score >= 30) return { label: "주의", className: "text-warning" }
+  return { label: "정상", className: "text-success" }
+}
+
+const latestOverallRisk = getRiskSeverity(latestPressData.overall_risk_score)
+const PRESS_CHART_WINDOW_SIZE = 31
+const pressAvailableDates = Array.from(
+  new Set(pressData.map((item) => item.dateTime.slice(0, 10))),
+).reverse()
 
 // 차체 로봇 데이터
 const bodyRobotData = Array.from({ length: 20 }, (_, i) => ({
@@ -87,12 +192,89 @@ export default function ManufacturingPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState("press")
   const [selectedVehicle, setSelectedVehicle] = useState("VIN-001245")
+  const [pressChartStartIndex, setPressChartStartIndex] = useState(
+    Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
+  )
+  const [isPressChartDragging, setIsPressChartDragging] = useState(false)
+  const pressChartDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startIndex: number
+    width: number
+  } | null>(null)
+
+  const visiblePressData = pressData.slice(
+    pressChartStartIndex,
+    pressChartStartIndex + PRESS_CHART_WINDOW_SIZE,
+  )
+  const selectedPressDate =
+    visiblePressData[Math.floor(visiblePressData.length / 2)]?.dateTime.slice(0, 10) ??
+    pressAvailableDates[0]
+
+  const handlePressDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedDate = event.target.value
+    const firstIndex = pressData.findIndex((item) => item.dateTime.startsWith(selectedDate))
+    const lastIndex = pressData.reduce(
+      (foundIndex, item, index) =>
+        item.dateTime.startsWith(selectedDate) ? index : foundIndex,
+      -1,
+    )
+
+    if (firstIndex < 0 || lastIndex < 0) return
+
+    setPressChartStartIndex(
+      Math.max(firstIndex, lastIndex - PRESS_CHART_WINDOW_SIZE + 1),
+    )
+  }
+
+  const handlePressChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    pressChartDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startIndex: pressChartStartIndex,
+      width: event.currentTarget.getBoundingClientRect().width,
+    }
+    setIsPressChartDragging(true)
+  }
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = pressChartDragRef.current
+      if (!drag || event.pointerId !== drag.pointerId) return
+
+      event.preventDefault()
+      const pixelsPerPoint = Math.max(5, drag.width / (PRESS_CHART_WINDOW_SIZE - 1))
+      const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
+      const maxStartIndex = pressData.length - PRESS_CHART_WINDOW_SIZE
+
+      setPressChartStartIndex(
+        Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
+      )
+    }
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (pressChartDragRef.current?.pointerId !== event.pointerId) return
+      pressChartDragRef.current = null
+      setIsPressChartDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
+    window.addEventListener("pointerup", handlePointerEnd)
+    window.addEventListener("pointercancel", handlePointerEnd)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerEnd)
+      window.removeEventListener("pointercancel", handlePointerEnd)
+    }
   }, [])
 
   return (
@@ -256,7 +438,7 @@ export default function ManufacturingPage() {
                 activeTab === "press" ? "border-primary text-primary" : "border-transparent text-muted-foreground"
               }`}
             >
-              2.1 프레스 | 이상 징지 탐지
+              2.1 프레스 | 이상 정지 탐지
             </button>
             <button
               onClick={() => setActiveTab("body")}
@@ -290,59 +472,111 @@ export default function ManufacturingPage() {
                 <div className="col-span-2">
                   <div className="flex items-center gap-8 mb-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">평균값 가동률</p>
-                      <p className="text-2xl font-bold">12,458 <span className="text-sm font-normal">ea</span></p>
+                      <p className="text-xs text-muted-foreground">기준 사이클 타임</p>
+                      <p className="text-2xl font-bold">{latestPressData.target_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">이상 탐지</p>
-                      <p className="text-2xl font-bold">152.3 <span className="text-sm font-normal">ea</span></p>
+                      <p className="text-xs text-muted-foreground">실제 사이클 타임</p>
+                      <p className="text-2xl font-bold text-warning">{latestPressData.actual_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">핵심 편차</p>
-                      <p className="text-2xl font-bold">15.2 <span className="text-sm font-normal">ea</span></p>
+                      <p className="text-xs text-muted-foreground">사이클 지연</p>
+                      <p className="text-2xl font-bold text-destructive">+{latestPressData.cycle_time_gap_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">전일 대비 변화</p>
-                      <p className="text-2xl font-bold text-destructive">2 <span className="text-sm font-normal">건</span></p>
+                      <p className="text-xs text-muted-foreground">Timestamp 지연</p>
+                      <p className="text-2xl font-bold text-destructive">{latestPressData.timestamp_delay_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">위험도</p>
+                      <p className="text-2xl font-bold text-warning">{latestPressData.risk_score} <span className="text-sm font-normal">/ 100</span></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">전체 위험도</p>
+                      <p className={`text-2xl font-bold ${latestOverallRisk.className}`}>{latestOverallRisk.label}</p>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">전류 RMS 및 CNT 추이</h4>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-medium">프레스 사이클 타임 및 지연 추이</h4>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      날짜
+                      <select
+                        aria-label="프레스 차트 날짜 선택"
+                        value={selectedPressDate}
+                        onChange={handlePressDateChange}
+                        className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      >
+                        {pressAvailableDates.map((date) => (
+                          <option key={date} value={date}>
+                            {date}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-4 mb-2 text-xs">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-primary" />
-                      <span>정상</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-0.5 bg-destructive" />
-                      <span>이상</span>
+                      <span>실제 사이클 타임</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-success" />
-                      <span>최심</span>
+                      <span>기준 사이클 타임</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-0.5 bg-warning" />
+                      <span>Timestamp 지연</span>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={pressData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
-                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#64748b" label={{ value: 'RMS (ea)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#64748b" label={{ value: 'CNT (ea)', angle: 90, position: 'insideRight', fontSize: 10 }} />
-                      <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }} />
-                      <Line yAxisId="left" type="monotone" dataKey="normal" stroke="#00d4ff" name="정상" dot={false} strokeWidth={2} />
-                      <Line yAxisId="left" type="monotone" dataKey="abnormal" stroke="#ef4444" name="이상" dot={false} strokeWidth={2} strokeDasharray="5 5" />
-                      <Line yAxisId="right" type="monotone" dataKey="max" stroke="#22c55e" name="최심" dot={false} strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div
+                    className={`select-none ${isPressChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    style={{ touchAction: "none" }}
+                    onPointerDownCapture={handlePressChartPointerDown}
+                  >
+                    <ResponsiveContainer width="100%" height={210}>
+                      <LineChart
+                        data={visiblePressData}
+                        margin={{ top: 5, right: 24, left: 4, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis
+                          dataKey="dateTime"
+                          interval={4}
+                          padding={{ left: 8, right: 12 }}
+                          tick={{ fontSize: 10 }}
+                          stroke="#64748b"
+                          tickFormatter={formatChartTick}
+                        />
+                        <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                        <Tooltip
+                          labelFormatter={(label) => `분석 시각 ${label}`}
+                          formatter={(value, name) => [`${Number(value).toFixed(1)} sec`, name]}
+                          contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }}
+                          wrapperStyle={{ visibility: isPressChartDragging ? "hidden" : "visible", pointerEvents: "none" }}
+                        />
+                        <Line isAnimationActive={false} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                    <p>그래프 안을 좌우로 드래그하면 전날 날짜와 시간까지 이동할 수 있습니다.</p>
+                    <p className="shrink-0 font-medium text-foreground">
+                      {visiblePressData[0]?.dateTime} ~ {visiblePressData[visiblePressData.length - 1]?.dateTime}
+                    </p>
+                  </div>
                 </div>
                 <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="font-medium text-destructive">프레스 이상 탐지</span>
+                    <span className="font-medium text-destructive">프레스 이상 정지 탐지</span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• CNT 증가 전체 감지</li>
-                    <li>• 전류 간 급감 패턴 감지</li>
+                    <li>• count_increase_yn = true</li>
+                    <li>• 실제 사이클 타임이 기준보다 초과</li>
                     <li>• Timestamp 지연 발생</li>
+                    <li>• press_analysis_result 기준 이상 정지 의심</li>
                   </ul>
                 </div>
               </div>
