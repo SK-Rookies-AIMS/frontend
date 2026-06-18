@@ -22,14 +22,12 @@ interface EquipmentStatusItem {
   count: number
 }
 
-const productionData = [
-  { time: "09:00", value: 2000 },
-  { time: "10:00", value: 4500 },
-  { time: "11:00", value: 6000 },
-  { time: "12:00", value: 8500 },
-  { time: "14:00", value: 10000 },
-  { time: "15:00", value: 12540 },
-]
+interface ProductionTrendItem {
+  id: number
+  totalCount: number
+  normalCount: number
+  createdAt: string
+}
 
 export function LeftSidebar() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -37,6 +35,7 @@ export function LeftSidebar() {
   const [error, setError] = useState<string | null>(null)
   const [agvStatus, setAgvStatus] = useState<AgvStatusSummary | null>(null)
   const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatusItem[]>([])
+  const [productionTrend, setProductionTrend] = useState<ProductionTrendItem[]>([])
 
   const fetchAgvStatus = async () => {
     try {
@@ -90,6 +89,35 @@ export function LeftSidebar() {
       }
     } catch (err) {
       console.error("설비 상태 조회 실패:", err)
+    }
+  }
+
+  const fetchProductionTrend = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch(
+        "/api/main/recent_production",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setProductionTrend(result.data)
+      }
+    } catch (err) {
+      console.error("생산 추이 조회 실패:", err)
     }
   }
 
@@ -164,6 +192,7 @@ export function LeftSidebar() {
     fetchUserTasks()
     fetchAgvStatus()
     fetchEquipmentStatus()
+    fetchProductionTrend()
   }, [])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
@@ -178,6 +207,11 @@ export function LeftSidebar() {
         return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
     }
   }
+
+  const productionData = productionTrend.map(item => ({
+    time: item.createdAt.substring(5, 10),
+    value: item.normalCount
+  }))
 
   const getAgvStatusDisplay = (status: string) => {
     switch (status) {
@@ -336,14 +370,16 @@ export function LeftSidebar() {
       <div className="p-4 border-b border-border">
         <h3 className="text-sm font-medium mb-2">오늘 실적</h3>
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold">12,540</span>
+          <span className="text-3xl font-bold">
+            {productionTrend.at(-1)?.normalCount ?? 0}
+          </span>
           <span className="text-sm text-muted-foreground">EA</span>
         </div>
         <div className="flex items-center gap-2 mt-2">
-          <span className="text-xs text-muted-foreground">목표 15,000 EA</span>
+          <span className="text-xs text-muted-foreground">목표 100 EA</span>
         </div>
         <div className="mt-2 h-2 bg-secondary rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full" style={{ width: "83.6%" }}></div>
+          <div className="h-full bg-primary rounded-full" style={{ width: `${((productionTrend.at(-1)?.normalCount ?? 0) / 100) * 100}%` }}></div>
         </div>
       </div>
 
@@ -351,7 +387,7 @@ export function LeftSidebar() {
       <div className="p-4 flex-1">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">생산 추이 (EA)</h3>
-          <span className="text-xs text-muted-foreground">오늘</span>
+          <span className="text-xs text-muted-foreground">최근 7일</span>
         </div>
         <div className="h-32">
           <ResponsiveContainer width="100%" height="100%">
@@ -366,7 +402,7 @@ export function LeftSidebar() {
                 tick={{ fontSize: 10, fill: '#8ba3c7' }}
                 axisLine={{ stroke: '#1e3a5f' }}
                 tickLine={false}
-                tickFormatter={(value) => `${value / 1000}K`}
+                tickFormatter={(value) => `${value}`}
               />
               <Tooltip 
                 contentStyle={{ 
