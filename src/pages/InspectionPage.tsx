@@ -41,38 +41,6 @@ import {
 
 const PAGE_SIZE = 10
 
-// ─── 검사 코드(carCode) 기준 집계 헬퍼 ─────────────────────────────────────
-function groupByInspectionNo(data: any[], scoreKey: string) {
-  const map: Record<
-    string,
-    { inspectionNo: string; total: number; normal: number; abnormal: number; item: any }
-  > = {}
-
-  data.forEach((item) => {
-    // 원본 데이터 필드: carCode. inspectionNo 필드가 생기면 자동 우선 사용
-    const key = item.inspectionNo ?? item.carCode ?? item.id ?? "기타"
-    if (!map[key]) {
-      map[key] = { inspectionNo: key, total: 0, normal: 0, abnormal: 0, item }
-    }
-    map[key].total++
-    if (item.inspectionResult === "NORMAL") map[key].normal++
-    else map[key].abnormal++
-  })
-
-  const rows = Object.values(map)
-  const totals = rows.reduce(
-    (acc, r) => ({
-      inspectionNo: "총 합계",
-      total: acc.total + r.total,
-      normal: acc.normal + r.normal,
-      abnormal: acc.abnormal + r.abnormal,
-      item: null,
-    }),
-    { inspectionNo: "총 합계", total: 0, normal: 0, abnormal: 0, item: null }
-  )
-  return { rows, totals }
-}
-
 
 // 기본 프로세스 카드 (API 실패 시 skeleton 표시용)
 const DEFAULT_PROCESSES = [
@@ -105,6 +73,11 @@ export default function InspectionPage() {
   useEffect(() => {
     loadDashboard()
   }, [])
+
+  useEffect(() => {
+    console.log("STATUS", statusDetailData[0])
+    console.log("DRIVE", driveDetailData[0])
+  }, [statusDetailData, driveDetailData])
 
   async function loadDashboard() {
     setIsLoading(true)
@@ -170,15 +143,20 @@ export default function InspectionPage() {
   const activeSummary = derivedSummary ?? summaryData ?? {}
 
   // 위험도 그래프 데이터 변환
-  const chartData = useMemo(() => {
-    const grouped: any = {}
-    riskHistoryData.forEach((item) => {
-      const time = item.recordTime
-      if (!grouped[time]) grouped[time] = { time }
-      grouped[time][item.inspectionType] = item.riskScore
-    })
-    return Object.values(grouped)
-  }, [riskHistoryData])
+  const chartData = riskHistoryData.reduce((acc, item) => {
+    const round = `Round ${item.inspectionRound}`
+
+    let existing = acc.find(v => v.round === round)
+
+    if (!existing) {
+      existing = { round }
+      acc.push(existing)
+    }
+
+    existing[item.inspectionType] = item.riskScore
+
+    return acc
+  }, [])
 
   // 위험도 분포 계산
   const riskDistribution = useMemo(() => {
@@ -199,28 +177,36 @@ export default function InspectionPage() {
   }, [statusDetailData])
 
   // 집계 테이블 데이터
-  const statusGrouped = useMemo(
-    () => groupByInspectionNo(statusDetailData, "statusScore"),
+  const statusRows = useMemo(
+    () => statusDetailData,
     [statusDetailData]
   )
-  const driveGrouped = useMemo(
-    () => groupByInspectionNo(driveDetailData, "driveScore"),
+
+  const driveRows = useMemo(
+    () => driveDetailData,
     [driveDetailData]
   )
 
   // 페이지네이션
   const pagedStatusRows = useMemo(() => {
-    const start = (statusPage - 1) * PAGE_SIZE
-    return statusGrouped.rows.slice(start, start + PAGE_SIZE)
-  }, [statusGrouped.rows, statusPage])
+  const start = (statusPage - 1) * PAGE_SIZE
+    return statusRows.slice(start, start + PAGE_SIZE)
+  }, [statusRows, statusPage])
 
   const pagedDriveRows = useMemo(() => {
     const start = (drivePage - 1) * PAGE_SIZE
-    return driveGrouped.rows.slice(start, start + PAGE_SIZE)
-  }, [driveGrouped.rows, drivePage])
+    return driveRows.slice(start, start + PAGE_SIZE)
+  }, [driveRows, drivePage])
 
-  const statusTotalPage = Math.ceil(statusGrouped.rows.length / PAGE_SIZE)
-  const driveTotalPage = Math.ceil(driveGrouped.rows.length / PAGE_SIZE)
+  const statusTotalPage = Math.max(
+    1,
+    Math.ceil(statusRows.length / PAGE_SIZE)
+  )
+
+  const driveTotalPage = Math.max(
+    1,
+    Math.ceil(driveRows.length / PAGE_SIZE)
+  )
 
   function renderProcessIcon(name: string) {
     if (name.includes("외관")) return <Car className="w-5 h-5" />
@@ -466,22 +452,26 @@ export default function InspectionPage() {
             <AggregateTable
               title="차량 상태 결과"
               rows={pagedStatusRows}
-              totals={statusGrouped.totals}
               page={statusPage}
               totalPage={statusTotalPage}
               setPage={setStatusPage}
-              onSelect={(item: any) => { setDetailType('status'); setSelectedDetail(item) }}
+              onSelect={(item: any) => {
+                setDetailType("status")
+                setSelectedDetail(item)
+              }}
             />
 
             {/* 운전자 입력 결과 */}
             <AggregateTable
               title="운전자 입력 결과"
               rows={pagedDriveRows}
-              totals={driveGrouped.totals}
               page={drivePage}
               totalPage={driveTotalPage}
               setPage={setDrivePage}
-              onSelect={(item: any) => { setDetailType('drive'); setSelectedDetail(item) }}
+              onSelect={(item: any) => {
+                setDetailType("drive")
+                setSelectedDetail(item)
+              }}
             />
           </div>
 
@@ -580,7 +570,6 @@ function SummaryBox({
 function AggregateTable({
   title,
   rows,
-  totals,
   page,
   totalPage,
   setPage,
@@ -588,7 +577,6 @@ function AggregateTable({
 }: {
   title: string
   rows: any[]
-  totals: any
   page: number
   totalPage: number
   setPage: (p: number) => void
@@ -603,40 +591,44 @@ function AggregateTable({
           {/* 1행: 그룹 헤더 */}
           <tr className="text-xs text-muted-foreground">
             <th rowSpan={2} className="text-left py-2 pr-3 border-b border-border align-bottom">검사 코드</th>
-            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">차량 대수</th>
-            <th colSpan={2} className="text-center py-1 px-2 border border-border bg-slate-800/50 rounded-t">상태</th>
-            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom text-red-400 whitespace-nowrap">이상률</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">차량 번호</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">검사 결과</th>
             <th rowSpan={2} className="text-center py-2 pl-2 border-b border-border align-bottom">상세</th>
-          </tr>
-          {/* 2행: 상태 하위 헤더 */}
-          <tr className="text-xs">
-            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-green-400 font-medium">정상</th>
-            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-red-400 font-medium">이상</th>
           </tr>
         </thead>
 
         <tbody>
           {rows.map((row) => {
-            const abnormalPct =
-              row.total > 0 ? ((row.abnormal / row.total) * 100).toFixed(1) : "0.0"
-            const isAbnormal = row.abnormal > 0
+            const isFail = row.inspectionResult === "FAIL"
+
             return (
-              <tr key={row.inspectionNo} className="border-b border-border hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-3 font-mono text-xs">{row.inspectionNo}</td>
-                <td className="text-center px-2">{row.total}<span className="text-xs text-muted-foreground ml-0.5">대</span></td>
-                {/* 상태: 정상 / 이상 묶음 */}
-                <td className="text-center px-3 text-green-400 font-medium">
-                  {row.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+              <tr
+                key={`${row.inspectionNo}-${row.vehicleNo}`}
+                className="border-b border-border hover:bg-slate-800/40 transition-colors"
+              >
+                <td className="py-2.5 pr-3 font-mono text-xs">
+                  {row.inspectionNo}
                 </td>
-                <td className="text-center px-3 text-red-400 font-medium">
-                  {row.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+
+                <td className="text-center px-2">
+                  {row.vehicleId ??
+                    row.vehicle_no ??
+                    row.carNumber ??
+                    row.car_number ??
+                    "-"}
                 </td>
-                <td className={`text-center px-2 font-medium ${isAbnormal ? "text-red-400" : "text-green-400"}`}>
-                  {abnormalPct}%
+
+                <td
+                  className={`text-center px-2 font-medium ${
+                    isFail ? "text-red-400" : "text-green-400"
+                  }`}
+                >
+                  {row.inspectionResult}
                 </td>
+
                 <td className="text-center pl-2">
                   <button
-                    onClick={() => onSelect(row.item)}
+                    onClick={() => onSelect(row)}
                     className="px-3 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 text-xs hover:bg-cyan-500/30 transition-colors"
                   >
                     보기
@@ -648,24 +640,6 @@ function AggregateTable({
         </tbody>
 
         {/* 총합계 행 */}
-        <tfoot>
-          <tr className="border-t-2 border-slate-600 bg-slate-800/30">
-            <td className="py-2.5 pr-3 font-semibold text-xs">총 합계</td>
-            <td className="text-center px-2 font-semibold">
-              {totals.total}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-3 text-green-400 font-semibold">
-              {totals.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-3 text-red-400 font-semibold">
-              {totals.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-2 text-red-400 font-semibold">
-              {totals.total > 0 ? ((totals.abnormal / totals.total) * 100).toFixed(1) : "0.0"}%
-            </td>
-            <td className="text-center pl-2 text-muted-foreground text-xs">-</td>
-          </tr>
-        </tfoot>
       </table>
 
       {/* PAGINATION */}
