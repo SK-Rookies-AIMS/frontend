@@ -135,3 +135,25 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes chart-line-reveal {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.chart-line-reveal .recharts-line-curve {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: chart-line-reveal 1.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-line-reveal .recharts-line-curve {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
