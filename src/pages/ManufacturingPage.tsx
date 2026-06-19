@@ -199,22 +199,98 @@ const bodyAvailableDates = Array.from(
   new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
 
-// 도장 품질 데이터
-const paintData = Array.from({ length: 20 }, (_, i) => ({
-  time: `${String(Math.floor(i * 1.2) + 6).padStart(2, "0")}:00`,
-  thickness: 25 + Math.random() * 10,
-  temperature: 22 + Math.random() * 8,
-  humidity: 60 + Math.random() * 20,
+const paintData = [
+  { eventTime: "2026-06-18T10:00:00", defectScore: 0.42, surfaceQualityScore: 88.4, thicknessValue: 121.2, thermalStdTemp: 2.1, visionLabel: "OK", riskScore: 34.2, severity: "NORMAL", isAbnormal: false, analysisMessage: "표면 품질 안정" },
+  { eventTime: "2026-06-18T10:15:00", defectScore: 0.51, surfaceQualityScore: 84.7, thicknessValue: 119.8, thermalStdTemp: 2.8, visionLabel: "OK", riskScore: 41.5, severity: "NORMAL", isAbnormal: false, analysisMessage: "도장 두께 정상 범위" },
+  { eventTime: "2026-06-18T10:30:00", defectScore: 0.68, surfaceQualityScore: 78.9, thicknessValue: 117.3, thermalStdTemp: 3.5, visionLabel: "DEFECT", riskScore: 67.4, severity: "WARNING", isAbnormal: true, analysisMessage: "비전 불량 라벨 감지" },
+  { eventTime: "2026-06-18T10:45:00", defectScore: 0.87, surfaceQualityScore: 72.3, thicknessValue: 116.5, thermalStdTemp: 4.2, visionLabel: "DEFECT", riskScore: 88.5, severity: "CRITICAL", isAbnormal: true, analysisMessage: "표면 품질 점수 저하 및 두께 이상 의심" },
+  { eventTime: "2026-06-18T11:00:00", defectScore: 0.73, surfaceQualityScore: 76.8, thicknessValue: 118.1, thermalStdTemp: 3.9, visionLabel: "DEFECT", riskScore: 72.8, severity: "WARNING", isAbnormal: true, analysisMessage: "불량 점수 상승" },
+  { eventTime: "2026-06-18T11:15:00", defectScore: 0.46, surfaceQualityScore: 86.2, thicknessValue: 120.4, thermalStdTemp: 2.4, visionLabel: "OK", riskScore: 38.6, severity: "NORMAL", isAbnormal: false, analysisMessage: "후속 샘플 품질 회복" },
+]
+
+const paintChartData = paintData.map((row) => ({
+  ...row,
+  time: new Date(row.eventTime).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
+  defectScoreScaled: row.defectScore <= 1 ? row.defectScore * 100 : row.defectScore,
 }))
 
-// 의장 조립 데이터
+const paintAlert = [...paintData].sort((a, b) => b.riskScore - a.riskScore)[0]
+const paintKpis = {
+  analysisCount: paintData.length,
+  defectRate: (paintData.filter((row) => row.isAbnormal || row.visionLabel === "DEFECT").length / paintData.length) * 100,
+  averageQuality: paintData.reduce((sum, row) => sum + row.surfaceQualityScore, 0) / paintData.length,
+  riskAlarmCount: paintData.filter((row) => row.severity === "WARNING" || row.severity === "CRITICAL").length,
+}
+
 const assemblyData = [
-  { vehicleId: "VIN-001245", currentStep: "엔진", status: "정상", progress: 78 },
-  { vehicleId: "VIN-001246", currentStep: "시트", status: "정상", progress: 65 },
-  { vehicleId: "VIN-001247", currentStep: "배선", status: "오류", progress: 42 },
-  { vehicleId: "VIN-001248", currentStep: "엔진", status: "정상", progress: 85 },
-  { vehicleId: "VIN-001249", currentStep: "대시보드", status: "지연", progress: 55 },
+  { carId: "CAR-000001", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A03>A02>A04", sequenceErrorCount: 1, missingPartCount: 0, fasteningErrorCount: 1, riskScore: 86.5, severity: "CRITICAL", isAbnormal: true, analysisMessage: "조립 순서 오류와 체결 오류 동시 감지" },
+  { carId: "CAR-000002", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 0, riskScore: 18.2, severity: "NORMAL", isAbnormal: false, analysisMessage: "정상 조립 완료" },
+  { carId: "CAR-000003", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A04", sequenceErrorCount: 0, missingPartCount: 1, fasteningErrorCount: 0, riskScore: 61.3, severity: "WARNING", isAbnormal: true, analysisMessage: "부품 누락 의심" },
+  { carId: "CAR-000004", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 1, riskScore: 54.7, severity: "WARNING", isAbnormal: true, analysisMessage: "체결 토크 이상 감지" },
+  { carId: "CAR-000005", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 0, riskScore: 22.4, severity: "NORMAL", isAbnormal: false, analysisMessage: "정상 조립 진행" },
 ]
+
+const assemblyAlert = [...assemblyData].sort((a, b) => b.riskScore - a.riskScore)[0]
+const assemblyKpis = {
+  carCount: new Set(assemblyData.map((row) => row.carId)).size,
+  sequenceErrors: assemblyData.reduce((sum, row) => sum + row.sequenceErrorCount, 0),
+  missingParts: assemblyData.reduce((sum, row) => sum + row.missingPartCount, 0),
+  fasteningErrors: assemblyData.reduce((sum, row) => sum + row.fasteningErrorCount, 0),
+  averageRisk: assemblyData.reduce((sum, row) => sum + row.riskScore, 0) / assemblyData.length,
+}
+
+type PaintChartDatum = (typeof paintChartData)[number]
+
+function PaintTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: Array<{ payload: PaintChartDatum }>
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+
+  const row = payload[0].payload
+
+  return (
+    <div className="rounded border border-border bg-card p-3 text-xs shadow">
+      <p className="mb-2 font-medium">{label}</p>
+      <div className="space-y-1 text-muted-foreground">
+        <p>event_time: {row.eventTime}</p>
+        <p>불량 점수: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (표시 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
+        <p>표면 품질 점수: {row.surfaceQualityScore.toFixed(1)}</p>
+        <p>도장 두께: {row.thicknessValue.toFixed(1)}</p>
+        <p>vision_label: {row.visionLabel}</p>
+      </div>
+    </div>
+  )
+}
+
+function formatSequence(sequence: string) {
+  return sequence.split(">").join(" > ")
+}
+
+function getAssemblyStatus(severity: string, isAbnormal: boolean) {
+  if (!isAbnormal) return "정상"
+  if (severity === "CRITICAL") return "위험"
+  if (severity === "WARNING") return "경고"
+  return "이상"
+}
+
+function getStatusBadgeClass(severity: string, isAbnormal: boolean) {
+  if (!isAbnormal) return "bg-success/20 text-success"
+  if (severity === "CRITICAL") return "bg-destructive/20 text-destructive"
+  if (severity === "WARNING") return "bg-warning/20 text-warning"
+  return "bg-destructive/20 text-destructive"
+}
+
+function getRiskTextClass(riskScore: number) {
+  if (riskScore >= 80) return "text-destructive"
+  if (riskScore >= 50) return "text-warning"
+  return "text-success"
+}
 
 export default function ManufacturingPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -636,7 +712,7 @@ export default function ManufacturingPage() {
                     </div>
                   </div>
                   <div
-                    className={`select-none ${isPressChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    className={`chart-line-reveal select-none ${isPressChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
                     style={{ touchAction: "none" }}
                     onPointerDownCapture={handlePressChartPointerDown}
                     onMouseEnter={() => setIsPressChartHovered(true)}
@@ -674,9 +750,9 @@ export default function ManufacturingPage() {
                             pointerEvents: "none",
                           }}
                         />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -753,16 +829,16 @@ export default function ManufacturingPage() {
                       <span>로봇 진동 점수</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <div className="w-3 h-0.5 bg-success" />
+                      <div className="w-3 h-0.5 bg-destructive" />
                       <span>위험도</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <div className="w-3 h-0.5 bg-warning" />
+                      <div className="w-3 h-0.5 bg-success" />
                       <span>피크 진동값</span>
                     </div>
                   </div>
                   <div
-                    className={`select-none ${isBodyChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    className={`chart-line-reveal select-none ${isBodyChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
                     style={{ touchAction: "none" }}
                     onPointerDownCapture={handleBodyChartPointerDown}
                     onMouseEnter={() => setIsBodyChartHovered(true)}
@@ -784,7 +860,7 @@ export default function ManufacturingPage() {
                           tickFormatter={formatChartTick}
                         />
                         <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748b" />
-                        <YAxis yAxisId="peak" orientation="right" domain={[0, 12]} tick={{ fontSize: 10 }} stroke="#f59e0b" />
+                        <YAxis yAxisId="peak" orientation="right" domain={[0, 12]} tick={{ fontSize: 10 }} stroke="#22c55e" />
                         <Tooltip
                           labelFormatter={(label) => `분석 시각 ${label}`}
                           formatter={(value, name) => [
@@ -804,9 +880,9 @@ export default function ManufacturingPage() {
                             pointerEvents: "none",
                           }}
                         />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="score" type="monotone" dataKey="robot_vibration_score" stroke="#00d4ff" name="로봇 진동 점수" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="score" type="monotone" dataKey="risk_score" stroke="#22c55e" name="위험도" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="peak" type="monotone" dataKey="frequency_peak_value" stroke="#f59e0b" name="피크 진동값" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} yAxisId="score" type="monotone" dataKey="robot_vibration_score" stroke="#00d4ff" name="로봇 진동 점수" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} yAxisId="score" type="monotone" dataKey="risk_score" stroke="#ef4444" name="위험도" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} yAxisId="peak" type="monotone" dataKey="frequency_peak_value" stroke="#22c55e" name="피크 진동값" dot={false} strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -855,48 +931,51 @@ export default function ManufacturingPage() {
                 <div className="col-span-2">
                   <div className="flex items-center gap-8 mb-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">도장 작업 수</p>
-                      <p className="text-2xl font-bold">1,245 <span className="text-sm font-normal">대</span></p>
+                      <p className="text-xs text-muted-foreground">도장 분석 건수</p>
+                      <p className="text-2xl font-bold">{paintKpis.analysisCount.toLocaleString()} <span className="text-sm font-normal">건</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">불량 예측률</p>
-                      <p className="text-2xl font-bold text-destructive">8.2% <span className="text-sm font-normal">(위험)</span></p>
+                      <p className="text-xs text-muted-foreground">불량 감지율</p>
+                      <p className="text-2xl font-bold text-destructive">{paintKpis.defectRate.toFixed(1)}% <span className="text-sm font-normal">(이상/DEFECT)</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">모델 정확도</p>
-                      <p className="text-2xl font-bold text-success">94.5% <span className="text-sm font-normal"></span></p>
+                      <p className="text-xs text-muted-foreground">평균 품질 점수</p>
+                      <p className="text-2xl font-bold text-success">{paintKpis.averageQuality.toFixed(1)} <span className="text-sm font-normal">점</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">전일 대비</p>
-                      <p className="text-2xl font-bold text-destructive">+2.1% <span className="text-sm font-normal"></span></p>
+                      <p className="text-xs text-muted-foreground">위험 알람 건수</p>
+                      <p className="text-2xl font-bold text-warning">{paintKpis.riskAlarmCount} <span className="text-sm font-normal">건</span></p>
                     </div>
                   </div>
                   <h4 className="text-sm font-medium mb-2">도장 품질 지표 추이</h4>
                   <div className="flex items-center gap-4 mb-2 text-xs">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-primary" />
-                      <span>도막 두께</span>
+                      <span>불량 점수</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-destructive" />
-                      <span>부스 온도</span>
+                      <span>표면 품질 점수</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-warning" />
-                      <span>습도</span>
+                      <span>도장 두께</span>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart key={activeTab} data={paintData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
-                      <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
-                      <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }} />
-                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="thickness" stroke="#00d4ff" name="도막 두께(μm)" dot={false} strokeWidth={2} />
-                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="temperature" stroke="#ef4444" name="부스 온도(°C)" dot={false} strokeWidth={2} />
-                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="humidity" stroke="#f59e0b" name="습도(%)" dot={false} strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div className="chart-line-reveal">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart key={activeTab} data={paintChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
+                        <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                        <Tooltip content={<PaintTooltip />} />
+                        <Legend />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="defectScoreScaled" stroke="#00d4ff" name="불량 점수" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="surfaceQualityScore" stroke="#ef4444" name="표면 품질 점수" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="thicknessValue" stroke="#f59e0b" name="도장 두께" dot={false} strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
                 <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
                   <div className="flex items-center gap-2 mb-3">
@@ -904,10 +983,13 @@ export default function ManufacturingPage() {
                     <span className="font-medium text-destructive">도장 품질 이상 감지</span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>- 도장 부스 L3 온도 초과 (34°C)</li>
-                    <li>- 노즐 압력 불균형 감지</li>
-                    <li>- 도막 두께 편차 증가</li>
-                    <li>- 열화상 이미지 이상 패턴</li>
+                    <li>- 비전 불량 라벨 감지: {paintAlert.visionLabel}</li>
+                    <li>- 불량 점수 상승: defect_score {paintAlert.defectScore.toFixed(2)}</li>
+                    <li>- 표면 품질 점수 저하: surface_quality_score {paintAlert.surfaceQualityScore.toFixed(1)}</li>
+                    <li>- 도장 두께 이상 의심: thickness_value {paintAlert.thicknessValue.toFixed(1)}</li>
+                    <li>- 온도 균일도 이상: thermal_std_temp {paintAlert.thermalStdTemp.toFixed(1)}</li>
+                    <li>- 위험도/등급: {paintAlert.riskScore.toFixed(1)} / {paintAlert.severity}</li>
+                    <li>- {paintAlert.analysisMessage}</li>
                   </ul>
                 </div>
               </div>
@@ -918,59 +1000,54 @@ export default function ManufacturingPage() {
                 <div className="col-span-2">
                   <div className="flex items-center gap-8 mb-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">진행 차량 수</p>
-                      <p className="text-2xl font-bold">156 <span className="text-sm font-normal">대</span></p>
+                      <p className="text-xs text-muted-foreground">분석 차량 수</p>
+                      <p className="text-2xl font-bold">{assemblyKpis.carCount} <span className="text-sm font-normal">대</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">정상 조립 완료</p>
-                      <p className="text-2xl font-bold text-success">142 <span className="text-sm font-normal">대</span></p>
+                      <p className="text-xs text-muted-foreground">순서 오류 건수</p>
+                      <p className="text-2xl font-bold text-destructive">{assemblyKpis.sequenceErrors} <span className="text-sm font-normal">건</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">조립 순서 오류</p>
-                      <p className="text-2xl font-bold text-destructive">3 <span className="text-sm font-normal">건</span></p>
+                      <p className="text-xs text-muted-foreground">누락 부품 건수</p>
+                      <p className="text-2xl font-bold text-warning">{assemblyKpis.missingParts} <span className="text-sm font-normal">건</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">지연 작업</p>
-                      <p className="text-2xl font-bold text-warning">11 <span className="text-sm font-normal">건</span></p>
+                      <p className="text-xs text-muted-foreground">체결 오류 건수</p>
+                      <p className="text-2xl font-bold text-destructive">{assemblyKpis.fasteningErrors} <span className="text-sm font-normal">건</span></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">평균 위험도 점수</p>
+                      <p className="text-2xl font-bold text-warning">{assemblyKpis.averageRisk.toFixed(1)} <span className="text-sm font-normal">점</span></p>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">차량별 조립 상태 현황</h4>
-                  <table className="w-full text-sm">
+                  <h4 className="text-sm font-medium mb-2">차량별 조립 분석 결과</h4>
+                  <table className="w-full text-xs">
                     <thead>
                       <tr className="text-muted-foreground text-xs">
                         <th className="text-left py-2">차량 ID</th>
-                        <th className="text-left py-2">현재 단계</th>
+                        <th className="text-left py-2">기준 순서</th>
+                        <th className="text-left py-2">실제 순서</th>
+                        <th className="text-center py-2">순서 오류</th>
+                        <th className="text-center py-2">누락 부품</th>
+                        <th className="text-center py-2">체결 오류</th>
+                        <th className="text-center py-2">위험도</th>
                         <th className="text-center py-2">상태</th>
-                        <th className="text-center py-2">진행률</th>
                       </tr>
                     </thead>
                     <tbody>
                       {assemblyData.map((row) => (
-                        <tr key={row.vehicleId} className="border-t border-border">
-                          <td className="py-2">{row.vehicleId}</td>
-                          <td className="py-2">{row.currentStep}</td>
+                        <tr key={row.carId} className="border-t border-border">
+                          <td className="py-2">{row.carId}</td>
+                          <td className="py-2">{formatSequence(row.expectedSequence)}</td>
+                          <td className="py-2">{formatSequence(row.actualSequence)}</td>
+                          <td className={`text-center font-medium ${row.sequenceErrorCount > 0 ? "text-destructive" : "text-success"}`}>{row.sequenceErrorCount}</td>
+                          <td className={`text-center font-medium ${row.missingPartCount > 0 ? "text-warning" : "text-success"}`}>{row.missingPartCount}</td>
+                          <td className={`text-center font-medium ${row.fasteningErrorCount > 0 ? "text-destructive" : "text-success"}`}>{row.fasteningErrorCount}</td>
+                          <td className={`text-center font-medium ${getRiskTextClass(row.riskScore)}`}>{row.riskScore.toFixed(1)}</td>
                           <td className="text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs ${
-                              row.status === "정상" ? "bg-success/20 text-success" :
-                              row.status === "오류" ? "bg-destructive/20 text-destructive" :
-                              "bg-warning/20 text-warning"
-                            }`}>
-                              {row.status}
+                            <span className={`px-2 py-0.5 rounded text-xs ${getStatusBadgeClass(row.severity, row.isAbnormal)}`}>
+                              {getAssemblyStatus(row.severity, row.isAbnormal)}
                             </span>
-                          </td>
-                          <td className="text-center">
-                            <div className="flex items-center gap-2 justify-center">
-                              <div className="w-20 h-2 bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    row.status === "정상" ? "bg-success" :
-                                    row.status === "오류" ? "bg-destructive" : "bg-warning"
-                                  }`}
-                                  style={{ width: `${row.progress}%` }}
-                                />
-                              </div>
-                              <span className="text-xs">{row.progress}%</span>
-                            </div>
                           </td>
                         </tr>
                       ))}
@@ -983,10 +1060,13 @@ export default function ManufacturingPage() {
                     <span className="font-medium text-destructive">조립 순서 오류 감지</span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>- VIN-001247: 배선 전 시트 장착 시도</li>
-                    <li>- 부품 누락 경고 (브래킷 #A12)</li>
-                    <li>- 작업 지연 11건 발생</li>
-                    <li>- 엔진 조립 순서 위반 2건</li>
+                    <li>- 기준 순서: {formatSequence(assemblyAlert.expectedSequence)}</li>
+                    <li>- 실제 순서: {formatSequence(assemblyAlert.actualSequence)}</li>
+                    <li>- 순서 오류: {assemblyAlert.sequenceErrorCount}건</li>
+                    <li>- 체결 오류: {assemblyAlert.fasteningErrorCount}건</li>
+                    <li>- 누락 부품: {assemblyAlert.missingPartCount}건</li>
+                    <li>- 위험도/등급: {assemblyAlert.riskScore.toFixed(1)} / {assemblyAlert.severity}</li>
+                    <li>- {assemblyAlert.analysisMessage}</li>
                   </ul>
                 </div>
               </div>
