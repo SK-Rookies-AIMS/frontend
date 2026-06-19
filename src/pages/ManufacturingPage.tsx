@@ -163,13 +163,41 @@ const pressAvailableDates = Array.from(
   new Set(pressData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
 
-// 차체 로봇 데이터
-const bodyRobotData = Array.from({ length: 20 }, (_, i) => ({
-  time: `${String(Math.floor(i * 1.2) + 6).padStart(2, "0")}:00`,
-  weldPoints: 80 + Math.random() * 20,
-  quality: 90 + Math.random() * 10,
-  temperature: 45 + Math.random() * 15,
-}))
+// body_analysis_result 형태를 반영한 차체 로봇 1분 단위 목 데이터
+const bodyRobotData = pressData.map((point, index) => {
+  const vibrationWave = Math.abs(Math.sin(index / 17))
+  const isLatestRisk = index >= pressData.length - 8
+  const robotVibrationScore = isLatestRisk
+    ? Math.min(86, 68 + (index - (pressData.length - 8)) * 2.6)
+    : Math.round(22 + vibrationWave * 34 + point.timestamp_delay_sec * 2)
+  const frequencyPeakValue = Number(
+    (1.8 + vibrationWave * 3.4 + (isLatestRisk ? 3.2 : 0)).toFixed(1),
+  )
+  const riskScore = Math.round(
+    Math.min(92, robotVibrationScore * 0.72 + frequencyPeakValue * 3),
+  )
+
+  return {
+    ...point,
+    robot_motion_status: isLatestRisk ? "COLLISION_RISK" : robotVibrationScore >= 55 ? "WARNING" : "NORMAL",
+    robot_operation_mode: isLatestRisk ? "AUTO_MANUAL_STOPPED" : "AUTO",
+    robot_vibration_score: robotVibrationScore,
+    frequency_peak_band: frequencyPeakValue >= 7 ? "HIGH (80–120Hz)" : frequencyPeakValue >= 4.5 ? "MID (30–80Hz)" : "LOW (0–30Hz)",
+    frequency_peak_value: frequencyPeakValue,
+    band_low: Number((frequencyPeakValue * 0.42).toFixed(1)),
+    band_mid: Number((frequencyPeakValue * 0.68).toFixed(1)),
+    band_high: Number((frequencyPeakValue * (isLatestRisk ? 1 : 0.35)).toFixed(1)),
+    risk_score: riskScore,
+    severity: riskScore >= 70 ? "CRITICAL" : riskScore >= 50 ? "WARNING" : "NORMAL",
+  }
+})
+
+const latestBodyData = bodyRobotData[bodyRobotData.length - 1]
+const latestBodySeverity = getRiskSeverity(latestBodyData.risk_score)
+const BODY_CHART_WINDOW_SIZE = 31
+const bodyAvailableDates = Array.from(
+  new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10))),
+).reverse()
 
 // 도장 품질 데이터
 const paintData = Array.from({ length: 20 }, (_, i) => ({
@@ -196,7 +224,19 @@ export default function ManufacturingPage() {
     Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
   )
   const [isPressChartDragging, setIsPressChartDragging] = useState(false)
+  const [isPressChartHovered, setIsPressChartHovered] = useState(false)
   const pressChartDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startIndex: number
+    width: number
+  } | null>(null)
+  const [bodyChartStartIndex, setBodyChartStartIndex] = useState(
+    Math.max(0, bodyRobotData.length - BODY_CHART_WINDOW_SIZE),
+  )
+  const [isBodyChartDragging, setIsBodyChartDragging] = useState(false)
+  const [isBodyChartHovered, setIsBodyChartHovered] = useState(false)
+  const bodyChartDragRef = useRef<{
     pointerId: number
     startX: number
     startIndex: number
@@ -238,11 +278,78 @@ export default function ManufacturingPage() {
     setIsPressChartDragging(true)
   }
 
+  const visibleBodyData = bodyRobotData.slice(
+    bodyChartStartIndex,
+    bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+  )
+  const selectedBodyDate =
+    visibleBodyData[Math.floor(visibleBodyData.length / 2)]?.dateTime.slice(0, 10) ??
+    bodyAvailableDates[0]
+
+  const handleBodyDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedDate = event.target.value
+    const firstIndex = bodyRobotData.findIndex((item) => item.dateTime.startsWith(selectedDate))
+    const lastIndex = bodyRobotData.reduce(
+      (foundIndex, item, index) =>
+        item.dateTime.startsWith(selectedDate) ? index : foundIndex,
+      -1,
+    )
+
+    if (firstIndex < 0 || lastIndex < 0) return
+
+    setBodyChartStartIndex(
+      Math.max(firstIndex, lastIndex - BODY_CHART_WINDOW_SIZE + 1),
+    )
+  }
+
+  const handleBodyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    bodyChartDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startIndex: bodyChartStartIndex,
+      width: event.currentTarget.getBoundingClientRect().width,
+    }
+    setIsBodyChartDragging(true)
+  }
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = bodyChartDragRef.current
+      if (!drag || event.pointerId !== drag.pointerId) return
+
+      event.preventDefault()
+      const pixelsPerPoint = Math.max(5, drag.width / (BODY_CHART_WINDOW_SIZE - 1))
+      const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
+      const maxStartIndex = bodyRobotData.length - BODY_CHART_WINDOW_SIZE
+
+      setBodyChartStartIndex(
+        Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
+      )
+    }
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (bodyChartDragRef.current?.pointerId !== event.pointerId) return
+      bodyChartDragRef.current = null
+      setIsBodyChartDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
+    window.addEventListener("pointerup", handlePointerEnd)
+    window.addEventListener("pointercancel", handlePointerEnd)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerEnd)
+      window.removeEventListener("pointercancel", handlePointerEnd)
+    }
   }, [])
 
   useEffect(() => {
@@ -532,9 +639,12 @@ export default function ManufacturingPage() {
                     className={`select-none ${isPressChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
                     style={{ touchAction: "none" }}
                     onPointerDownCapture={handlePressChartPointerDown}
+                    onMouseEnter={() => setIsPressChartHovered(true)}
+                    onMouseLeave={() => setIsPressChartHovered(false)}
                   >
                     <ResponsiveContainer width="100%" height={210}>
                       <LineChart
+                        key={activeTab}
                         data={visiblePressData}
                         margin={{ top: 5, right: 24, left: 4, bottom: 4 }}
                       >
@@ -551,12 +661,22 @@ export default function ManufacturingPage() {
                         <Tooltip
                           labelFormatter={(label) => `분석 시각 ${label}`}
                           formatter={(value, name) => [`${Number(value).toFixed(1)} sec`, name]}
-                          contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }}
-                          wrapperStyle={{ visibility: isPressChartDragging ? "hidden" : "visible", pointerEvents: "none" }}
+                          contentStyle={{
+                            backgroundColor: "var(--popover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 8,
+                            color: "var(--popover-foreground)",
+                          }}
+                          labelStyle={{ color: "var(--popover-foreground)" }}
+                          wrapperStyle={{
+                            visibility:
+                              isPressChartHovered && !isPressChartDragging ? "visible" : "hidden",
+                            pointerEvents: "none",
+                          }}
                         />
-                        <Line isAnimationActive={false} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -585,62 +705,147 @@ export default function ManufacturingPage() {
             {activeTab === "body" && (
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
-                  <div className="flex items-center gap-8 mb-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">용접 포인트 수</p>
-                      <p className="text-2xl font-bold">3,842 <span className="text-sm font-normal">개</span></p>
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">로봇 모션 상태</p>
+                      <p className="whitespace-nowrap text-base font-bold text-destructive">{latestBodyData.robot_motion_status}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">이상 발생</p>
-                      <p className="text-2xl font-bold text-warning">18 <span className="text-sm font-normal">건</span></p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">운전 모드</p>
+                      <p className="whitespace-nowrap text-base font-bold text-warning">{latestBodyData.robot_operation_mode}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">전일 대비</p>
-                      <p className="text-2xl font-bold text-success">-3 <span className="text-sm font-normal">건</span></p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">진동 점수</p>
+                      <p className="whitespace-nowrap text-lg font-bold text-destructive">{latestBodyData.robot_vibration_score} <span className="text-xs font-normal">/ 100</span></p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">충돌 위험도</p>
-                      <p className="text-2xl font-bold text-warning">12% <span className="text-sm font-normal">(경고)</span></p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">피크 주파수 대역</p>
+                      <p className="whitespace-nowrap text-base font-bold text-warning">{latestBodyData.frequency_peak_band}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">피크 진동값</p>
+                      <p className="whitespace-nowrap text-lg font-bold text-warning">{latestBodyData.frequency_peak_value.toFixed(1)} <span className="text-xs font-normal">mm/s</span></p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">전체 위험도</p>
+                      <p className={`whitespace-nowrap text-lg font-bold ${latestBodySeverity.className}`}>{latestBodySeverity.label}</p>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">용접 품질 및 서보 모터 온도 추이</h4>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-medium">로봇 진동·주파수 및 위험도 추이</h4>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      날짜
+                      <select
+                        aria-label="차체 로봇 차트 날짜 선택"
+                        value={selectedBodyDate}
+                        onChange={handleBodyDateChange}
+                        className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      >
+                        {bodyAvailableDates.map((date) => (
+                          <option key={date} value={date}>{date}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-4 mb-2 text-xs">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-primary" />
-                      <span>용접 포인트</span>
+                      <span>로봇 진동 점수</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-success" />
-                      <span>품질</span>
+                      <span>위험도</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-warning" />
-                      <span>서보 온도</span>
+                      <span>피크 진동값</span>
                     </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={bodyRobotData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
-                      <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
-                      <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }} />
-                      <Line type="monotone" dataKey="weldPoints" stroke="#00d4ff" name="용접 포인트" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="quality" stroke="#22c55e" name="품질" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="temperature" stroke="#f59e0b" name="서보 온도" dot={false} strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div
+                    className={`select-none ${isBodyChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                    style={{ touchAction: "none" }}
+                    onPointerDownCapture={handleBodyChartPointerDown}
+                    onMouseEnter={() => setIsBodyChartHovered(true)}
+                    onMouseLeave={() => setIsBodyChartHovered(false)}
+                  >
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart
+                        key={activeTab}
+                        data={visibleBodyData}
+                        margin={{ top: 5, right: 24, left: 4, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis
+                          dataKey="dateTime"
+                          interval={4}
+                          padding={{ left: 8, right: 12 }}
+                          tick={{ fontSize: 10 }}
+                          stroke="#64748b"
+                          tickFormatter={formatChartTick}
+                        />
+                        <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748b" />
+                        <YAxis yAxisId="peak" orientation="right" domain={[0, 12]} tick={{ fontSize: 10 }} stroke="#f59e0b" />
+                        <Tooltip
+                          labelFormatter={(label) => `분석 시각 ${label}`}
+                          formatter={(value, name) => [
+                            `${Number(value).toFixed(1)}${name === "피크 진동값" ? " mm/s" : " 점"}`,
+                            name,
+                          ]}
+                          contentStyle={{
+                            backgroundColor: "var(--popover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 8,
+                            color: "var(--popover-foreground)",
+                          }}
+                          labelStyle={{ color: "var(--popover-foreground)" }}
+                          wrapperStyle={{
+                            visibility:
+                              isBodyChartHovered && !isBodyChartDragging ? "visible" : "hidden",
+                            pointerEvents: "none",
+                          }}
+                        />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="score" type="monotone" dataKey="robot_vibration_score" stroke="#00d4ff" name="로봇 진동 점수" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="score" type="monotone" dataKey="risk_score" stroke="#22c55e" name="위험도" dot={false} strokeWidth={2} />
+                        <Line isAnimationActive animationDuration={2000} animationEasing="linear" yAxisId="peak" type="monotone" dataKey="frequency_peak_value" stroke="#f59e0b" name="피크 진동값" dot={false} strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
+                    <p>그래프 안을 좌우로 드래그하면 이전 날짜와 시간까지 이동할 수 있습니다.</p>
+                    <p className="shrink-0 font-medium text-foreground">
+                      {visibleBodyData[0]?.dateTime} ~ {visibleBodyData[visibleBodyData.length - 1]?.dateTime}
+                    </p>
+                  </div>
                 </div>
-                <div className="bg-warning/10 border border-warning/30 rounded p-4">
+                <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-warning" />
-                    <span className="font-medium text-warning">충돌 위험 감지</span>
+                    <AlertTriangle className="w-4 h-4 text-destructive" />
+                    <span className="font-medium text-destructive">차체 로봇 충돌 위험 탐지</span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>- 로봇 암 R3 동작 패턴 이상</li>
-                    <li>- 서보 모터 온도 상승 (58°C)</li>
-                    <li>- 센서 통신 지연 (5ms)</li>
-                    <li>- 용접 포인트 S12 품질 저하</li>
+                    <li>• robot_motion_status = COLLISION_RISK</li>
+                    <li>• robot_operation_mode = AUTO_MANUAL_STOPPED</li>
+                    <li>• 피크 진동값 급증 ({latestBodyData.frequency_peak_value.toFixed(1)} mm/s)</li>
+                    <li>• 고주파 대역 이상 감지 ({latestBodyData.frequency_peak_band})</li>
                   </ul>
+                  <div className="mt-4 border-t border-destructive/20 pt-4">
+                    <p className="text-xs font-medium">주파수 대역별 진동 분포</p>
+                    <div className="mt-3 space-y-2 text-xs">
+                      {[
+                        { label: "LOW", value: latestBodyData.band_low, color: "bg-success" },
+                        { label: "MID", value: latestBodyData.band_mid, color: "bg-warning" },
+                        { label: "HIGH", value: latestBodyData.band_high, color: "bg-destructive" },
+                      ].map((band) => (
+                        <div key={band.label} className="flex items-center gap-2">
+                          <span className="w-9 text-muted-foreground">{band.label}</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded bg-secondary">
+                            <div className={`h-full ${band.color}`} style={{ width: `${Math.min(100, band.value * 10)}%` }} />
+                          </div>
+                          <span className="w-12 text-right">{band.value.toFixed(1)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -682,14 +887,14 @@ export default function ManufacturingPage() {
                     </div>
                   </div>
                   <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={paintData}>
+                    <LineChart key={activeTab} data={paintData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                       <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
                       <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
                       <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #334155" }} />
-                      <Line type="monotone" dataKey="thickness" stroke="#00d4ff" name="도막 두께(μm)" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="temperature" stroke="#ef4444" name="부스 온도(°C)" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="humidity" stroke="#f59e0b" name="습도(%)" dot={false} strokeWidth={2} />
+                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="thickness" stroke="#00d4ff" name="도막 두께(μm)" dot={false} strokeWidth={2} />
+                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="temperature" stroke="#ef4444" name="부스 온도(°C)" dot={false} strokeWidth={2} />
+                      <Line isAnimationActive animationDuration={1500} type="monotone" dataKey="humidity" stroke="#f59e0b" name="습도(%)" dot={false} strokeWidth={2} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
