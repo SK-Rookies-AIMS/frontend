@@ -41,38 +41,6 @@ import {
 
 const PAGE_SIZE = 10
 
-// ─── 검사 코드(carCode) 기준 집계 헬퍼 ─────────────────────────────────────
-function groupByInspectionNo(data: any[], scoreKey: string) {
-  const map: Record<
-    string,
-    { inspectionNo: string; total: number; normal: number; abnormal: number; item: any }
-  > = {}
-
-  data.forEach((item) => {
-    // 원본 데이터 필드: carCode. inspectionNo 필드가 생기면 자동 우선 사용
-    const key = item.inspectionNo ?? item.carCode ?? item.id ?? "기타"
-    if (!map[key]) {
-      map[key] = { inspectionNo: key, total: 0, normal: 0, abnormal: 0, item }
-    }
-    map[key].total++
-    if (item.inspectionResult === "NORMAL") map[key].normal++
-    else map[key].abnormal++
-  })
-
-  const rows = Object.values(map)
-  const totals = rows.reduce(
-    (acc, r) => ({
-      inspectionNo: "총 합계",
-      total: acc.total + r.total,
-      normal: acc.normal + r.normal,
-      abnormal: acc.abnormal + r.abnormal,
-      item: null,
-    }),
-    { inspectionNo: "총 합계", total: 0, normal: 0, abnormal: 0, item: null }
-  )
-  return { rows, totals }
-}
-
 
 // 기본 프로세스 카드 (API 실패 시 skeleton 표시용)
 const DEFAULT_PROCESSES = [
@@ -123,7 +91,11 @@ export default function InspectionPage() {
       ])
 
     setProcessData(Array.isArray(process) ? process : [])
-    setSummaryData(summary || {})
+    if (Array.isArray(summary) && summary.length > 0) {
+      setSummaryData(summary[summary.length - 1])
+    } else {
+      setSummaryData(summary || {})
+    }
     setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
     setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
     setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
@@ -149,36 +121,47 @@ export default function InspectionPage() {
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
   const derivedSummary = useMemo(() => {
-    const total = statusDetailData.length
-    if (!total && !summaryData?.totalCount) return null
 
-    // API 값이 있으면 그대로 사용, 없으면 detail 데이터로 계산
-    if (summaryData?.totalCount) return summaryData
+    if (Array.isArray(summaryData) && summaryData.length > 0) {
 
-    const normal   = statusDetailData.filter((d) => d.inspectionResult === "NORMAL").length
-    const abnormal = statusDetailData.filter((d) => d.inspectionResult !== "NORMAL").length
-    return {
-      totalCount:      total,
-      inspectingCount: statusDetailData.filter((d) => d.processStatus === "RUNNING").length,
-      normalCount:     normal,
-      abnormalCount:   abnormal,
-      standbyCount:    statusDetailData.filter((d) => d.processStatus === "WAIT").length,
+      const latest = summaryData[summaryData.length - 1]
+
+      return {
+        totalCount: latest.totalCount ?? 0,
+        inspectingCount:
+          (latest.normalCount ?? 0) +
+          (latest.abnormalCount ?? 0),
+        normalCount: latest.normalCount ?? 0,
+        abnormalCount: latest.abnormalCount ?? 0,
+        standbyCount:
+          latest.standbyCount ??
+          latest.stanbyCount ??
+          0,
+      }
     }
-  }, [summaryData, statusDetailData])
+
+    return null
+
+  }, [summaryData])
 
   // derivedSummary가 있으면 우선 사용
   const activeSummary = derivedSummary ?? summaryData ?? {}
 
   // 위험도 그래프 데이터 변환
-  const chartData = useMemo(() => {
-    const grouped: any = {}
-    riskHistoryData.forEach((item) => {
-      const time = item.recordTime
-      if (!grouped[time]) grouped[time] = { time }
-      grouped[time][item.inspectionType] = item.riskScore
-    })
-    return Object.values(grouped)
-  }, [riskHistoryData])
+  const chartData = riskHistoryData.reduce((acc, item) => {
+    const round = `Round ${item.inspectionRound}`
+
+    let existing = acc.find(v => v.round === round)
+
+    if (!existing) {
+      existing = { round }
+      acc.push(existing)
+    }
+
+    existing[item.inspectionType] = item.riskScore
+
+    return acc
+  }, [])
 
   // 위험도 분포 계산
   const riskDistribution = useMemo(() => {
@@ -199,28 +182,36 @@ export default function InspectionPage() {
   }, [statusDetailData])
 
   // 집계 테이블 데이터
-  const statusGrouped = useMemo(
-    () => groupByInspectionNo(statusDetailData, "statusScore"),
+  const statusRows = useMemo(
+    () => statusDetailData,
     [statusDetailData]
   )
-  const driveGrouped = useMemo(
-    () => groupByInspectionNo(driveDetailData, "driveScore"),
+
+  const driveRows = useMemo(
+    () => driveDetailData,
     [driveDetailData]
   )
 
   // 페이지네이션
   const pagedStatusRows = useMemo(() => {
-    const start = (statusPage - 1) * PAGE_SIZE
-    return statusGrouped.rows.slice(start, start + PAGE_SIZE)
-  }, [statusGrouped.rows, statusPage])
+  const start = (statusPage - 1) * PAGE_SIZE
+    return statusRows.slice(start, start + PAGE_SIZE)
+  }, [statusRows, statusPage])
 
   const pagedDriveRows = useMemo(() => {
     const start = (drivePage - 1) * PAGE_SIZE
-    return driveGrouped.rows.slice(start, start + PAGE_SIZE)
-  }, [driveGrouped.rows, drivePage])
+    return driveRows.slice(start, start + PAGE_SIZE)
+  }, [driveRows, drivePage])
 
-  const statusTotalPage = Math.ceil(statusGrouped.rows.length / PAGE_SIZE)
-  const driveTotalPage = Math.ceil(driveGrouped.rows.length / PAGE_SIZE)
+  const statusTotalPage = Math.max(
+    1,
+    Math.ceil(statusRows.length / PAGE_SIZE)
+  )
+
+  const driveTotalPage = Math.max(
+    1,
+    Math.ceil(driveRows.length / PAGE_SIZE)
+  )
 
   function renderProcessIcon(name: string) {
     if (name.includes("외관")) return <Car className="w-5 h-5" />
@@ -372,7 +363,7 @@ export default function InspectionPage() {
                 />
                 <SummaryBox
                   label="검사 진행"
-                  value={activeSummary?.inspectingCount ?? 0}
+                  value={(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}
                   sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.inspectingCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
                 />
                 <SummaryBox
@@ -393,9 +384,9 @@ export default function InspectionPage() {
               <div className="bg-slate-800/60 rounded-lg p-3 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">대기 중</span>
                 <div className="text-right">
-                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.standbyCount ?? 0}</span>
+                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.stanbyCount ?? 0}</span>
                   <span className="text-xs text-muted-foreground ml-1">
-                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.standbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
+                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.stanbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
                   </span>
                 </div>
               </div>
@@ -466,22 +457,26 @@ export default function InspectionPage() {
             <AggregateTable
               title="차량 상태 결과"
               rows={pagedStatusRows}
-              totals={statusGrouped.totals}
               page={statusPage}
               totalPage={statusTotalPage}
               setPage={setStatusPage}
-              onSelect={(item: any) => { setDetailType('status'); setSelectedDetail(item) }}
+              onSelect={(item: any) => {
+                setDetailType("status")
+                setSelectedDetail(item)
+              }}
             />
 
             {/* 운전자 입력 결과 */}
             <AggregateTable
               title="운전자 입력 결과"
               rows={pagedDriveRows}
-              totals={driveGrouped.totals}
               page={drivePage}
               totalPage={driveTotalPage}
               setPage={setDrivePage}
-              onSelect={(item: any) => { setDetailType('drive'); setSelectedDetail(item) }}
+              onSelect={(item: any) => {
+                setDetailType("drive")
+                setSelectedDetail(item)
+              }}
             />
           </div>
 
@@ -509,29 +504,41 @@ export default function InspectionPage() {
                     <DetailCard icon={<Activity />} label="속도"         value={selectedDetail.speed} />
                     <DetailCard icon={<Battery />}  label="배터리 전압"  value={selectedDetail.batteryVoltage} />
                     <DetailCard icon={<Fuel />}     label="연료율"       value={selectedDetail.fuelRate} />
-                    <DetailCard icon={<Gauge />}    label="스로틀 포지션" value={selectedDetail.throttlePosition} />
-                    <DetailCard icon={<Gauge />}    label="조향각"       value={selectedDetail.steeringAngle} />
+                    <DetailCard icon={<Gauge />}    label="진동량" value={selectedDetail.att} />
+                    <DetailCard icon={<Gauge />}    label="차량 종류"       value={selectedDetail.carCode} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 ) : (
                   /* ── 운전자 입력 결과 (fetchDriveDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="주행 거리"    value={selectedDetail.driveDistance} />
-                    <DetailCard icon={<Gauge />}    label="평균 속도"    value={selectedDetail.avgSpeed} />
-                    <DetailCard icon={<PlayCircle />} label="급가속 횟수" value={selectedDetail.suddenAccelCount} />
-                    <DetailCard icon={<PlayCircle />} label="급감속 횟수" value={selectedDetail.suddenBrakeCount} />
-                    <DetailCard icon={<Clock />}    label="주행 시간"    value={selectedDetail.driveDuration} />
+                    <DetailCard icon={<Activity />} label="조향각"    value={selectedDetail.steeringAngle} />
+                    <DetailCard icon={<Gauge />}    label="브레이크 강도"    value={selectedDetail.brakePressure} />
+                    <DetailCard icon={<PlayCircle />} label="운전 방식" value={selectedDetail.drivingPattern} />
+                    <DetailCard icon={<PlayCircle />} label="운행 점수" value={selectedDetail.driveScore} />
+                    <DetailCard icon={<Activity />}    label="가속량"    value={selectedDetail.throttlePosition} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 )}
 
                 <div className="mt-6 p-4 rounded-xl bg-slate-900">
                   <p className="text-sm text-muted-foreground mb-2">검사 결과</p>
-                  <p className={`text-lg font-bold ${
-                    selectedDetail.inspectionResult === 'NORMAL' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {selectedDetail.inspectionResult === 'NORMAL' ? '정상' : '이상'}
+
+                  <p
+                    className={`text-lg font-bold ${
+                      selectedDetail.inspectionResult === "NORMAL"
+                        ? "text-green-400"
+                        : selectedDetail.inspectionResult === "WARNING"
+                        ? "text-yellow-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {selectedDetail.inspectionResult === "NORMAL"
+                      ? "정상"
+                      : selectedDetail.inspectionResult === "WARNING"
+                      ? "주의"
+                      : "이상"}
                   </p>
+
                   <p className="mt-4 text-sm text-slate-300">
                     {selectedDetail.issueMessage || "이상 메시지 없음"}
                   </p>
@@ -580,7 +587,6 @@ function SummaryBox({
 function AggregateTable({
   title,
   rows,
-  totals,
   page,
   totalPage,
   setPage,
@@ -588,7 +594,6 @@ function AggregateTable({
 }: {
   title: string
   rows: any[]
-  totals: any
   page: number
   totalPage: number
   setPage: (p: number) => void
@@ -603,40 +608,54 @@ function AggregateTable({
           {/* 1행: 그룹 헤더 */}
           <tr className="text-xs text-muted-foreground">
             <th rowSpan={2} className="text-left py-2 pr-3 border-b border-border align-bottom">검사 코드</th>
-            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">차량 대수</th>
-            <th colSpan={2} className="text-center py-1 px-2 border border-border bg-slate-800/50 rounded-t">상태</th>
-            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom text-red-400 whitespace-nowrap">이상률</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">차량 번호</th>
+            <th rowSpan={2} className="text-center py-2 px-2 border-b border-border align-bottom whitespace-nowrap">검사 결과</th>
             <th rowSpan={2} className="text-center py-2 pl-2 border-b border-border align-bottom">상세</th>
-          </tr>
-          {/* 2행: 상태 하위 헤더 */}
-          <tr className="text-xs">
-            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-green-400 font-medium">정상</th>
-            <th className="text-center py-1 px-3 border border-border bg-slate-800/50 text-red-400 font-medium">이상</th>
           </tr>
         </thead>
 
         <tbody>
           {rows.map((row) => {
-            const abnormalPct =
-              row.total > 0 ? ((row.abnormal / row.total) * 100).toFixed(1) : "0.0"
-            const isAbnormal = row.abnormal > 0
+            const isFail = row.inspectionResult === "FAIL"
+
             return (
-              <tr key={row.inspectionNo} className="border-b border-border hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-3 font-mono text-xs">{row.inspectionNo}</td>
-                <td className="text-center px-2">{row.total}<span className="text-xs text-muted-foreground ml-0.5">대</span></td>
-                {/* 상태: 정상 / 이상 묶음 */}
-                <td className="text-center px-3 text-green-400 font-medium">
-                  {row.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+              <tr
+                key={`${row.inspectionNo}-${row.vehicleNo}`}
+                className="border-b border-border hover:bg-slate-800/40 transition-colors"
+              >
+                <td className="py-2.5 pr-3 font-mono text-xs">
+                  {row.inspectionNo}
                 </td>
-                <td className="text-center px-3 text-red-400 font-medium">
-                  {row.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
+
+                <td className="text-center px-2">
+                  {row.vehicleId ??
+                    row.vehicle_no ??
+                    row.carNumber ??
+                    row.car_number ??
+                    "-"}
                 </td>
-                <td className={`text-center px-2 font-medium ${isAbnormal ? "text-red-400" : "text-green-400"}`}>
-                  {abnormalPct}%
-                </td>
+
+                <td
+                  className={`text-center px-2 font-medium ${
+                    row.inspectionResult === "NORMAL" ||
+                    row.inspectionResult === "PASS"
+                      ? "text-green-400"
+                      : row.inspectionResult === "WARNING"
+                      ? "text-yellow-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {row.inspectionResult === "NORMAL" ||
+                  row.inspectionResult === "PASS"
+                    ? "정상"
+                    : row.inspectionResult === "WARNING"
+                    ? "주의"
+                    : "이상"}
+                </td> 
+
                 <td className="text-center pl-2">
                   <button
-                    onClick={() => onSelect(row.item)}
+                    onClick={() => onSelect(row)}
                     className="px-3 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 text-xs hover:bg-cyan-500/30 transition-colors"
                   >
                     보기
@@ -648,24 +667,6 @@ function AggregateTable({
         </tbody>
 
         {/* 총합계 행 */}
-        <tfoot>
-          <tr className="border-t-2 border-slate-600 bg-slate-800/30">
-            <td className="py-2.5 pr-3 font-semibold text-xs">총 합계</td>
-            <td className="text-center px-2 font-semibold">
-              {totals.total}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-3 text-green-400 font-semibold">
-              {totals.normal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-3 text-red-400 font-semibold">
-              {totals.abnormal}<span className="text-xs text-muted-foreground ml-0.5">대</span>
-            </td>
-            <td className="text-center px-2 text-red-400 font-semibold">
-              {totals.total > 0 ? ((totals.abnormal / totals.total) * 100).toFixed(1) : "0.0"}%
-            </td>
-            <td className="text-center pl-2 text-muted-foreground text-xs">-</td>
-          </tr>
-        </tfoot>
       </table>
 
       {/* PAGINATION */}
