@@ -7,7 +7,7 @@ async function request(url: string) {
     throw new Error(`API Error: ${response.status}`)
   }
 
-  return response.json()
+  return response.json() 
 }
 
 export async function fetchInspectionProcess() {
