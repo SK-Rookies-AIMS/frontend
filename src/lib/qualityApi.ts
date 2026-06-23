@@ -1,4 +1,4 @@
-const BASE_URL = "http://127.0.0.1:8083/api/quality/inspection"
+const BASE_URL = "http://aims-dev-mysql.c7yyi6w0ch43.ap-northeast-2.rds.amazonaws.com:8083/api/quality/inspection"
 
 async function request(url: string) {
   const response = await fetch(url)
