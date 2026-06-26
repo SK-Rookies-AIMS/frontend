@@ -393,17 +393,24 @@ export function LeftSidebar() {
           />
 
           <StatusRow
-            color="bg-warning"
-            label="ERROR"
-            count={getCountByStatus("ERROR")}
-            percent={getPercentByStatus("ERROR")}
-          />
-
-          <StatusRow
             color="bg-destructive"
             label="IDLE"
             count={getCountByStatus("IDLE")}
             percent={getPercentByStatus("IDLE")}
+          />
+
+          <StatusRow
+            color="bg-primary"
+            label="STOPPED"
+            count={getCountByStatus("STOPPED")}
+            percent={getPercentByStatus("STOPPED")}
+          />
+
+          <StatusRow
+            color="bg-warning"
+            label="FAULT"
+            count={getCountByStatus("FAULT")}   
+            percent={getPercentByStatus("FAULT")}
           />
 
           <StatusRow
@@ -413,12 +420,6 @@ export function LeftSidebar() {
             percent={getPercentByStatus("MAINTENANCE")}
           />
 
-          <StatusRow
-            color="bg-primary"
-            label="STOPPED"
-            count={getCountByStatus("STOPPED")}
-            percent={getPercentByStatus("STOPPED")}
-          />
         </div>
       </div>
 
