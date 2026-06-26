@@ -359,18 +359,19 @@ export function LeftSidebar() {
                 </div>
 
                 <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">복귀 중</span>
+                  <span className="font-medium text-primary">
+                    {agvStatus.returningCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">대기 중</span>
                   <span className="font-medium">
                     {agvStatus.waitingCount} 대
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">복귀 중</span>
-                  <span className="font-medium text-primary">
-                    {agvStatus.returningCount} 대
-                  </span>
-                </div>
               </>
             ) : (
               <div className="text-xs text-muted-foreground">
@@ -393,28 +394,28 @@ export function LeftSidebar() {
           />
 
           <StatusRow
-            color="bg-destructive"
+            color="bg-primary"
             label="IDLE"
             count={getCountByStatus("IDLE")}
             percent={getPercentByStatus("IDLE")}
           />
 
           <StatusRow
-            color="bg-primary"
+            color="bg-warning"
             label="STOPPED"
             count={getCountByStatus("STOPPED")}
             percent={getPercentByStatus("STOPPED")}
           />
 
           <StatusRow
-            color="bg-warning"
+            color="bg-destructive"
             label="FAULT"
             count={getCountByStatus("FAULT")}   
             percent={getPercentByStatus("FAULT")}
           />
 
           <StatusRow
-            color="bg-primary"
+            color="bg-muted-foreground"
             label="MAINTENANCE"
             count={getCountByStatus("MAINTENANCE")}
             percent={getPercentByStatus("MAINTENANCE")}
@@ -488,7 +489,8 @@ export function LeftSidebar() {
 function StatusRow({ color, label, count, percent }: { color: string; label: string; count: number; percent: number }) {
   const iconColor = color === "bg-success" ? "text-success" : 
                     color === "bg-warning" ? "text-warning" :
-                    color === "bg-destructive" ? "text-destructive" : "text-primary"
+                    color === "bg-destructive" ? "text-destructive" : 
+                    color === "bg-muted-foreground" ? "text-muted-foreground" : "text-primary"
   
   return (
     <div className="flex items-center gap-2">
