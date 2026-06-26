@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckCircle, Truck, Clock } from "lucide-react"
+import { CheckCircle, Truck, Clock, AlertTriangle, AlertCircle } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
 import { useState, useEffect } from "react"
 
@@ -29,6 +29,13 @@ interface ProductionTrendItem {
   createdAt: string
 }
 
+interface OverallStatus {
+    totalScore: number
+    equipmentScore: number
+    agvScore: number
+    environmentScore: number
+}
+
 export function LeftSidebar() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +43,7 @@ export function LeftSidebar() {
   const [agvStatus, setAgvStatus] = useState<AgvStatusSummary | null>(null)
   const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatusItem[]>([])
   const [productionTrend, setProductionTrend] = useState<ProductionTrendItem[]>([])
+  const [overallStatus, setOverallStatus] = useState<OverallStatus | null>(null)
 
   const fetchAgvStatus = async () => {
     try {
@@ -121,6 +129,35 @@ export function LeftSidebar() {
     }
   }
 
+  const fetchOverallStatus = async () => {
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        return
+      }
+
+      const response = await fetch(
+        "/api/main/overall_status",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setOverallStatus(result.data)
+      }
+    } catch (err) {
+      console.error("전체 설비 상태 조회 실패:", err)
+    }
+  }
+
   const getCountByStatus = (status: string) => {
     return (
       equipmentStatus.find(
@@ -193,6 +230,7 @@ export function LeftSidebar() {
     fetchAgvStatus()
     fetchEquipmentStatus()
     fetchProductionTrend()
+    fetchOverallStatus()
   }, [])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
@@ -206,6 +244,12 @@ export function LeftSidebar() {
       default:
         return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
     }
+  }
+
+  const getOverallStatusDisplay = (score: number) => {
+    if (score >= 80) return { label: "정상", color: "text-success", icon: CheckCircle, desc: "모든 시스템 정상 운영 중" };
+    if (score >= 60) return { label: "경고", color: "text-warning", icon: AlertTriangle, desc: "주의가 필요합니다" };
+    return { label: "위험", color: "text-destructive", icon: AlertCircle, desc: "즉각적인 조치가 필요합니다" };
   }
 
   const productionData = productionTrend.map(item => ({
@@ -278,11 +322,23 @@ export function LeftSidebar() {
       {/* Overall Status */}
       <div className="p-4 border-b border-border">
         <h3 className="text-xs text-muted-foreground mb-2">전체 설비 상태</h3>
-        <div className="flex items-center gap-3">
-          <span className="text-3xl font-bold text-success">정상</span>
-          <CheckCircle className="w-8 h-8 text-success" />
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">모든 시스템 정상 운영 중</p>
+        {overallStatus ? (
+            (() => {
+                const display = getOverallStatusDisplay(overallStatus.totalScore)
+                const Icon = display.icon
+                return (
+                    <>
+                        <div className="flex items-center gap-3">
+                            <span className={`text-3xl font-bold ${display.color}`}>{display.label}</span>
+                            <Icon className={`w-8 h-8 ${display.color}`} />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{display.desc}</p>
+                    </>
+                )
+            })()
+        ) : (
+            <div className="text-xs text-muted-foreground">정보 없음</div>
+        )}
       </div>
 
       {/* AGV Status */}
@@ -303,18 +359,19 @@ export function LeftSidebar() {
                 </div>
 
                 <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">복귀 중</span>
+                  <span className="font-medium text-primary">
+                    {agvStatus.returningCount} 대
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">대기 중</span>
                   <span className="font-medium">
                     {agvStatus.waitingCount} 대
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">복귀 중</span>
-                  <span className="font-medium text-primary">
-                    {agvStatus.returningCount} 대
-                  </span>
-                </div>
               </>
             ) : (
               <div className="text-xs text-muted-foreground">
@@ -337,32 +394,33 @@ export function LeftSidebar() {
           />
 
           <StatusRow
-            color="bg-warning"
-            label="ERROR"
-            count={getCountByStatus("ERROR")}
-            percent={getPercentByStatus("ERROR")}
-          />
-
-          <StatusRow
-            color="bg-destructive"
+            color="bg-primary"
             label="IDLE"
             count={getCountByStatus("IDLE")}
             percent={getPercentByStatus("IDLE")}
           />
 
           <StatusRow
-            color="bg-primary"
+            color="bg-warning"
+            label="STOPPED"
+            count={getCountByStatus("STOPPED")}
+            percent={getPercentByStatus("STOPPED")}
+          />
+
+          <StatusRow
+            color="bg-destructive"
+            label="FAULT"
+            count={getCountByStatus("FAULT")}   
+            percent={getPercentByStatus("FAULT")}
+          />
+
+          <StatusRow
+            color="bg-muted-foreground"
             label="MAINTENANCE"
             count={getCountByStatus("MAINTENANCE")}
             percent={getPercentByStatus("MAINTENANCE")}
           />
 
-          <StatusRow
-            color="bg-primary"
-            label="STOPPED"
-            count={getCountByStatus("STOPPED")}
-            percent={getPercentByStatus("STOPPED")}
-          />
         </div>
       </div>
 
@@ -431,7 +489,8 @@ export function LeftSidebar() {
 function StatusRow({ color, label, count, percent }: { color: string; label: string; count: number; percent: number }) {
   const iconColor = color === "bg-success" ? "text-success" : 
                     color === "bg-warning" ? "text-warning" :
-                    color === "bg-destructive" ? "text-destructive" : "text-primary"
+                    color === "bg-destructive" ? "text-destructive" : 
+                    color === "bg-muted-foreground" ? "text-muted-foreground" : "text-primary"
   
   return (
     <div className="flex items-center gap-2">
