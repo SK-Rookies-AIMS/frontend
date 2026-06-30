@@ -1,4 +1,4 @@
-const BASE_URL = "http://127.0.0.1:8083/api/quality/inspection"
+const BASE_URL = "/api/quality/inspection"
 
 async function request(url: string) {
   const response = await fetch(url)
@@ -7,7 +7,7 @@ async function request(url: string) {
     throw new Error(`API Error: ${response.status}`)
   }
 
-  return response.json()
+  return response.json() 
 }
 
 export async function fetchInspectionProcess() {

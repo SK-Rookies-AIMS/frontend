@@ -148,20 +148,26 @@ export default function InspectionPage() {
   const activeSummary = derivedSummary ?? summaryData ?? {}
 
   // 위험도 그래프 데이터 변환
-  const chartData = riskHistoryData.reduce((acc, item) => {
-    const round = `Round ${item.inspectionRound}`
+  const chartData = useMemo(() => {
+    const grouped = riskHistoryData.reduce(
+      (acc: Record<string, any>, item: any) => {
+        const date = item.startTime.split(" ")[0]
 
-    let existing = acc.find(v => v.round === round)
+        if (!acc[date]) {
+          acc[date] = {
+            time: date.slice(5).replace("-", "/"),
+          }
+        }
 
-    if (!existing) {
-      existing = { round }
-      acc.push(existing)
-    }
+        acc[date][item.inspectionType] = item.riskScore
 
-    existing[item.inspectionType] = item.riskScore
+        return acc
+      },
+      {}
+    )
 
-    return acc
-  }, [])
+    return Object.values(grouped)
+  }, [riskHistoryData])
 
   // 위험도 분포 계산
   const riskDistribution = useMemo(() => {
