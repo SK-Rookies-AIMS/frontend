@@ -1,10 +1,16 @@
 ﻿"use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Header } from "@/components/dashboard/header"
 import { Mascot } from "@/components/dashboard/mascot"
 import { Footer } from "@/components/dashboard/footer"
 import { AuthGuard } from "@/components/auth-guard"
+import {
+  BOTTLENECK_INITIAL_CURSOR,
+  BOTTLENECK_PAGE_SIZE,
+  type BottleneckRow,
+  fetchBottleneckAnalysis,
+} from "@/api/bottleneckApi"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -23,14 +29,6 @@ const processStages = [
   { id: "03", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
   { id: "04", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
   { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
-]
-
-const bottleneckData = [
-  { rank: 1, process: "도장 (L3)", delay: 12.4, affected: 128, risk: 5 },
-  { rank: 2, process: "차체 (S12)", delay: 9.8, affected: 92, risk: 4 },
-  { rank: 3, process: "프레스 (P4)", delay: 6.1, affected: 54, risk: 3 },
-  { rank: 4, process: "의장 (A1)", delay: 4.3, affected: 32, risk: 2 },
-  { rank: 5, process: "검사 (I2)", delay: 2.1, affected: 18, risk: 1 },
 ]
 
 const defectPredictionData = [
@@ -296,6 +294,14 @@ export default function ManufacturingPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState("press")
   const [selectedVehicle, setSelectedVehicle] = useState("VIN-001245")
+  const [bottleneckRows, setBottleneckRows] = useState<BottleneckRow[]>([])
+  const [bottleneckCursor, setBottleneckCursor] = useState<number | null>(BOTTLENECK_INITIAL_CURSOR)
+  const [hasNextBottleneck, setHasNextBottleneck] = useState(true)
+  const [isBottleneckLoading, setIsBottleneckLoading] = useState(false)
+  const [bottleneckError, setBottleneckError] = useState<string | null>(null)
+  const requestedBottleneckCursorsRef = useRef<Set<number>>(new Set())
+  const hasNextBottleneckRef = useRef(true)
+  const isBottleneckLoadingRef = useRef(false)
   const [pressChartStartIndex, setPressChartStartIndex] = useState(
     Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
   )
@@ -389,12 +395,54 @@ export default function ManufacturingPage() {
     setIsBodyChartDragging(true)
   }
 
+  const fetchBottleneckRows = useCallback(async (cursor: number | null) => {
+    if (cursor === null) return
+    if (requestedBottleneckCursorsRef.current.has(cursor)) return
+    if (!hasNextBottleneckRef.current && cursor !== BOTTLENECK_INITIAL_CURSOR) return
+
+    requestedBottleneckCursorsRef.current.add(cursor)
+    isBottleneckLoadingRef.current = true
+    setIsBottleneckLoading(true)
+    setBottleneckError(null)
+
+    try {
+      const result = await fetchBottleneckAnalysis({
+        size: BOTTLENECK_PAGE_SIZE,
+        cursor,
+      })
+
+      setBottleneckRows((prevRows) => [...prevRows, ...result.content])
+      hasNextBottleneckRef.current = result.hasNext
+      setHasNextBottleneck(result.hasNext)
+      setBottleneckCursor(result.hasNext ? result.nextCursor : null)
+    } catch (error) {
+      requestedBottleneckCursorsRef.current.delete(cursor)
+      setBottleneckError(error instanceof Error ? error.message : "병목 분석 데이터를 불러오지 못했습니다.")
+    } finally {
+      isBottleneckLoadingRef.current = false
+      setIsBottleneckLoading(false)
+    }
+  }, [])
+
+  const handleBottleneckScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget
+    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
+
+    if (isNearBottom && hasNextBottleneckRef.current && !isBottleneckLoadingRef.current) {
+      void fetchBottleneckRows(bottleneckCursor)
+    }
+  }
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR)
+  }, [fetchBottleneckRows])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -526,30 +574,49 @@ export default function ManufacturingPage() {
           {/* 1. Bottleneck Analysis */}
           <div className="bg-card border border-border rounded-lg p-4">
             <h3 className="text-sm font-medium mb-4">실시간 병목 분석</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="text-left py-2">순위</th>
-                  <th className="text-left py-2">공정</th>
-                  <th className="text-center py-2">평균 지연</th>
-                  <th className="text-center py-2">영향 차량 수</th>
-                  <th className="text-center py-2">위험도</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bottleneckData.map((row) => (
-                  <tr key={row.rank} className="border-t border-border">
-                    <td className="py-2 font-bold">{row.rank}</td>
-                    <td className="py-2">{row.process}</td>
-                    <td className="text-center">{row.delay}초</td>
-                    <td className="text-center text-warning">{row.affected}대</td>
-                    <td className="text-center">
-                      <RiskIndicator level={row.risk} />
-                    </td>
+            <div className="max-h-[220px] overflow-y-auto pr-1" onScroll={handleBottleneckScroll}>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="text-muted-foreground text-xs">
+                    <th className="text-left py-2">순위</th>
+                    <th className="text-left py-2">공정</th>
+                    <th className="text-center py-2">평균 지연</th>
+                    <th className="text-center py-2">영향 차량 수</th>
+                    <th className="text-center py-2">위험도</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {bottleneckRows.map((row, index) => (
+                    <tr key={`${row.rankNo}-${row.processCode}-${index}`} className="border-t border-border">
+                      <td className="py-2 font-bold">{row.rankNo}</td>
+                      <td className="py-2">{row.processCode}</td>
+                      <td className="text-center">{row.delayTime}초</td>
+                      <td className="text-center text-warning">{row.affectedVehicleCount}대</td>
+                      <td className="text-center">
+                        <RiskIndicator level={row.riskScore} />
+                      </td>
+                    </tr>
+                  ))}
+                  {!isBottleneckLoading && bottleneckRows.length === 0 && (
+                    <tr className="border-t border-border">
+                      <td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                        병목 분석 데이터가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {isBottleneckLoading && (
+                <div className="py-3 text-center text-xs text-muted-foreground">
+                  병목 분석 데이터를 불러오는 중...
+                </div>
+              )}
+              {bottleneckError && (
+                <div className="py-3 text-center text-xs text-destructive">
+                  {bottleneckError}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 2. Defect Prediction */}
