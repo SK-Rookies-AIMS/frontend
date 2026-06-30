@@ -1,14 +1,25 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { ThermometerSun, Zap, Droplets } from "lucide-react"
 
 type StatusLevel = "normal" | "warning" | "danger"
+
+interface EquipmentApiResponse {
+  processCode: string
+  overallEquipmentCount: number
+  runningEquipmentCount: number
+  temperature: number
+  humidity: number
+  usage: number
+}
 
 interface EquipmentCardProps {
   number: number
   title: string
   status: "가동" | "가동중" | "점검"
   count: number
+  running: number
   percent: number
   percentColor: string
   temp: number
@@ -21,22 +32,90 @@ interface EquipmentCardProps {
   hasWarning?: boolean
 }
 
-const equipmentData: Omit<EquipmentCardProps, "icon">[] = [
-  { number: 1, title: "프레스", status: "가동", count: 256, percent: 87, percentColor: "text-success", temp: 24.1, humidity: 41, power: 78, tempStatus: "normal", humidityStatus: "normal", powerStatus: "normal" },
-  { number: 2, title: "차체 (용접)", status: "가동중", count: 198, percent: 68, percentColor: "text-warning", temp: 24.0, humidity: 57, power: 82, tempStatus: "normal", humidityStatus: "warning", powerStatus: "normal" },
-  { number: 3, title: "도장", status: "가동중", count: 142, percent: 53, percentColor: "text-warning", temp: 34.8, humidity: 71, power: 95, tempStatus: "danger", humidityStatus: "warning", powerStatus: "danger", hasWarning: true },
-  { number: 4, title: "의장 조립", status: "가동중", count: 312, percent: 74, percentColor: "text-success", temp: 23.7, humidity: 68, power: 65, tempStatus: "normal", humidityStatus: "normal", powerStatus: "normal" },
-  { number: 5, title: "최종 검사", status: "가동", count: 298, percent: 90, percentColor: "text-success", temp: 23.0, humidity: 64, power: 45, tempStatus: "normal", humidityStatus: "normal", powerStatus: "normal" },
-]
+const getTitleByProcessCode = (code: string) => {
+  switch (code) {
+    case "PRESS": return "프레스"
+    case "BODY": return "차체 (용접)"
+    case "PAINT": return "도장"
+    case "ASSEMBLY": return "의장 조립"
+    default: return code
+  }
+}
 
 export function EquipmentStatus() {
+  const [equipmentList, setEquipmentList] = useState<EquipmentCardProps[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchEquipmentStatus = async () => {
+      try {
+        const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+        const response = await fetch("/api/main/get-manufacturing-status", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+        const result = await response.json()
+        
+        if (response.ok && result.success) {
+          const filteredData = result.data.filter((item: EquipmentApiResponse) => item.processCode !== 'INSPECTION');
+
+          const processOrder: Record<string, number> = {
+            'PRESS': 0,
+            'BODY': 1,
+            'PAINT': 2,
+            'ASSEMBLY': 3
+          };
+
+          filteredData.sort((a: EquipmentApiResponse, b: EquipmentApiResponse) => {
+            return (processOrder[a.processCode] ?? 99) - (processOrder[b.processCode] ?? 99);
+          });
+
+          const mappedData: EquipmentCardProps[] = filteredData.map((item: EquipmentApiResponse, index: number) => {
+            const calculatedPercent = item.overallEquipmentCount > 0 
+              ? Math.round((item.runningEquipmentCount / item.overallEquipmentCount) * 100) 
+              : 0;
+            
+            return {
+              number: index + 1,
+              title: getTitleByProcessCode(item.processCode),
+              status: item.runningEquipmentCount > 0 ? "가동중" : "점검",
+              count: item.overallEquipmentCount,
+              running: item.runningEquipmentCount,
+              percent: calculatedPercent,
+              percentColor: calculatedPercent > 80 ? "text-success" : calculatedPercent > 60 ? "text-warning" : "text-destructive",
+              temp: item.temperature,
+              humidity: item.humidity,
+              power: item.usage,
+              tempStatus: "normal",
+              humidityStatus: "normal",
+              powerStatus: "normal",
+              icon: null, // Will be set in render
+              hasWarning: calculatedPercent < 50 // Example warning logic
+            }
+          })
+          setEquipmentList(mappedData)
+        }
+      } catch (err) {
+        console.error("설비 상태 조회 실패:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchEquipmentStatus()
+  }, [])
+
+  if (loading) return <div className="p-4">로딩 중...</div>
+
   return (
-    <div className="bg-card rounded-lg border border-border p-4 mb-4">
+    <div className="bg-card rounded-lg border border-border p-4 flex flex-col flex-1">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-medium">주요 설비 현황</h2>
       </div>
-      <div className="grid grid-cols-5 gap-4">
-        {equipmentData.map((equipment, index) => (
+      <div className="grid grid-cols-4 gap-4 flex-1">
+        {equipmentList.map((equipment, index) => (
           <EquipmentCard 
             key={index} 
             {...equipment} 
@@ -53,6 +132,7 @@ function EquipmentCard({
   title,
   status,
   count,
+  running,
   percent,
   percentColor,
   temp,
@@ -99,23 +179,29 @@ function EquipmentCard({
 
       {/* Stats */}
       <div className="flex items-center justify-between text-xs mb-2">
-        <span className="text-muted-foreground">가동중</span>
+        <span className="text-muted-foreground">전체</span>
         <span className="font-medium">{count} EA</span>
+        <span className="text-muted-foreground">가동중</span>
+        <span className="font-medium">{running} EA</span>
       </div>
 
       {/* Footer metrics - 온도, 습도, 전력사용량 with status colors */}
       <div className="flex items-center justify-between text-[10px] pt-2 border-t border-border">
-        <div className={`flex items-center gap-1 ${getStatusColor(tempStatus)}`}>
-          <ThermometerSun className="w-3 h-3" />
-          <span>{temp}°C</span>
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <span className="w-4 h-4 flex items-center justify-center">🌡️</span>
+          <span className={getStatusColor(tempStatus)}>{temp}°C</span>
         </div>
-        <div className={`flex items-center gap-1 ${getStatusColor(humidityStatus)}`}>
-          <Droplets className="w-3 h-3" />
-          <span>{humidity}%</span>
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 22C15.866 22 19 18.866 19 15C19 11.134 12 2 12 2C12 2 5 11.134 5 15C5 18.866 8.13401 22 12 22Z" fill="#3B82F6" fillOpacity="0.2" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className={getStatusColor(humidityStatus)}>{humidity}%</span>
         </div>
-        <div className={`flex items-center gap-1 ${getStatusColor(powerStatus)}`}>
-          <Zap className="w-3 h-3" />
-          <span>{power}kW</span>
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="#F59E0B" fillOpacity="0.2" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className={getStatusColor(powerStatus)}>{power}kW</span>
         </div>
       </div>
     </div>
