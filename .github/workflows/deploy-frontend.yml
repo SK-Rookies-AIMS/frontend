@@ -1,8 +1,8 @@
-name: Deploy Frontend to EKS
+name: Build Frontend and Update GitOps
 
 on:
   push:
-    branches: ["infra/docker"]
+    branches: ["dev", "main"]
     paths:
       - "src/**"
       - "public/**"
@@ -13,29 +13,27 @@ on:
       - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
+concurrency:
+  group: frontend-${{ github.ref_name }}
+  cancel-in-progress: true
+
 env:
   AWS_REGION: ap-northeast-2
-  EKS_CLUSTER_NAME: aims-dev-eks
   ECR_REPOSITORY: aims/frontend
-  NAMESPACE: aims-project
   FRONTEND_CONTEXT: .
+  INFRA_REPOSITORY: SK-Rookies-AIMS/infra
+  INFRA_MANIFEST_PATH: k8s/frontend/frontend.yaml
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
 
     steps:
       - name: Checkout frontend repository
         uses: actions/checkout@v4
-
-      - name: Checkout infra repository
-        uses: actions/checkout@v4
-        with:
-          repository: SK-Rookies-AIMS/infra
-          ref: dev
-          path: infra
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -50,49 +48,63 @@ jobs:
 
       - name: Ensure ECR repository exists
         run: |
-          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
-          aws ecr create-repository \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-scanning-configuration scanOnPush=true \
-            --image-tag-mutability MUTABLE
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --image-scanning-configuration scanOnPush=true --image-tag-mutability MUTABLE
 
       - name: Build and push Docker image
         id: build-image
         run: |
-          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_SHA}"
-          docker build -t "$IMAGE_URI" "$FRONTEND_CONTEXT"
+          IMAGE_TAG="${GITHUB_REF_NAME}-${GITHUB_SHA::12}"
+          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          BRANCH_IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_REF_NAME}"
+
+          docker build -t "$IMAGE_URI" -t "$BRANCH_IMAGE_URI" "$FRONTEND_CONTEXT"
           docker push "$IMAGE_URI"
+          docker push "$BRANCH_IMAGE_URI"
+
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Update kubeconfig
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.INFRA_REPOSITORY }}
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.INFRA_REPO_TOKEN }}
+          path: infra
+          fetch-depth: 0
+
+      - name: Update image tag in infra repository
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
         run: |
-          aws eks update-kubeconfig \
-            --region "$AWS_REGION" \
-            --name "$EKS_CLUSTER_NAME"
+          MANIFEST="infra/${INFRA_MANIFEST_PATH}"
 
-      - name: Load deploy parameters from SSM
-        run: |
-          CERTIFICATE_ARN=$(aws ssm get-parameter --name "/aims/dev/acm/certificate-arn" --query "Parameter.Value" --output text)
-          ALB_SECURITY_GROUPS=$(aws ssm get-parameter --name "/aims/dev/alb/security-groups" --query "Parameter.Value" --output text)
+          sed -i -E "s|^([[:space:]]*)image:.*$|\1image: ${IMAGE_URI}|" "$MANIFEST"
 
-          echo "::add-mask::$CERTIFICATE_ARN"
-          echo "::add-mask::$ALB_SECURITY_GROUPS"
+          grep -n "image:" "$MANIFEST"
 
-          echo "CERTIFICATE_ARN=$CERTIFICATE_ARN" >> "$GITHUB_ENV"
-          echo "ALB_SECURITY_GROUPS=$ALB_SECURITY_GROUPS" >> "$GITHUB_ENV"
+          cd infra
 
-      - name: Deploy to EKS
-        run: |
-          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          sed "s|IMAGE_PLACEHOLDER|${{ steps.build-image.outputs.image_uri }}|g" \
-            infra/k8s/frontend/frontend.yaml > /tmp/frontend.yaml
+          git add "$INFRA_MANIFEST_PATH"
 
-          sed -e "s|CERTIFICATE_ARN_PLACEHOLDER|$CERTIFICATE_ARN|g" \
-              -e "s|ALB_SECURITY_GROUPS_PLACEHOLDER|$ALB_SECURITY_GROUPS|g" \
-            infra/k8s/ingress/frontend-ingress.yaml > /tmp/frontend-ingress.yaml
+          if git diff --cached --quiet; then
+            echo "Image tag is already up to date"
+            exit 0
+          fi
 
-          kubectl apply -f /tmp/frontend.yaml
-          kubectl apply -f /tmp/frontend-ingress.yaml
+          git commit -m "chore(frontend): deploy ${GITHUB_REF_NAME}-${GITHUB_SHA::12}"
 
-          kubectl rollout status deployment/frontend -n "$NAMESPACE" --timeout=180s
+          for ATTEMPT in 1 2 3; do
+            git pull --rebase origin "$GITHUB_REF_NAME"
+
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              exit 0
+            fi
+
+            sleep $((ATTEMPT * 5))
+          done
+
+          echo "Failed to push GitOps image update"
+          exit 1
