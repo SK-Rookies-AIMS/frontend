@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Header } from "@/components/dashboard/header"
@@ -84,6 +84,18 @@ const formatDateTime = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
 
 const formatChartTick = (dateTime: string) => `${dateTime.slice(5, 10)} ${dateTime.slice(11)}`
+
+const formatDelayTime = (seconds: number): string => {
+  if (seconds >= 3600) {
+    const hours = seconds / 3600;
+    return `${Number(hours.toFixed(1))}시간`;
+  }
+  if (seconds >= 60) {
+    const minutes = seconds / 60;
+    return `${Number(minutes.toFixed(1))}분`;
+  }
+  return `${Number(seconds.toFixed(1))}초`;
+}
 
 // 드래그 시 전날 데이터까지 조회할 수 있도록 이전 24시간의 5분 기준값을 만든다.
 const historicalPressAnchorData: PressAnchor[] = Array.from({ length: 288 }, (_, index) => {
@@ -302,6 +314,7 @@ export default function ManufacturingPage() {
   const requestedBottleneckCursorsRef = useRef<Set<number>>(new Set())
   const hasNextBottleneckRef = useRef(true)
   const isBottleneckLoadingRef = useRef(false)
+  const bottleneckScrollRef = useRef<HTMLDivElement | null>(null)
   const [pressChartStartIndex, setPressChartStartIndex] = useState(
     Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
   )
@@ -445,6 +458,16 @@ export default function ManufacturingPage() {
   }, [fetchBottleneckRows])
 
   useEffect(() => {
+    const scrollElement = bottleneckScrollRef.current
+    if (!scrollElement || !hasNextBottleneck || isBottleneckLoading || bottleneckCursor === null) return
+
+    const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
+    if (!hasScrollableContent) {
+      void fetchBottleneckRows(bottleneckCursor)
+    }
+  }, [bottleneckRows.length, bottleneckCursor, fetchBottleneckRows, hasNextBottleneck, isBottleneckLoading])
+
+  useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       const drag = bodyChartDragRef.current
       if (!drag || event.pointerId !== drag.pointerId) return
@@ -574,7 +597,11 @@ export default function ManufacturingPage() {
           {/* 1. Bottleneck Analysis */}
           <div className="bg-card border border-border rounded-lg p-4">
             <h3 className="text-sm font-medium mb-4">실시간 병목 분석</h3>
-            <div className="max-h-[220px] overflow-y-auto pr-1" onScroll={handleBottleneckScroll}>
+            <div
+              ref={bottleneckScrollRef}
+              className="h-[180px] overflow-y-auto pr-1"
+              onScroll={handleBottleneckScroll}
+            >
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card">
                   <tr className="text-muted-foreground text-xs">
@@ -590,7 +617,7 @@ export default function ManufacturingPage() {
                     <tr key={`${row.rankNo}-${row.processCode}-${index}`} className="border-t border-border">
                       <td className="py-2 font-bold">{row.rankNo}</td>
                       <td className="py-2">{row.processCode}</td>
-                      <td className="text-center">{row.delayTime}초</td>
+                      <td className="text-center">{formatDelayTime(row.delayTime)}</td>
                       <td className="text-center text-warning">{row.affectedVehicleCount}대</td>
                       <td className="text-center">
                         <RiskIndicator level={row.riskScore} />
