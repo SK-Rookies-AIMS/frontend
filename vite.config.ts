@@ -16,11 +16,11 @@ export default defineConfig({
         changeOrigin: true,
       },
       "/api/quality/inspection": {
-        target: "http://localhost:8082",
+        target: "http://localhost:8083",
         changeOrigin: true,
       },
       "/api/process": {
-        target: "http://localhost:8083",
+        target: "http://localhost:8082",
         changeOrigin: true,
       },
       "/api": {

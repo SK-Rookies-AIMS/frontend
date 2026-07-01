@@ -4,6 +4,7 @@ import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
 import { Mascot } from "@/components/dashboard/mascot"
 import { AuthGuard } from "@/components/auth-guard"
+import { connectWebSocket } from "@/lib/qualityWebsocket";
 
 import {
   Car,
@@ -73,6 +74,34 @@ export default function InspectionPage() {
   useEffect(() => {
     loadDashboard()
   }, [])
+
+  useEffect(() => {
+
+    const disconnect = connectWebSocket({
+
+          onSummary: (data) => {
+              setSummaryData(data);
+          },
+
+          onProcess: (data) => {
+              setProcessData(data);
+          },
+
+          onStatus: (data) => {
+              setStatusDetailData(data);
+          },
+
+          onDrive: (data) => {
+              setDriveDetailData(data);
+          }
+
+      });
+
+      return () => {
+          disconnect();
+      };
+
+  }, []);
 
   async function loadDashboard() {
     setIsLoading(true)
