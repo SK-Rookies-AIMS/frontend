@@ -115,3 +115,4 @@ export async function fetchDefectTransferCauses({
     nextCursor: result.data.nextCursor ?? null,
   }
 }
+
