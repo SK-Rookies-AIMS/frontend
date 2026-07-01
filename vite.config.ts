@@ -11,11 +11,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api/process/bottleneck": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-      },
-      "/api/process/defect-transfer": {
+      "/api/ai": {
         target: "http://localhost:8000",
         changeOrigin: true,
       },

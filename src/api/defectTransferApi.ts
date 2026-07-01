@@ -51,7 +51,7 @@ export async function fetchDefectTransferPredictions({
     cursor: String(cursor),
   })
 
-  const response = await fetch(`/api/process/defect-transfer/predictions?${params.toString()}`)
+  const response = await fetch(`/api/ai/process/defect-transfer/predictions?${params.toString()}`)
 
   if (!response.ok) {
     throw new Error(`불량 전이 예측 API 요청 실패 (${response.status})`)
@@ -92,7 +92,7 @@ export async function fetchDefectTransferCauses({
     params.set("vehicleId", vehicleId)
   }
 
-  const response = await fetch(`/api/process/defect-transfer/causes?${params.toString()}`)
+  const response = await fetch(`/api/ai/process/defect-transfer/causes?${params.toString()}`)
 
   if (!response.ok) {
     throw new Error(`SHAP 원인 분석 API 요청 실패 (${response.status})`)
