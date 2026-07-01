@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useTheme } from "@/components/theme-provider"
-import { Home, Factory, ClipboardCheck, Sun, Moon, Clock, AlertTriangle, LogOut } from "lucide-react"
+import { Home, Factory, ClipboardCheck, Sun, Moon, Clock, AlertTriangle, LogOut, RefreshCw } from "lucide-react"
+
+import { getStoredAccessToken } from "@/api/authStorage"
+import { decodeJwt } from "@/lib/jwt-utils"
 
 interface HeaderProps {
   currentTime: Date
@@ -12,16 +15,11 @@ interface HeaderProps {
 // 계정 역할 타입
 type UserRole = "시니어" | "주니어"
 
-// 현재 로그인한 사용자 정보 (실제로는 인증 시스템에서 가져옴)
-const currentUser = {
-  name: "홍길동",
-  role: "시니어" as UserRole,
-}
-
 // 역할별 스타일
-const roleStyles: Record<UserRole, { bg: string; text: string }> = {
+const roleStyles: Record<string, { bg: string; text: string }> = {
   "시니어": { bg: "bg-primary/20", text: "text-primary" },
   "주니어": { bg: "bg-success/20", text: "text-success" },
+  "ADMIN": { bg: "bg-destructive/20", text: "text-destructive" },
 }
 
 export function Header({ currentTime }: HeaderProps) {
@@ -29,10 +27,81 @@ export function Header({ currentTime }: HeaderProps) {
   const navigate = useNavigate()
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [timeLeft, setTimeLeft] = useState<number>(0)
+  
+  // 로그인 사용자 정보
+  const [currentUser, setCurrentUser] = useState({ name: "알수없음", role: "주니어" })
+
+  useEffect(() => {
+    const token = getStoredAccessToken()
+    if (token) {
+      const decoded = decodeJwt(token)
+      if (decoded) {
+        setCurrentUser({
+          name: decoded.name || "사용자",
+          role: decoded.role === "SENIOR" ? "시니어" : "주니어"
+        })
+      }
+    }
+  }, [])
+
+  // 세션 타이머
+  useEffect(() => {
+    const checkExpiry = () => {
+      const token = sessionStorage.getItem("aims-auth-accessToken")
+      if (!token) {
+        setTimeLeft(0)
+        return
+      }
+
+      const decoded = decodeJwt(token)
+      if (!decoded || !decoded.exp) {
+        setTimeLeft(0)
+        return
+      }
+
+      const now = Math.floor(Date.now() / 1000)
+      const remaining = decoded.exp - now
+      setTimeLeft(remaining > 0 ? remaining : 0)
+    }
+
+    checkExpiry()
+    const interval = setInterval(checkExpiry, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogout = () => {
-    sessionStorage.removeItem("aims-auth")
+    sessionStorage.removeItem("aims-auth-accessToken")
+    sessionStorage.removeItem("aims-auth-refreshToken")
     navigate("/login", { replace: true })
+  }
+
+  const extendSession = async () => {
+    try {
+      const refreshToken = sessionStorage.getItem("aims-auth-refreshToken")
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        sessionStorage.setItem("aims-auth-accessToken", data.data.accessToken)
+        alert("세션이 1시간 연장되었습니다.")
+        window.location.reload()
+      } else {
+        alert("세션 연장에 실패했습니다. 다시 로그인해주세요.")
+        handleLogout()
+      }
+    } catch (error) {
+      console.error("세션 연장 오류:", error)
+    }
+  }
+
+  const formatTimeLeft = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
   // 클라이언트 사이드에서만 테마 아이콘 표시 (hydration 문제 방지)
@@ -123,6 +192,21 @@ export function Header({ currentTime }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Session Timer & Extend */}
+        <div className="flex items-center gap-3 text-sm">
+          <span className={`${timeLeft < 300 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+            세션 만료: {formatTimeLeft(timeLeft)}
+          </span>
+          <button
+            onClick={extendSession}
+            className="flex items-center gap-1 px-2 py-1 bg-secondary text-foreground rounded hover:bg-secondary/80 transition-colors"
+            title="세션 연장"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span className="text-xs">연장</span>
+          </button>
+        </div>
+
         {/* User Profile */}
         <div className="flex items-center gap-2 cursor-pointer">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
@@ -156,3 +240,4 @@ export function Header({ currentTime }: HeaderProps) {
     </header>
   )
 }
+

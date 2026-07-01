@@ -1,15 +1,12 @@
 // 이벤트 데이터 / 타입 / 유틸 - 이벤트 페이지와 알림(마스코트) Provider가 공유하는 단일 진실 공급원
 
 // 공정 코드 매핑
-export const PROCESS_CODES: Record<string, string> = {
-  "프레스 공정": "P",
-  "용접 공정": "W",
-  "차체 공정": "W",
-  "도장 공정": "C",
-  "의장 공정": "A",
-  "조립 공정": "A",
-  "검사 공정": "I",
-  "자재 관리": "M",
+export const PROCESS_CODE_MAP: Record<string, string> = {
+  "PRESS": "프레스",
+  "BODY": "차체",
+  "PAINT": "도장",
+  "ASSEMBLY": "의장"
+  // "INSPECTION": "검사"
 }
 
 // 심각도 코드 매핑
@@ -32,6 +29,7 @@ export interface EventItem {
   status: EventStatus
   handler?: string
   trustScore?: number
+  priorityScore?: number
   equipmentNo: string // 장비 번호
   eventDate: string // 이벤트 날짜 (MMDD)
   eventCount: number // 해당 장비 이벤트 횟수
@@ -73,7 +71,7 @@ export function generateLogCode(
   eventCount: number
 ): string {
   const severityCode = SEVERITY_CODES[severity] || "W"
-  const processCode = PROCESS_CODES[area] || "P"
+  const processCode = PROCESS_CODE_MAP[area] || "P"
   const equipNo = equipmentNo.padStart(3, "0")
   const date = eventDate // MMDD 형식
   const count = String(eventCount).padStart(4, "0")
