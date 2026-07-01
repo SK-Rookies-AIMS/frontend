@@ -31,7 +31,7 @@ export async function fetchBottleneckAnalysis({
     cursor: String(cursor),
   })
 
-  const response = await fetch(`/api/process/bottleneck?${params.toString()}`)
+  const response = await fetch(`/api/ai/process/bottleneck?${params.toString()}`)
 
   if (!response.ok) {
     throw new Error(`병목 분석 API 요청 실패 (${response.status})`)
