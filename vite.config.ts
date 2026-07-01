@@ -15,6 +15,10 @@ export default defineConfig({
         target: "http://localhost:8000",
         changeOrigin: true,
       },
+      "/api/process/defect-transfer": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
       "/api/quality/inspection": {
         target: "http://localhost:8082",
         changeOrigin: true,
