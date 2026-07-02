@@ -1,5 +1,4 @@
 import { Client } from "@stomp/stompjs";
-import SockJS from "sockjs-client";
 
 type WebSocketCallbacks = {
   onSummary?: (data: any) => void;
@@ -17,9 +16,7 @@ export function connectWebSocket(callbacks: WebSocketCallbacks) {
   }
 
   client = new Client({
-
-    webSocketFactory: () =>
-      new SockJS(`${process.env.NEXT_PUBLIC_API_BASE_URL}/ws`),
+    brokerURL: `${import.meta.env.VITE_WS_URL}/ws`,
 
     reconnectDelay: 5000,
 
