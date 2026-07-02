@@ -1,4 +1,4 @@
-const TOKEN_KEYS = ["accessToken", "token", "authToken", "auth_token"];
+const TOKEN_KEYS = ["aims-auth-accessToken", "accessToken", "token", "authToken", "auth_token"];
 const JSON_TOKEN_KEYS = ["auth", "user", "login", "session", "authState"];
 
 function pickToken(value) {
@@ -58,8 +58,8 @@ export function getStoredAccessToken() {
   }
 
   return (
-    readStorageToken(window.localStorage) ||
     readStorageToken(window.sessionStorage) ||
+    readStorageToken(window.localStorage) ||
     ""
   );
 }

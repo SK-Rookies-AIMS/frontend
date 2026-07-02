@@ -1,3 +1,5 @@
+import { getStoredAccessToken } from "./authStorage"
+
 export const BODY_ANALYSIS_DEFAULT_LIMIT = 30
 
 export type BodyAnalysisMetrics = {
@@ -56,7 +58,7 @@ export async function fetchBodyAnalysis({
   from,
   to,
   endAt,
-  limit = BODY_ANALYSIS_DEFAULT_LIMIT,
+  limit,
 }: {
   date?: string | null
   from?: string | null
@@ -64,16 +66,19 @@ export async function fetchBodyAnalysis({
   endAt?: string | null
   limit?: number
 } = {}) {
-  const params = new URLSearchParams({
-    limit: String(limit),
-  })
+  const params = new URLSearchParams()
 
   if (date) params.set("date", date)
   if (from) params.set("from", from)
   if (to) params.set("to", to)
   if (endAt) params.set("endAt", endAt)
+  if (limit) params.set("limit", String(limit))
 
-  const response = await fetch(`/api/process/body/analysis?${params.toString()}`)
+  const token = getStoredAccessToken()
+  const queryString = params.toString()
+  const response = await fetch(`/api/process/body/analysis${queryString ? `?${queryString}` : ""}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
 
   if (!response.ok) {
     throw new Error(`차체 이상 탐지 API 요청 실패 (${response.status})`)
