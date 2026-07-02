@@ -23,6 +23,7 @@ import {
 import {
   getAssemblyDashboard,
   getAssemblyAvailableDates,
+  getEquipmentOperationRate,
   getPaintAvailableDates,
   getPaintDashboard,
 } from "@/api/processDashboardApi"
@@ -39,10 +40,10 @@ import {
 } from "recharts"
 
 const processStages = [
-  { id: "01", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
-  { id: "02", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
-  { id: "03", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
-  { id: "04", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
+  { id: "01", processCode: "PRESS", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
+  { id: "02", processCode: "BODY", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
+  { id: "03", processCode: "PAINT", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
+  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
   { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
 ]
 
@@ -266,8 +267,8 @@ type PaintDashboardData = {
 type AssemblyVehicleRow = {
   carMasterId?: number
   carDisplayId: string
-  expectedSequence: string
-  actualSequence: string
+  expectedSequence: string | null
+  actualSequence: string | null
   sequenceErrorCount: number
   missingPartCount: number
   fasteningErrorCount: number
@@ -296,6 +297,16 @@ type AssemblyDashboardData = {
 type AvailableDatesData = {
   dates: string[]
   latestDate: string | null
+}
+
+type EquipmentOperationRateItem = {
+  processCode: "PRESS" | "BODY" | "PAINT" | "ASSEMBLY" | string
+  processName?: string
+  operationRate?: number
+}
+
+type EquipmentOperationRateData = {
+  items?: EquipmentOperationRateItem[]
 }
 
 const emptyPaintDashboard: PaintDashboardData = {
@@ -363,8 +374,16 @@ function PaintTooltip({
   )
 }
 
-function formatSequence(sequence: string) {
-  return sequence.split(">").join(" > ")
+function formatSequence(sequence?: string | null) {
+  if (typeof sequence !== "string" || sequence.trim() === "") {
+    return "-"
+  }
+
+  return sequence
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ")
 }
 
 function getAssemblyStatus(severity: string, isAbnormal: boolean, status?: string) {
@@ -472,6 +491,7 @@ export default function ManufacturingPage() {
   const [assemblyDashboardError, setAssemblyDashboardError] = useState<string | null>(null)
   const [paintDatesError, setPaintDatesError] = useState<string | null>(null)
   const [assemblyDatesError, setAssemblyDatesError] = useState<string | null>(null)
+  const [operationRateByProcess, setOperationRateByProcess] = useState<Record<string, EquipmentOperationRateItem>>({})
 
   const visiblePressData = pressData.slice(
     pressChartStartIndex,
@@ -570,6 +590,30 @@ export default function ManufacturingPage() {
     fasteningErrors: assemblyDashboard.summary?.fasteningErrorCount ?? 0,
     averageRisk: assemblyDashboard.summary?.averageRiskScore ?? 0,
   }
+  const paintAbnormalEventCount = paintDashboard.summary?.alertCount ?? 0
+  const assemblyAbnormalEventCount =
+    (assemblyDashboard.summary?.sequenceErrorCount ?? 0) +
+    (assemblyDashboard.summary?.missingPartCount ?? 0) +
+    (assemblyDashboard.summary?.fasteningErrorCount ?? 0)
+  const topProcessStages = processStages.map((stage) => {
+    if (stage.rate === null) return stage
+
+    const operationRate = stage.processCode
+      ? operationRateByProcess[stage.processCode]?.operationRate
+      : undefined
+    const events =
+      stage.processCode === "PAINT"
+        ? paintAbnormalEventCount
+        : stage.processCode === "ASSEMBLY"
+          ? assemblyAbnormalEventCount
+          : stage.events
+
+    return {
+      ...stage,
+      rate: Number.isFinite(operationRate) ? Math.round(operationRate as number) : stage.rate,
+      events,
+    }
+  })
   const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_PAGE_SIZE
   const assemblyTotalPages = Math.max(1, Math.ceil(assemblyData.length / ASSEMBLY_PAGE_SIZE))
   const pagedAssemblyData = assemblyData.slice(
@@ -732,6 +776,41 @@ export default function ManufacturingPage() {
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    const fetchEquipmentOperationRate = async () => {
+      try {
+        const result: EquipmentOperationRateData = await getEquipmentOperationRate()
+        const items = Array.isArray(result?.items) ? result.items : []
+        const nextOperationRateByProcess = items.reduce<Record<string, EquipmentOperationRateItem>>(
+          (acc, item) => {
+            if (item?.processCode) {
+              acc[item.processCode] = item
+            }
+            return acc
+          },
+          {},
+        )
+
+        if (!ignore) {
+          setOperationRateByProcess(nextOperationRateByProcess)
+        }
+      } catch (error) {
+        console.error("Failed to load equipment operation rate", error)
+        if (!ignore) {
+          setOperationRateByProcess({})
+        }
+      }
+    }
+
+    void fetchEquipmentOperationRate()
+
+    return () => {
+      ignore = true
+    }
   }, [])
 
   const applyPaintDashboard = (result: Partial<PaintDashboardData> | null | undefined) => {
@@ -1000,7 +1079,7 @@ export default function ManufacturingPage() {
 
         {/* Process Stages */}
         <div className="flex items-center gap-2 mb-6">
-          {processStages.map((stage, index) => (
+          {topProcessStages.map((stage, index) => (
             <div key={stage.id} className="flex items-center">
               <div
                 className={`relative rounded-lg border p-4 min-w-[160px] ${

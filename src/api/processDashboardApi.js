@@ -40,11 +40,17 @@ export const getAssemblyAvailableDates = async () => {
   return unwrapApiResponse(response);
 };
 
+export const getEquipmentOperationRate = async () => {
+  const response = await axios.get('/api/process/equipment/operation-rate');
+  return unwrapApiResponse(response);
+};
+
 const processDashboardApi = {
   getPaintDashboard,
   getAssemblyDashboard,
   getPaintAvailableDates,
   getAssemblyAvailableDates,
+  getEquipmentOperationRate,
 };
 
 export default processDashboardApi;
