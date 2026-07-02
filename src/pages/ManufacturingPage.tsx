@@ -20,6 +20,13 @@ import {
   fetchDefectTransferCauses,
   fetchDefectTransferPredictions,
 } from "@/api/defectTransferApi"
+import {
+  getAssemblyDashboard,
+  getAssemblyAvailableDates,
+  getEquipmentOperationRate,
+  getPaintAvailableDates,
+  getPaintDashboard,
+} from "@/api/processDashboardApi"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -33,10 +40,10 @@ import {
 } from "recharts"
 
 const processStages = [
-  { id: "01", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
-  { id: "02", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
-  { id: "03", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
-  { id: "04", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
+  { id: "01", processCode: "PRESS", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
+  { id: "02", processCode: "BODY", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
+  { id: "03", processCode: "PAINT", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
+  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
   { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
 ]
 
@@ -218,47 +225,123 @@ const bodyAvailableDates = Array.from(
   new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
 
-const paintData = [
-  { eventTime: "2026-06-18T10:00:00", defectScore: 0.42, surfaceQualityScore: 88.4, thicknessValue: 121.2, thermalStdTemp: 2.1, visionLabel: "OK", riskScore: 34.2, severity: "NORMAL", isAbnormal: false, analysisMessage: "표면 품질 안정" },
-  { eventTime: "2026-06-18T10:15:00", defectScore: 0.51, surfaceQualityScore: 84.7, thicknessValue: 119.8, thermalStdTemp: 2.8, visionLabel: "OK", riskScore: 41.5, severity: "NORMAL", isAbnormal: false, analysisMessage: "도장 두께 정상 범위" },
-  { eventTime: "2026-06-18T10:30:00", defectScore: 0.68, surfaceQualityScore: 78.9, thicknessValue: 117.3, thermalStdTemp: 3.5, visionLabel: "DEFECT", riskScore: 67.4, severity: "WARNING", isAbnormal: true, analysisMessage: "비전 불량 라벨 감지" },
-  { eventTime: "2026-06-18T10:45:00", defectScore: 0.87, surfaceQualityScore: 72.3, thicknessValue: 116.5, thermalStdTemp: 4.2, visionLabel: "DEFECT", riskScore: 88.5, severity: "CRITICAL", isAbnormal: true, analysisMessage: "표면 품질 점수 저하 및 두께 이상 의심" },
-  { eventTime: "2026-06-18T11:00:00", defectScore: 0.73, surfaceQualityScore: 76.8, thicknessValue: 118.1, thermalStdTemp: 3.9, visionLabel: "DEFECT", riskScore: 72.8, severity: "WARNING", isAbnormal: true, analysisMessage: "불량 점수 상승" },
-  { eventTime: "2026-06-18T11:15:00", defectScore: 0.46, surfaceQualityScore: 86.2, thicknessValue: 120.4, thermalStdTemp: 2.4, visionLabel: "OK", riskScore: 38.6, severity: "NORMAL", isAbnormal: false, analysisMessage: "후속 샘플 품질 회복" },
-]
-
-const paintChartData = paintData.map((row) => ({
-  ...row,
-  time: new Date(row.eventTime).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }),
-  defectScoreScaled: row.defectScore <= 1 ? row.defectScore * 100 : row.defectScore,
-}))
-
-const paintAlert = [...paintData].sort((a, b) => b.riskScore - a.riskScore)[0]
-const paintKpis = {
-  analysisCount: paintData.length,
-  defectRate: (paintData.filter((row) => row.isAbnormal || row.visionLabel === "DEFECT").length / paintData.length) * 100,
-  averageQuality: paintData.reduce((sum, row) => sum + row.surfaceQualityScore, 0) / paintData.length,
-  riskAlarmCount: paintData.filter((row) => row.severity === "WARNING" || row.severity === "CRITICAL").length,
+type PaintChartDatum = {
+  eventTime: string
+  time: string
+  defectScore: number
+  defectScoreScaled: number
+  surfaceQualityScore: number
+  thicknessValue: number
+  riskScore: number
+  imagePosition?: string
+  visionLabel?: string
+  thermalStdTemp?: number
+  severity?: string
 }
 
-const assemblyData = [
-  { carId: "CAR-000001", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A03>A02>A04", sequenceErrorCount: 1, missingPartCount: 0, fasteningErrorCount: 1, riskScore: 86.5, severity: "CRITICAL", isAbnormal: true, analysisMessage: "조립 순서 오류와 체결 오류 동시 감지" },
-  { carId: "CAR-000002", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 0, riskScore: 18.2, severity: "NORMAL", isAbnormal: false, analysisMessage: "정상 조립 완료" },
-  { carId: "CAR-000003", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A04", sequenceErrorCount: 0, missingPartCount: 1, fasteningErrorCount: 0, riskScore: 61.3, severity: "WARNING", isAbnormal: true, analysisMessage: "부품 누락 의심" },
-  { carId: "CAR-000004", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 1, riskScore: 54.7, severity: "WARNING", isAbnormal: true, analysisMessage: "체결 토크 이상 감지" },
-  { carId: "CAR-000005", expectedSequence: "A01>A02>A03>A04", actualSequence: "A01>A02>A03>A04", sequenceErrorCount: 0, missingPartCount: 0, fasteningErrorCount: 0, riskScore: 22.4, severity: "NORMAL", isAbnormal: false, analysisMessage: "정상 조립 진행" },
-]
-
-const assemblyAlert = [...assemblyData].sort((a, b) => b.riskScore - a.riskScore)[0]
-const assemblyKpis = {
-  carCount: new Set(assemblyData.map((row) => row.carId)).size,
-  sequenceErrors: assemblyData.reduce((sum, row) => sum + row.sequenceErrorCount, 0),
-  missingParts: assemblyData.reduce((sum, row) => sum + row.missingPartCount, 0),
-  fasteningErrors: assemblyData.reduce((sum, row) => sum + row.fasteningErrorCount, 0),
-  averageRisk: assemblyData.reduce((sum, row) => sum + row.riskScore, 0) / assemblyData.length,
+type PaintDashboardData = {
+  selectedDate: string | null
+  summary: {
+    analysisCount: number
+    defectRate: number
+    averageSurfaceQualityScore: number
+    alertCount: number
+  }
+  chart: Array<{
+    time: string
+    defectScore: number
+    surfaceQualityScore: number
+    thicknessValue: number
+    riskScore: number
+    imagePosition?: string
+    visionLabel?: string
+    thermalStdTemp?: number
+    severity?: string
+  }>
+  alert: {
+    title: string
+    messages: string[]
+  } | null
 }
 
-type PaintChartDatum = (typeof paintChartData)[number]
+type AssemblyVehicleRow = {
+  carMasterId?: number
+  carDisplayId: string
+  expectedSequence: string | null
+  actualSequence: string | null
+  sequenceErrorCount: number
+  missingPartCount: number
+  fasteningErrorCount: number
+  riskScore: number
+  severity: string
+  status: string
+  time?: string
+}
+
+type AssemblyDashboardData = {
+  selectedDate: string | null
+  summary: {
+    vehicleCount: number
+    sequenceErrorCount: number
+    missingPartCount: number
+    fasteningErrorCount: number
+    averageRiskScore: number
+  }
+  vehicles: AssemblyVehicleRow[]
+  alert: {
+    title: string
+    messages: string[]
+  } | null
+}
+
+type AvailableDatesData = {
+  dates: string[]
+  latestDate: string | null
+}
+
+type EquipmentOperationRateItem = {
+  processCode: "PRESS" | "BODY" | "PAINT" | "ASSEMBLY" | string
+  processName?: string
+  operationRate?: number
+}
+
+type EquipmentOperationRateData = {
+  items?: EquipmentOperationRateItem[]
+}
+
+const emptyPaintDashboard: PaintDashboardData = {
+  selectedDate: null,
+  summary: {
+    analysisCount: 0,
+    defectRate: 0,
+    averageSurfaceQualityScore: 0,
+    alertCount: 0,
+  },
+  chart: [],
+  alert: null,
+}
+
+const emptyAssemblyDashboard: AssemblyDashboardData = {
+  selectedDate: null,
+  summary: {
+    vehicleCount: 0,
+    sequenceErrorCount: 0,
+    missingPartCount: 0,
+    fasteningErrorCount: 0,
+    averageRiskScore: 0,
+  },
+  vehicles: [],
+  alert: null,
+}
+
+const ASSEMBLY_PAGE_SIZE = 5
+
+const formatApiTime = (value: string) => {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.slice(11, 16) || value
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
+}
 
 function PaintTooltip({
   active,
@@ -281,27 +364,40 @@ function PaintTooltip({
         <p>불량 점수: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (표시 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
         <p>표면 품질 점수: {row.surfaceQualityScore.toFixed(1)}</p>
         <p>도장 두께: {row.thicknessValue.toFixed(1)}</p>
-        <p>vision_label: {row.visionLabel}</p>
+        <p>위험도: {row.riskScore.toFixed(1)}</p>
+        {row.visionLabel && <p>vision_label: {row.visionLabel}</p>}
+        {row.imagePosition && <p>image_position: {row.imagePosition}</p>}
+        {row.thermalStdTemp !== undefined && <p>thermal_std_temp: {row.thermalStdTemp.toFixed(1)}</p>}
+        {row.severity && <p>severity: {row.severity}</p>}
       </div>
     </div>
   )
 }
 
-function formatSequence(sequence: string) {
-  return sequence.split(">").join(" > ")
+function formatSequence(sequence?: string | null) {
+  if (typeof sequence !== "string" || sequence.trim() === "") {
+    return "-"
+  }
+
+  return sequence
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ")
 }
 
-function getAssemblyStatus(severity: string, isAbnormal: boolean) {
+function getAssemblyStatus(severity: string, isAbnormal: boolean, status?: string) {
+  if (status) return status
   if (!isAbnormal) return "정상"
   if (severity === "CRITICAL") return "위험"
   if (severity === "WARNING") return "경고"
   return "이상"
 }
 
-function getStatusBadgeClass(severity: string, isAbnormal: boolean) {
+function getStatusBadgeClass(severity: string, isAbnormal: boolean, status?: string, riskScore = 0) {
+  if (status === "위험" || severity === "CRITICAL" || riskScore >= 80) return "bg-destructive/20 text-destructive"
+  if (status === "경고" || severity === "WARNING" || riskScore >= 50) return "bg-warning/20 text-warning"
   if (!isAbnormal) return "bg-success/20 text-success"
-  if (severity === "CRITICAL") return "bg-destructive/20 text-destructive"
-  if (severity === "WARNING") return "bg-warning/20 text-warning"
   return "bg-destructive/20 text-destructive"
 }
 
@@ -380,6 +476,22 @@ export default function ManufacturingPage() {
     startIndex: number
     width: number
   } | null>(null)
+  const [selectedPaintDate, setSelectedPaintDate] = useState("")
+  const [selectedAssemblyDate, setSelectedAssemblyDate] = useState("")
+  const [paintAvailableDates, setPaintAvailableDates] = useState<string[]>([])
+  const [assemblyAvailableDates, setAssemblyAvailableDates] = useState<string[]>([])
+  const [assemblyPage, setAssemblyPage] = useState(1)
+  const [paintDashboard, setPaintDashboard] = useState<PaintDashboardData>(emptyPaintDashboard)
+  const [assemblyDashboard, setAssemblyDashboard] = useState<AssemblyDashboardData>(emptyAssemblyDashboard)
+  const [isPaintDashboardLoading, setIsPaintDashboardLoading] = useState(false)
+  const [isAssemblyDashboardLoading, setIsAssemblyDashboardLoading] = useState(false)
+  const [isPaintDatesLoading, setIsPaintDatesLoading] = useState(false)
+  const [isAssemblyDatesLoading, setIsAssemblyDatesLoading] = useState(false)
+  const [paintDashboardError, setPaintDashboardError] = useState<string | null>(null)
+  const [assemblyDashboardError, setAssemblyDashboardError] = useState<string | null>(null)
+  const [paintDatesError, setPaintDatesError] = useState<string | null>(null)
+  const [assemblyDatesError, setAssemblyDatesError] = useState<string | null>(null)
+  const [operationRateByProcess, setOperationRateByProcess] = useState<Record<string, EquipmentOperationRateItem>>({})
 
   const visiblePressData = pressData.slice(
     pressChartStartIndex,
@@ -450,6 +562,72 @@ export default function ManufacturingPage() {
     }
     setIsBodyChartDragging(true)
   }
+
+  const paintKpis = {
+    analysisCount: paintDashboard.summary?.analysisCount ?? 0,
+    defectRate: paintDashboard.summary?.defectRate ?? 0,
+    averageQuality: paintDashboard.summary?.averageSurfaceQualityScore ?? 0,
+    riskAlarmCount: paintDashboard.summary?.alertCount ?? 0,
+  }
+  const paintChartData: PaintChartDatum[] = (paintDashboard.chart ?? []).map((row) => ({
+    eventTime: row.time,
+    time: formatApiTime(row.time),
+    defectScore: row.defectScore ?? 0,
+    defectScoreScaled: (row.defectScore ?? 0) <= 1 ? (row.defectScore ?? 0) * 100 : (row.defectScore ?? 0),
+    surfaceQualityScore: row.surfaceQualityScore ?? 0,
+    thicknessValue: row.thicknessValue ?? 0,
+    riskScore: row.riskScore ?? 0,
+    imagePosition: row.imagePosition,
+    visionLabel: row.visionLabel,
+    thermalStdTemp: row.thermalStdTemp,
+    severity: row.severity,
+  }))
+  const assemblyData = assemblyDashboard.vehicles ?? []
+  const assemblyKpis = {
+    carCount: assemblyDashboard.summary?.vehicleCount ?? 0,
+    sequenceErrors: assemblyDashboard.summary?.sequenceErrorCount ?? 0,
+    missingParts: assemblyDashboard.summary?.missingPartCount ?? 0,
+    fasteningErrors: assemblyDashboard.summary?.fasteningErrorCount ?? 0,
+    averageRisk: assemblyDashboard.summary?.averageRiskScore ?? 0,
+  }
+  const paintAbnormalEventCount = paintDashboard.summary?.alertCount ?? 0
+  const assemblyAbnormalEventCount =
+    (assemblyDashboard.summary?.sequenceErrorCount ?? 0) +
+    (assemblyDashboard.summary?.missingPartCount ?? 0) +
+    (assemblyDashboard.summary?.fasteningErrorCount ?? 0)
+  const topProcessStages = processStages.map((stage) => {
+    if (stage.rate === null) return stage
+
+    const operationRate = stage.processCode
+      ? operationRateByProcess[stage.processCode]?.operationRate
+      : undefined
+    const events =
+      stage.processCode === "PAINT"
+        ? paintAbnormalEventCount
+        : stage.processCode === "ASSEMBLY"
+          ? assemblyAbnormalEventCount
+          : stage.events
+
+    return {
+      ...stage,
+      rate: Number.isFinite(operationRate) ? Math.round(operationRate as number) : stage.rate,
+      events,
+    }
+  })
+  const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_PAGE_SIZE
+  const assemblyTotalPages = Math.max(1, Math.ceil(assemblyData.length / ASSEMBLY_PAGE_SIZE))
+  const pagedAssemblyData = assemblyData.slice(
+    assemblyStartIndex,
+    assemblyStartIndex + ASSEMBLY_PAGE_SIZE,
+  )
+  const paintDateOptions =
+    selectedPaintDate && !paintAvailableDates.includes(selectedPaintDate)
+      ? [selectedPaintDate, ...paintAvailableDates]
+      : paintAvailableDates
+  const assemblyDateOptions =
+    selectedAssemblyDate && !assemblyAvailableDates.includes(selectedAssemblyDate)
+      ? [selectedAssemblyDate, ...assemblyAvailableDates]
+      : assemblyAvailableDates
 
   const fetchBottleneckRows = useCallback(async (cursor: number | null) => {
     if (cursor === null) return
@@ -601,6 +779,180 @@ export default function ManufacturingPage() {
   }, [])
 
   useEffect(() => {
+    let ignore = false
+
+    const fetchEquipmentOperationRate = async () => {
+      try {
+        const result: EquipmentOperationRateData = await getEquipmentOperationRate()
+        const items = Array.isArray(result?.items) ? result.items : []
+        const nextOperationRateByProcess = items.reduce<Record<string, EquipmentOperationRateItem>>(
+          (acc, item) => {
+            if (item?.processCode) {
+              acc[item.processCode] = item
+            }
+            return acc
+          },
+          {},
+        )
+
+        if (!ignore) {
+          setOperationRateByProcess(nextOperationRateByProcess)
+        }
+      } catch (error) {
+        console.error("Failed to load equipment operation rate", error)
+        if (!ignore) {
+          setOperationRateByProcess({})
+        }
+      }
+    }
+
+    void fetchEquipmentOperationRate()
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const applyPaintDashboard = (result: Partial<PaintDashboardData> | null | undefined) => {
+    setPaintDashboard({
+      ...emptyPaintDashboard,
+      ...result,
+      summary: {
+        ...emptyPaintDashboard.summary,
+        ...result?.summary,
+      },
+      chart: Array.isArray(result?.chart) ? result.chart : [],
+      alert: result?.alert ?? null,
+      selectedDate: result?.selectedDate ?? null,
+    })
+    setSelectedPaintDate(result?.selectedDate ?? "")
+  }
+
+  const applyAssemblyDashboard = (result: Partial<AssemblyDashboardData> | null | undefined) => {
+    setAssemblyDashboard({
+      ...emptyAssemblyDashboard,
+      ...result,
+      summary: {
+        ...emptyAssemblyDashboard.summary,
+        ...result?.summary,
+      },
+      vehicles: Array.isArray(result?.vehicles) ? result.vehicles : [],
+      alert: result?.alert ?? null,
+      selectedDate: result?.selectedDate ?? null,
+    })
+    setSelectedAssemblyDate(result?.selectedDate ?? "")
+    setAssemblyPage(1)
+  }
+
+  const fetchPaintDashboardData = useCallback(async (date?: string) => {
+    setIsPaintDashboardLoading(true)
+    setPaintDashboardError(null)
+
+    try {
+      const result = await getPaintDashboard(
+        date ? { date, limit: 30 } : { limit: 30 },
+      )
+      applyPaintDashboard(result)
+    } catch (error) {
+      console.error("Failed to load paint dashboard", error)
+      setPaintDashboard(emptyPaintDashboard)
+      setPaintDashboardError("도장 대시보드 데이터를 불러오지 못했습니다.")
+    } finally {
+      setIsPaintDashboardLoading(false)
+    }
+  }, [])
+
+  const fetchAssemblyDashboardData = useCallback(async (date?: string) => {
+    setIsAssemblyDashboardLoading(true)
+    setAssemblyDashboardError(null)
+
+    try {
+      const result = await getAssemblyDashboard(
+        date ? { date, limit: 30 } : { limit: 30 },
+      )
+      applyAssemblyDashboard(result)
+    } catch (error) {
+      console.error("Failed to load assembly dashboard", error)
+      setAssemblyDashboard(emptyAssemblyDashboard)
+      setAssemblyDashboardError("조립 대시보드 데이터를 불러오지 못했습니다.")
+    } finally {
+      setIsAssemblyDashboardLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    const fetchPaintDates = async () => {
+      setIsPaintDatesLoading(true)
+      setPaintDatesError(null)
+
+      try {
+        const result: AvailableDatesData = await getPaintAvailableDates()
+        if (!ignore) {
+          setPaintAvailableDates(Array.isArray(result?.dates) ? result.dates : [])
+          if (!selectedPaintDate && result?.latestDate) {
+            setSelectedPaintDate(result.latestDate)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load paint available dates", error)
+        if (!ignore) {
+          setPaintAvailableDates([])
+          setPaintDatesError("도장 데이터 날짜 목록을 불러오지 못했습니다.")
+        }
+      } finally {
+        if (!ignore) {
+          setIsPaintDatesLoading(false)
+        }
+      }
+    }
+
+    void fetchPaintDates()
+    void fetchPaintDashboardData()
+
+    return () => {
+      ignore = true
+    }
+  }, [fetchPaintDashboardData])
+
+  useEffect(() => {
+    let ignore = false
+
+    const fetchAssemblyDates = async () => {
+      setIsAssemblyDatesLoading(true)
+      setAssemblyDatesError(null)
+
+      try {
+        const result: AvailableDatesData = await getAssemblyAvailableDates()
+        if (!ignore) {
+          setAssemblyAvailableDates(Array.isArray(result?.dates) ? result.dates : [])
+          if (!selectedAssemblyDate && result?.latestDate) {
+            setSelectedAssemblyDate(result.latestDate)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load assembly available dates", error)
+        if (!ignore) {
+          setAssemblyAvailableDates([])
+          setAssemblyDatesError("조립 데이터 날짜 목록을 불러오지 못했습니다.")
+        }
+      } finally {
+        if (!ignore) {
+          setIsAssemblyDatesLoading(false)
+        }
+      }
+    }
+
+    void fetchAssemblyDates()
+    void fetchAssemblyDashboardData()
+
+    return () => {
+      ignore = true
+    }
+  }, [fetchAssemblyDashboardData])
+
+  useEffect(() => {
     void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR)
   }, [fetchBottleneckRows])
 
@@ -727,7 +1079,7 @@ export default function ManufacturingPage() {
 
         {/* Process Stages */}
         <div className="flex items-center gap-2 mb-6">
-          {processStages.map((stage, index) => (
+          {topProcessStages.map((stage, index) => (
             <div key={stage.id} className="flex items-center">
               <div
                 className={`relative rounded-lg border p-4 min-w-[160px] ${
@@ -1302,7 +1654,40 @@ export default function ManufacturingPage() {
                       <p className="text-2xl font-bold text-warning">{paintKpis.riskAlarmCount} <span className="text-sm font-normal">건</span></p>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">도장 품질 지표 추이</h4>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-medium">도장 품질 지표 추이</h4>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      날짜
+                      <select
+                        aria-label="도장 대시보드 날짜 선택"
+                        value={selectedPaintDate}
+                        onChange={(event) => {
+                          const date = event.target.value
+                          setSelectedPaintDate(date)
+                          void fetchPaintDashboardData(date)
+                        }}
+                        disabled={isPaintDatesLoading || paintDateOptions.length === 0}
+                        className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      >
+                        {paintDateOptions.length === 0 && (
+                          <option value="">데이터 없음</option>
+                        )}
+                        {paintDateOptions.map((date) => (
+                          <option key={date} value={date}>{date}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {paintDatesError && (
+                    <div className="mb-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {paintDatesError}
+                    </div>
+                  )}
+                  {paintDashboardError && (
+                    <div className="mb-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {paintDashboardError}
+                    </div>
+                  )}
                   <div className="flex items-center gap-4 mb-2 text-xs">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-primary" />
@@ -1318,34 +1703,46 @@ export default function ManufacturingPage() {
                     </div>
                   </div>
                   <div className="chart-line-reveal">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart key={activeTab} data={paintChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
-                        <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
-                        <Tooltip content={<PaintTooltip />} />
-                        <Legend />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="defectScoreScaled" stroke="#00d4ff" name="불량 점수" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="surfaceQualityScore" stroke="#ef4444" name="표면 품질 점수" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="thicknessValue" stroke="#f59e0b" name="도장 두께" dot={false} strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {isPaintDashboardLoading ? (
+                      <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                        도장 대시보드 데이터를 불러오는 중입니다.
+                      </div>
+                    ) : paintChartData.length === 0 ? (
+                      <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                        표시할 도장 품질 데이터가 없습니다.
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart key={activeTab} data={paintChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#64748b" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                          <Tooltip content={<PaintTooltip />} />
+                          <Legend />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="defectScoreScaled" stroke="#00d4ff" name="불량 점수" dot={false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="surfaceQualityScore" stroke="#ef4444" name="표면 품질 점수" dot={false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="thicknessValue" stroke="#f59e0b" name="도장 두께" dot={false} strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </div>
                 <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="font-medium text-destructive">도장 품질 이상 감지</span>
+                    <span className="font-medium text-destructive">{paintDashboard.alert?.title ?? "도장 품질 이상 감지"}</span>
                   </div>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>- 비전 불량 라벨 감지: {paintAlert.visionLabel}</li>
-                    <li>- 불량 점수 상승: defect_score {paintAlert.defectScore.toFixed(2)}</li>
-                    <li>- 표면 품질 점수 저하: surface_quality_score {paintAlert.surfaceQualityScore.toFixed(1)}</li>
-                    <li>- 도장 두께 이상 의심: thickness_value {paintAlert.thicknessValue.toFixed(1)}</li>
-                    <li>- 온도 균일도 이상: thermal_std_temp {paintAlert.thermalStdTemp.toFixed(1)}</li>
-                    <li>- 위험도/등급: {paintAlert.riskScore.toFixed(1)} / {paintAlert.severity}</li>
-                    <li>- {paintAlert.analysisMessage}</li>
-                  </ul>
+                  {paintDashboard.alert?.messages?.length ? (
+                    <ul className="text-sm space-y-1 text-muted-foreground">
+                      {paintDashboard.alert.messages.map((message) => (
+                        <li key={message}>- {message}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      현재 감지된 도장 품질 이상이 없습니다.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1375,7 +1772,40 @@ export default function ManufacturingPage() {
                       <p className="text-2xl font-bold text-warning">{assemblyKpis.averageRisk.toFixed(1)} <span className="text-sm font-normal">점</span></p>
                     </div>
                   </div>
-                  <h4 className="text-sm font-medium mb-2">차량별 조립 분석 결과</h4>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-medium">차량별 조립 분석 결과</h4>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      날짜
+                      <select
+                        aria-label="조립 대시보드 날짜 선택"
+                        value={selectedAssemblyDate}
+                        onChange={(event) => {
+                          const date = event.target.value
+                          setSelectedAssemblyDate(date)
+                          void fetchAssemblyDashboardData(date)
+                        }}
+                        disabled={isAssemblyDatesLoading || assemblyDateOptions.length === 0}
+                        className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      >
+                        {assemblyDateOptions.length === 0 && (
+                          <option value="">데이터 없음</option>
+                        )}
+                        {assemblyDateOptions.map((date) => (
+                          <option key={date} value={date}>{date}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {assemblyDatesError && (
+                    <div className="mb-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {assemblyDatesError}
+                    </div>
+                  )}
+                  {assemblyDashboardError && (
+                    <div className="mb-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {assemblyDashboardError}
+                    </div>
+                  )}
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-muted-foreground text-xs">
@@ -1390,9 +1820,23 @@ export default function ManufacturingPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {assemblyData.map((row) => (
-                        <tr key={row.carId} className="border-t border-border">
-                          <td className="py-2">{row.carId}</td>
+                      {isAssemblyDashboardLoading ? (
+                        <tr className="border-t border-border">
+                          <td className="py-6 text-center text-muted-foreground" colSpan={8}>
+                            조립 대시보드 데이터를 불러오는 중입니다.
+                          </td>
+                        </tr>
+                      ) : assemblyData.length === 0 ? (
+                        <tr className="border-t border-border">
+                          <td className="py-6 text-center text-muted-foreground" colSpan={8}>
+                            표시할 조립 분석 데이터가 없습니다.
+                          </td>
+                        </tr>
+                      ) : pagedAssemblyData.map((row, index) => {
+                        const rowIndex = assemblyStartIndex + index
+                        return (
+                        <tr key={`${row.carMasterId ?? row.carDisplayId}-${row.carDisplayId}-${row.time ?? "no-time"}-${rowIndex}`} className="border-t border-border">
+                          <td className="py-2">{row.carDisplayId}</td>
                           <td className="py-2">{formatSequence(row.expectedSequence)}</td>
                           <td className="py-2">{formatSequence(row.actualSequence)}</td>
                           <td className={`text-center font-medium ${row.sequenceErrorCount > 0 ? "text-destructive" : "text-success"}`}>{row.sequenceErrorCount}</td>
@@ -1400,29 +1844,58 @@ export default function ManufacturingPage() {
                           <td className={`text-center font-medium ${row.fasteningErrorCount > 0 ? "text-destructive" : "text-success"}`}>{row.fasteningErrorCount}</td>
                           <td className={`text-center font-medium ${getRiskTextClass(row.riskScore)}`}>{row.riskScore.toFixed(1)}</td>
                           <td className="text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs ${getStatusBadgeClass(row.severity, row.isAbnormal)}`}>
-                              {getAssemblyStatus(row.severity, row.isAbnormal)}
+                            <span className={`px-2 py-0.5 rounded text-xs ${getStatusBadgeClass(row.severity, row.status !== "정상", row.status, row.riskScore)}`}>
+                              {getAssemblyStatus(row.severity, row.status !== "정상", row.status)}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
+                  {assemblyData.length > 0 && (
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <p>총 {assemblyData.length.toLocaleString()}건</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAssemblyPage((page) => Math.max(1, page - 1))}
+                          disabled={assemblyPage <= 1}
+                          className="rounded border border-border px-2 py-1 text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          이전
+                        </button>
+                        <span className="min-w-12 text-center text-foreground">
+                          {assemblyPage} / {assemblyTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAssemblyPage((page) => Math.min(assemblyTotalPages, page + 1))}
+                          disabled={assemblyPage >= assemblyTotalPages}
+                          className="rounded border border-border px-2 py-1 text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          다음
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="font-medium text-destructive">조립 순서 오류 감지</span>
+                    <span className="font-medium text-destructive">{assemblyDashboard.alert?.title ?? "조립 순서 오류 감지"}</span>
                   </div>
-                  <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>- 기준 순서: {formatSequence(assemblyAlert.expectedSequence)}</li>
-                    <li>- 실제 순서: {formatSequence(assemblyAlert.actualSequence)}</li>
-                    <li>- 순서 오류: {assemblyAlert.sequenceErrorCount}건</li>
-                    <li>- 체결 오류: {assemblyAlert.fasteningErrorCount}건</li>
-                    <li>- 누락 부품: {assemblyAlert.missingPartCount}건</li>
-                    <li>- 위험도/등급: {assemblyAlert.riskScore.toFixed(1)} / {assemblyAlert.severity}</li>
-                    <li>- {assemblyAlert.analysisMessage}</li>
-                  </ul>
+                  {assemblyDashboard.alert?.messages?.length ? (
+                    <ul className="text-sm space-y-1 text-muted-foreground">
+                      {assemblyDashboard.alert.messages.map((message) => (
+                        <li key={message}>- {message}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      현재 감지된 조립 순서 오류가 없습니다.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
