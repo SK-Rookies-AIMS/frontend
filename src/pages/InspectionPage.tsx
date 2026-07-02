@@ -19,6 +19,7 @@ import {
   Battery,
   Fuel,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react"
 
 import {
@@ -65,6 +66,19 @@ export default function InspectionPage() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null)
   const [detailType, setDetailType] = useState<'status'|'drive'>('status')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshingRisk, setIsRefreshingRisk] = useState(false)
+
+  async function loadRiskHistoryData() {
+    setIsRefreshingRisk(true)
+    try {
+      const data = await fetchRiskHistory()
+      setRiskHistoryData(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error("위험도 데이터 갱신 실패", e)
+    } finally {
+      setIsRefreshingRisk(false)
+    }
+  }
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -365,6 +379,14 @@ export default function InspectionPage() {
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
+                <button
+                  onClick={loadRiskHistoryData}
+                  disabled={isRefreshingRisk}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-cyan-400 transition-colors disabled:opacity-50 px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshingRisk ? 'animate-spin' : ''}`} />
+                  {isRefreshingRisk ? "갱신 중..." : "새로고침"}
+                </button>
               </div>
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={chartData}>
