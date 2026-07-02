@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api/process/bottleneck": {
+      "/api/ai": {
         target: "http://localhost:8000",
         changeOrigin: true,
       },

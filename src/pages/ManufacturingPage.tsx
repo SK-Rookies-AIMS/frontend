@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Header } from "@/components/dashboard/header"
@@ -11,6 +11,15 @@ import {
   type BottleneckRow,
   fetchBottleneckAnalysis,
 } from "@/api/bottleneckApi"
+import {
+  DEFECT_TRANSFER_INITIAL_CURSOR,
+  DEFECT_TRANSFER_PAGE_SIZE,
+  type DefectTransferCauseData,
+  type DefectTransferCauseRow,
+  type DefectTransferPredictionRow,
+  fetchDefectTransferCauses,
+  fetchDefectTransferPredictions,
+} from "@/api/defectTransferApi"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -84,6 +93,18 @@ const formatDateTime = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
 
 const formatChartTick = (dateTime: string) => `${dateTime.slice(5, 10)} ${dateTime.slice(11)}`
+
+const formatDelayTime = (seconds: number): string => {
+  if (seconds >= 3600) {
+    const hours = seconds / 3600;
+    return `${Number(hours.toFixed(1))}시간`;
+  }
+  if (seconds >= 60) {
+    const minutes = seconds / 60;
+    return `${Number(minutes.toFixed(1))}분`;
+  }
+  return `${Number(seconds.toFixed(1))}초`;
+}
 
 // 드래그 시 전날 데이터까지 조회할 수 있도록 이전 24시간의 5분 기준값을 만든다.
 const historicalPressAnchorData: PressAnchor[] = Array.from({ length: 288 }, (_, index) => {
@@ -290,10 +311,24 @@ function getRiskTextClass(riskScore: number) {
   return "text-success"
 }
 
+function formatProbability(value: number) {
+  const percent = value <= 1 ? value * 100 : value
+  return `${Math.round(percent)}%`
+}
+
+function getDefectRiskTextClass(riskLevel: string, probability?: number) {
+  const normalizedRisk = riskLevel.toUpperCase()
+  const percent = probability === undefined ? 0 : probability <= 1 ? probability * 100 : probability
+
+  if (normalizedRisk.includes("CRITICAL") || normalizedRisk.includes("HIGH") || percent >= 70) return "text-destructive"
+  if (normalizedRisk.includes("WARNING") || normalizedRisk.includes("MEDIUM") || percent >= 50) return "text-warning"
+  return "text-success"
+}
+
 export default function ManufacturingPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState("press")
-  const [selectedVehicle, setSelectedVehicle] = useState("VIN-001245")
+  const [selectedVehicle, setSelectedVehicle] = useState("")
   const [bottleneckRows, setBottleneckRows] = useState<BottleneckRow[]>([])
   const [bottleneckCursor, setBottleneckCursor] = useState<number | null>(BOTTLENECK_INITIAL_CURSOR)
   const [hasNextBottleneck, setHasNextBottleneck] = useState(true)
@@ -302,6 +337,27 @@ export default function ManufacturingPage() {
   const requestedBottleneckCursorsRef = useRef<Set<number>>(new Set())
   const hasNextBottleneckRef = useRef(true)
   const isBottleneckLoadingRef = useRef(false)
+  const bottleneckScrollRef = useRef<HTMLDivElement | null>(null)
+  const [defectPredictionRows, setDefectPredictionRows] = useState<DefectTransferPredictionRow[]>([])
+  const [defectPredictionCursor, setDefectPredictionCursor] = useState<number | null>(DEFECT_TRANSFER_INITIAL_CURSOR)
+  const [hasNextDefectPrediction, setHasNextDefectPrediction] = useState(true)
+  const [isDefectPredictionLoading, setIsDefectPredictionLoading] = useState(false)
+  const [defectPredictionError, setDefectPredictionError] = useState<string | null>(null)
+  const requestedDefectPredictionCursorsRef = useRef<Set<number>>(new Set())
+  const hasNextDefectPredictionRef = useRef(true)
+  const isDefectPredictionLoadingRef = useRef(false)
+  const defectPredictionScrollRef = useRef<HTMLDivElement | null>(null)
+  const [defectCauseSummary, setDefectCauseSummary] = useState<DefectTransferCauseData | null>(null)
+  const [defectCauseRows, setDefectCauseRows] = useState<DefectTransferCauseRow[]>([])
+  const [defectCauseCursor, setDefectCauseCursor] = useState<number | null>(DEFECT_TRANSFER_INITIAL_CURSOR)
+  const [hasNextDefectCause, setHasNextDefectCause] = useState(true)
+  const [isDefectCauseLoading, setIsDefectCauseLoading] = useState(false)
+  const [defectCauseError, setDefectCauseError] = useState<string | null>(null)
+  const requestedDefectCauseCursorsRef = useRef<Set<number>>(new Set())
+  const hasNextDefectCauseRef = useRef(true)
+  const isDefectCauseLoadingRef = useRef(false)
+  const defectCauseScrollRef = useRef<HTMLDivElement | null>(null)
+  const initializedDefectCauseVehicleRef = useRef<string | null>(null)
   const [pressChartStartIndex, setPressChartStartIndex] = useState(
     Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
   )
@@ -433,6 +489,110 @@ export default function ManufacturingPage() {
     }
   }
 
+  const fetchDefectPredictionRows = useCallback(async (cursor: number | null) => {
+    if (cursor === null) return
+    if (requestedDefectPredictionCursorsRef.current.has(cursor)) return
+    if (!hasNextDefectPredictionRef.current && cursor !== DEFECT_TRANSFER_INITIAL_CURSOR) return
+
+    requestedDefectPredictionCursorsRef.current.add(cursor)
+    isDefectPredictionLoadingRef.current = true
+    setIsDefectPredictionLoading(true)
+    setDefectPredictionError(null)
+
+    try {
+      const result = await fetchDefectTransferPredictions({
+        size: DEFECT_TRANSFER_PAGE_SIZE,
+        cursor,
+      })
+
+      setDefectPredictionRows((prevRows) => {
+        const existingVehicleIds = new Set(prevRows.map((row) => row.vehicleId))
+        const nextRows = result.content.filter((row) => !existingVehicleIds.has(row.vehicleId))
+        return [...prevRows, ...nextRows]
+      })
+      hasNextDefectPredictionRef.current = result.hasNext
+      setHasNextDefectPrediction(result.hasNext)
+      setDefectPredictionCursor(result.hasNext ? result.nextCursor : null)
+    } catch (error) {
+      requestedDefectPredictionCursorsRef.current.delete(cursor)
+      setDefectPredictionError(error instanceof Error ? error.message : "불량 전이 예측 데이터를 불러오지 못했습니다.")
+    } finally {
+      isDefectPredictionLoadingRef.current = false
+      setIsDefectPredictionLoading(false)
+    }
+  }, [])
+
+  const handleDefectPredictionScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget
+    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
+
+    if (isNearBottom && hasNextDefectPredictionRef.current && !isDefectPredictionLoadingRef.current) {
+      void fetchDefectPredictionRows(defectPredictionCursor)
+    }
+  }
+
+  const resetDefectCauses = useCallback(() => {
+    requestedDefectCauseCursorsRef.current.clear()
+    hasNextDefectCauseRef.current = true
+    isDefectCauseLoadingRef.current = false
+    setDefectCauseRows([])
+    setDefectCauseCursor(DEFECT_TRANSFER_INITIAL_CURSOR)
+    setHasNextDefectCause(true)
+    setIsDefectCauseLoading(false)
+    setDefectCauseError(null)
+    setDefectCauseSummary(null)
+  }, [])
+
+  const fetchDefectCauseRows = useCallback(async (cursor: number | null, vehicleId: string | null) => {
+    if (cursor === null) return
+    const requestKey = vehicleId || "__default__"
+    if (requestedDefectCauseCursorsRef.current.has(cursor)) return
+    if (!hasNextDefectCauseRef.current && cursor !== DEFECT_TRANSFER_INITIAL_CURSOR) return
+
+    requestedDefectCauseCursorsRef.current.add(cursor)
+    isDefectCauseLoadingRef.current = true
+    setIsDefectCauseLoading(true)
+    setDefectCauseError(null)
+
+    try {
+      const result = await fetchDefectTransferCauses({
+        vehicleId,
+        size: DEFECT_TRANSFER_PAGE_SIZE,
+        cursor,
+      })
+
+      if (initializedDefectCauseVehicleRef.current !== requestKey) return
+
+      setDefectCauseSummary(result)
+      setDefectCauseRows((prevRows) => {
+        const existingRanks = new Set(prevRows.map((row) => row.rank))
+        const nextRows = result.content.filter((row) => !existingRanks.has(row.rank))
+        return [...prevRows, ...nextRows]
+      })
+      hasNextDefectCauseRef.current = result.hasNext
+      setHasNextDefectCause(result.hasNext)
+      setDefectCauseCursor(result.hasNext ? result.nextCursor : null)
+    } catch (error) {
+      if (initializedDefectCauseVehicleRef.current !== requestKey) return
+      requestedDefectCauseCursorsRef.current.delete(cursor)
+      setDefectCauseError(error instanceof Error ? error.message : "SHAP 원인 분석 데이터를 불러오지 못했습니다.")
+    } finally {
+      if (initializedDefectCauseVehicleRef.current === requestKey) {
+        isDefectCauseLoadingRef.current = false
+        setIsDefectCauseLoading(false)
+      }
+    }
+  }, [])
+
+  const handleDefectCauseScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget
+    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
+
+    if (isNearBottom && hasNextDefectCauseRef.current && !isDefectCauseLoadingRef.current) {
+      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null)
+    }
+  }
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
@@ -443,6 +603,49 @@ export default function ManufacturingPage() {
   useEffect(() => {
     void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR)
   }, [fetchBottleneckRows])
+
+  useEffect(() => {
+    const scrollElement = bottleneckScrollRef.current
+    if (!scrollElement || !hasNextBottleneck || isBottleneckLoading || bottleneckCursor === null) return
+
+    const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
+    if (!hasScrollableContent) {
+      void fetchBottleneckRows(bottleneckCursor)
+    }
+  }, [bottleneckRows.length, bottleneckCursor, fetchBottleneckRows, hasNextBottleneck, isBottleneckLoading])
+
+  useEffect(() => {
+    void fetchDefectPredictionRows(DEFECT_TRANSFER_INITIAL_CURSOR)
+  }, [fetchDefectPredictionRows])
+
+  useEffect(() => {
+    const requestKey = selectedVehicle || "__default__"
+    if (initializedDefectCauseVehicleRef.current === requestKey) return
+
+    initializedDefectCauseVehicleRef.current = requestKey
+    resetDefectCauses()
+    void fetchDefectCauseRows(DEFECT_TRANSFER_INITIAL_CURSOR, selectedVehicle || null)
+  }, [fetchDefectCauseRows, resetDefectCauses, selectedVehicle])
+
+  useEffect(() => {
+    const scrollElement = defectPredictionScrollRef.current
+    if (!scrollElement || !hasNextDefectPrediction || isDefectPredictionLoading || defectPredictionCursor === null) return
+
+    const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
+    if (!hasScrollableContent) {
+      void fetchDefectPredictionRows(defectPredictionCursor)
+    }
+  }, [defectPredictionRows.length, defectPredictionCursor, fetchDefectPredictionRows, hasNextDefectPrediction, isDefectPredictionLoading])
+
+  useEffect(() => {
+    const scrollElement = defectCauseScrollRef.current
+    if (!scrollElement || !hasNextDefectCause || isDefectCauseLoading || defectCauseCursor === null) return
+
+    const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
+    if (!hasScrollableContent) {
+      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null)
+    }
+  }, [defectCauseRows.length, defectCauseCursor, fetchDefectCauseRows, hasNextDefectCause, isDefectCauseLoading, selectedVehicle])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -508,6 +711,10 @@ export default function ManufacturingPage() {
     }
   }, [])
 
+  const defectPredictionVehicleOptions = defectPredictionRows.filter(
+    (row, index, rows) => rows.findIndex((item) => item.vehicleId === row.vehicleId) === index,
+  )
+
   return (
     <AuthGuard>
     <div className="min-h-screen bg-background flex flex-col">
@@ -572,9 +779,13 @@ export default function ManufacturingPage() {
         {/* Analysis Section - 3 Cards */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           {/* 1. Bottleneck Analysis */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-4">실시간 병목 분석</h3>
-            <div className="max-h-[220px] overflow-y-auto pr-1" onScroll={handleBottleneckScroll}>
+          <div className="bg-card border border-border rounded-lg p-3">
+            <h3 className="text-sm font-medium mb-2">실시간 병목 분석</h3>
+            <div
+              ref={bottleneckScrollRef}
+              className="h-[206px] overflow-y-auto pr-1"
+              onScroll={handleBottleneckScroll}
+            >
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card">
                   <tr className="text-muted-foreground text-xs">
@@ -590,7 +801,7 @@ export default function ManufacturingPage() {
                     <tr key={`${row.rankNo}-${row.processCode}-${index}`} className="border-t border-border">
                       <td className="py-2 font-bold">{row.rankNo}</td>
                       <td className="py-2">{row.processCode}</td>
-                      <td className="text-center">{row.delayTime}초</td>
+                      <td className="text-center">{formatDelayTime(row.delayTime)}</td>
                       <td className="text-center text-warning">{row.affectedVehicleCount}대</td>
                       <td className="text-center">
                         <RiskIndicator level={row.riskScore} />
@@ -620,61 +831,138 @@ export default function ManufacturingPage() {
           </div>
 
           {/* 2. Defect Prediction */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-4">불량 전이 예측</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="text-left py-2">VIN / Lot ID</th>
-                  <th className="text-left py-2">현재 공정</th>
-                  <th className="text-left py-2">예측 불량 공정</th>
-                  <th className="text-center py-2">불량 확률</th>
-                  <th className="text-center py-2">예상 발생 시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {defectPredictionData.map((row) => (
-                  <tr key={row.vinId} className="border-t border-border">
-                    <td className="py-2">{row.vinId}</td>
-                    <td className="py-2">{row.currentProcess}</td>
-                    <td className="py-2 text-destructive">{row.predictedProcess}</td>
-                    <td className="text-center">
-                      <span className={`font-bold ${row.probability >= 70 ? "text-destructive" : "text-warning"}`}>
-                        {row.probability}%
-                      </span>
-                    </td>
-                    <td className="text-center text-muted-foreground">{row.stepsAhead}</td>
+          <div className="bg-card border border-border rounded-lg p-3">
+            <h3 className="text-sm font-medium mb-2">불량 전이 예측</h3>
+            <div
+              ref={defectPredictionScrollRef}
+              className="h-[206px] overflow-y-auto pr-1"
+              onScroll={handleDefectPredictionScroll}
+            >
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="text-muted-foreground text-xs">
+                    <th className="text-left py-2">Vehicle ID</th>
+                    <th className="text-left py-2">현재 공정</th>
+                    <th className="text-left py-2">예측 불량 공정</th>
+                    <th className="text-center py-2">불량 확률</th>
+                    <th className="text-center py-2">예상 시간</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {defectPredictionRows.map((row, index) => {
+                    const isSelected =
+                      selectedVehicle === row.vehicleId ||
+                      (!selectedVehicle && defectCauseSummary?.vehicleId === row.vehicleId)
+                    return (
+                      <tr
+                        key={`${row.vehicleId}-${row.carMasterId}-${index}`}
+                        onClick={() => setSelectedVehicle(selectedVehicle === row.vehicleId ? "" : row.vehicleId)}
+                        className={`border-t border-border cursor-pointer hover:bg-muted/50 transition-colors ${
+                          isSelected ? "bg-primary/10" : ""
+                        }`}
+                      >
+                        <td className="py-2 font-medium">{row.vehicleId}</td>
+                        <td className="py-2">{row.currentProcess}</td>
+                        <td className="py-2 text-destructive">{row.predictedDefectProcess}</td>
+                        <td className="text-center">
+                          <span className={`font-bold ${getDefectRiskTextClass(row.riskLevel, row.defectProbability)}`}>
+                            {formatProbability(row.defectProbability)}
+                          </span>
+                        </td>
+                        <td className="text-center text-muted-foreground">{row.expectedTime}</td>
+                      </tr>
+                    )
+                  })}
+                  {!isDefectPredictionLoading && defectPredictionRows.length === 0 && (
+                    <tr className="border-t border-border">
+                      <td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                        불량 전이 예측 데이터가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {isDefectPredictionLoading && (
+                <div className="py-3 text-center text-xs text-muted-foreground">
+                  불량 전이 예측 데이터를 불러오는 중...
+                </div>
+              )}
+              {defectPredictionError && (
+                <div className="py-3 text-center text-xs text-destructive">
+                  {defectPredictionError}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 3. AI Analysis */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium mb-4">AI 원인 분석</h3>
-            <div className="flex items-center gap-3 mb-4">
+          <div className="bg-card border border-border rounded-lg p-3">
+            <h3 className="text-sm font-medium mb-2">SHAP 기반 AI 원인 분석</h3>
+            <div className="flex items-center gap-3 mb-2">
               <span className="text-muted-foreground text-sm">선택 차량</span>
-              <button className="flex items-center gap-2 px-3 py-1.5 bg-secondary border border-border rounded text-sm">
-                {selectedVehicle}
-                <ChevronDown className="w-4 h-4" />
-              </button>
+              <div className="relative">
+                <select
+                  className="appearance-none bg-secondary border border-border rounded py-1.5 pl-3 pr-8 text-sm"
+                  value={selectedVehicle}
+                  onChange={(event) => setSelectedVehicle(event.target.value)}
+                  disabled={defectPredictionVehicleOptions.length === 0}
+                >
+                  <option value="">예측 불량 확률 최고 차량</option>
+                  {defectPredictionVehicleOptions.map((row) => (
+                    <option key={`${row.vehicleId}-${row.carMasterId}`} value={row.vehicleId}>
+                      {row.vehicleId}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2" />
+              </div>
+
               <div className="ml-auto text-right">
                 <span className="text-muted-foreground text-xs">예측 불량 확률</span>
-                <p className="text-2xl font-bold text-destructive">78% <span className="text-sm font-normal">(위험)</span></p>
+                <p className={`text-2xl font-bold ${getDefectRiskTextClass(defectCauseSummary?.riskLevel ?? "", defectCauseSummary?.predictedDefectProbability)}`}>
+                  {defectCauseSummary ? formatProbability(defectCauseSummary.predictedDefectProbability) : "-"}
+                  {defectCauseSummary?.riskLevel && <span className="text-sm font-normal"> ({defectCauseSummary.riskLevel})</span>}
+                </p>
               </div>
             </div>
             
-            <h4 className="text-xs text-muted-foreground mb-2">주요 원인</h4>
-            <div className="space-y-2">
-              {aiAnalysisFactors.map((factor, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <span className="text-xs w-4">{index + 1}</span>
-                  <span className="text-xs flex-1">{factor.name}</span>
-                  <span className="text-xs text-muted-foreground">(영향도 {factor.impact})</span>
-                  <ImpactBar value={factor.impact} />
+            <div className="mb-1 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <span>현재 공정: {defectCauseSummary?.currentProcess ?? "-"}</span>
+              <span>예측 공정: {defectCauseSummary?.predictedDefectProcess ?? "-"}</span>
+            </div>
+            <h4 className="text-xs text-muted-foreground mb-1 mt-3">주요 원인</h4>
+            <div
+              ref={defectCauseScrollRef}
+              className="h-[114px] overflow-y-auto pr-1"
+              onScroll={handleDefectCauseScroll}
+            >
+              <div className="space-y-2">
+                {defectCauseRows.map((factor) => (
+                  <div key={`${factor.rank}-${factor.feature}`} className="flex items-center gap-2">
+                    <span className="text-xs w-4">{factor.rank}</span>
+                    <span className="text-xs flex-1" title={factor.message}>
+                      {factor.label || factor.feature}: {factor.value}
+                    </span>
+                    <span className="text-xs text-muted-foreground">(영향도 {factor.impact})</span>
+                    <ImpactBar value={Math.abs(factor.impact)} />
+                  </div>
+                ))}
+                {!isDefectCauseLoading && defectCauseRows.length === 0 && (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    SHAP 원인 분석 데이터가 없습니다.
+                  </div>
+                )}
+              </div>
+              {isDefectCauseLoading && (
+                <div className="py-3 text-center text-xs text-muted-foreground">
+                  SHAP 원인 분석 데이터를 불러오는 중...
                 </div>
-              ))}
+              )}
+              {defectCauseError && (
+                <div className="py-3 text-center text-xs text-destructive">
+                  {defectCauseError}
+                </div>
+              )}
             </div>
           </div>
         </div>
