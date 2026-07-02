@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 
 import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
@@ -45,10 +45,10 @@ const PAGE_SIZE = 10
 
 // 기본 프로세스 카드 (API 실패 시 skeleton 표시용)
 const DEFAULT_PROCESSES = [
-  { id: "p1", processName: "외관 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p2", processName: "기능 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p3", processName: "주행 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p4", processName: "최종 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p1", processName: "VISUAL", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p2", processName: "FUNCTION", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p3", processName: "DRIVE", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p4", processName: "FINAL", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
 ]
 
 export default function InspectionPage() {
@@ -65,6 +65,7 @@ export default function InspectionPage() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null)
   const [detailType, setDetailType] = useState<'status'|'drive'>('status')
   const [isLoading, setIsLoading] = useState(true)
+
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -133,19 +134,31 @@ export default function InspectionPage() {
 
   // 최신 시간대 기준 최대 4개 추출
   // createdAt 필드가 없으면 processData 전체를 그대로 사용
+  const currentDateRef = useRef<string | null>(null)
+  const getDate = (dt: string) =>
+  new Date(dt).toISOString().split("T")[0]
   const latestProcesses = useMemo(() => {
     if (!processData.length) return DEFAULT_PROCESSES
-    const hasTime = processData.some((item: any) => item.createdAt)
-    if (!hasTime) return processData.slice(0, 4)
-    const grouped = processData.reduce((acc: any, item: any) => {
-      const time = item.createdAt ?? "unknown"
-      if (!acc[time]) acc[time] = []
-      acc[time].push(item)
-      return acc
-    }, {})
-    const sortedTimes = Object.keys(grouped).sort()
-    const latestTime = sortedTimes[sortedTimes.length - 1]
-    return (grouped[latestTime] || []).slice(0, 4)
+
+    // 1. 가장 최신 데이터 기준 날짜 찾기
+    const sorted = [...processData].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+
+    const latestDate = getDate(sorted[sorted.length - 1].createdAt)
+
+    // 2. 날짜 바뀌었으면 완전 초기화
+    if (currentDateRef.current && currentDateRef.current !== latestDate) {
+      currentDateRef.current = latestDate
+      return DEFAULT_PROCESSES
+    }
+
+    currentDateRef.current = latestDate
+
+    // 3. 해당 날짜 데이터만 필터링
+    return processData
+      .filter(item => getDate(item.createdAt) === latestDate)
+      .slice(0, 4)
   }, [processData])
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
@@ -249,9 +262,9 @@ export default function InspectionPage() {
   )
 
   function renderProcessIcon(name: string) {
-    if (name.includes("외관")) return <Car className="w-5 h-5" />
-    if (name.includes("기능")) return <Gauge className="w-5 h-5" />
-    if (name.includes("주행")) return <PlayCircle className="w-5 h-5" />
+    if (name.includes("VISUAL")) return <Car className="w-5 h-5" />
+    if (name.includes("FUNCTION")) return <Gauge className="w-5 h-5" />
+    if (name.includes("DRIVE")) return <PlayCircle className="w-5 h-5" />
     return <CheckCircle2 className="w-5 h-5" />
   }
 
@@ -323,7 +336,7 @@ export default function InspectionPage() {
                         {renderProcessIcon(process.processName)}
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">차량 대수</p>
+                        <p className="text-xs text-muted-foreground">목표 차량 대수</p>
                         <p className="text-2xl font-bold leading-tight">
                           {process.totalVehicleCount}
                           <span className="text-sm font-normal ml-1 text-muted-foreground">대</span>
