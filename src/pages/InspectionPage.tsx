@@ -19,6 +19,7 @@ import {
   Battery,
   Fuel,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react"
 
 import {
@@ -52,6 +53,9 @@ const DEFAULT_PROCESSES = [
 ]
 
 export default function InspectionPage() {
+  const [refreshInterval, setRefreshInterval] = useState("10")
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false)
+
   const [currentTime, setCurrentTime] = useState(new Date())
 
   const [processData, setProcessData] = useState<any[]>([])
@@ -65,6 +69,21 @@ export default function InspectionPage() {
   const [selectedDetail, setSelectedDetail] = useState<any>(null)
   const [detailType, setDetailType] = useState<'status'|'drive'>('status')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  useEffect(() => {
+  if (!autoRefreshEnabled) return
+
+  const seconds = Number(refreshInterval)
+
+  if (isNaN(seconds) || seconds <= 0) return
+
+  const timer = setInterval(() => {
+    loadDashboard(true)
+  }, seconds * 1000)
+
+  return () => clearInterval(timer)
+}, [autoRefreshEnabled, refreshInterval])
 
 
   useEffect(() => {
@@ -104,33 +123,49 @@ export default function InspectionPage() {
 
   }, []);
 
-  async function loadDashboard() {
+async function loadDashboard(refresh = false) {
+  if (refresh) {
+    setIsRefreshing(true)
+  } else {
     setIsLoading(true)
-    // 각 API를 독립적으로 호출 — 하나가 500이어도 나머지는 정상 렌더링
-    const safeCall = async (fn: () => Promise<any>, fallback: any) => {
-      try { return await fn() } catch (e) { console.error(e); return fallback }
-    }
+  }
 
-    const [process, summary, riskHistory, statusDetail, driveDetail] =
-      await Promise.all([
-        safeCall(fetchInspectionProcess, []),
-        safeCall(fetchInspectionSummary, {}),
-        safeCall(fetchRiskHistory, []),
-        safeCall(fetchStatusDetail, []),
-        safeCall(fetchDriveDetail, []),
-      ])
-
-    setProcessData(Array.isArray(process) ? process : [])
-    if (Array.isArray(summary) && summary.length > 0) {
-      setSummaryData(summary[summary.length - 1])
-    } else {
-      setSummaryData(summary || {})
+  const safeCall = async (fn: () => Promise<any>, fallback: any) => {
+    try {
+      return await fn()
+    } catch (e) {
+      console.error(e)
+      return fallback
     }
-    setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
-    setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
-    setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+  }
+
+  const [process, summary, riskHistory, statusDetail, driveDetail] =
+    await Promise.all([
+      safeCall(fetchInspectionProcess, []),
+      safeCall(fetchInspectionSummary, {}),
+      safeCall(fetchRiskHistory, []),
+      safeCall(fetchStatusDetail, []),
+      safeCall(fetchDriveDetail, []),
+    ])
+
+  setProcessData(Array.isArray(process) ? process : [])
+
+  if (Array.isArray(summary) && summary.length > 0) {
+    setSummaryData(summary[summary.length - 1])
+  } else {
+    setSummaryData(summary || {})
+  }
+
+  setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
+  setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
+  setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+
+  if (refresh) {
+    setIsRefreshing(false)
+  } else {
     setIsLoading(false)
   }
+}
 
   // 최신 시간대 기준 최대 4개 추출
   // createdAt 필드가 없으면 processData 전체를 그대로 사용
@@ -295,7 +330,49 @@ export default function InspectionPage() {
 
           {/* ── TITLE ── */}
           <div className="mb-5">
-            <h1 className="text-xl font-bold mb-1">품질 / 검사 단계 모니터링</h1>
+            <div className="flex items-center gap-5 mb-1">
+              <h1 className="text-xl font-bold">
+                품질 / 검사 단계 모니터링
+              </h1>
+
+              <div className="flex items-center gap-2">
+
+                <input
+                  type="number"
+                  min={1}
+                  value={refreshInterval}
+                  onChange={(e) => setRefreshInterval(e.target.value)}
+                  className="w-20 px-2 py-1 text-xs rounded bg-slate-800 border border-slate-700"
+                />
+
+                <span className="text-xs text-muted-foreground">
+                  초
+                </span>
+
+                <button
+                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                  className={`px-3 py-1 rounded text-xs transition-colors ${
+                    autoRefreshEnabled
+                      ? "bg-green-600 text-white"
+                      : "bg-slate-700 text-slate-300"
+                  }`}
+                >
+                  {autoRefreshEnabled ? "자동 ON" : "자동 OFF"}
+                </button>
+
+                <button
+                  onClick={() => loadDashboard(true)}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-cyan-400 transition-colors disabled:opacity-50 px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800"
+                >
+                  <RefreshCw
+                    className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  {isRefreshing ? "갱신 중..." : "새로고침"}
+                </button>
+
+              </div>
+            </div>
             <p className="text-sm text-muted-foreground">
               각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.
             </p>
