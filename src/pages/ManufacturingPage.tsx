@@ -24,6 +24,10 @@ import {
   type PressAnomalyData,
   fetchPressAnomalyAnalysis,
 } from "@/api/pressAnomalyApi"
+import {
+  type BodyAnomalyData,
+  fetchBodyAnalysis,
+} from "@/api/bodyAnalysisApi"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -154,32 +158,23 @@ const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchor
 
 type PressDataPoint = PressAnchor
 
-// 5분 기준값 사이를 1분 단위로 보간해 모든 시각에서 상세 값을 확인할 수 있게 한다.
-const pressData: PressDataPoint[] = pressAnchorData.flatMap((current, index) => {
-  const next = pressAnchorData[index + 1]
-  if (!next) return [current]
+// Press mock data removed; rely on backend `pressAnalysis` when available
+const pressData: PressDataPoint[] = []
 
-  return Array.from({ length: 5 }, (_, minuteOffset) => {
-    const ratio = minuteOffset / 5
-    const date = new Date(current.timestamp + minuteOffset * 60_000)
-    const interpolate = (key: "target_cycle_time_sec" | "actual_cycle_time_sec" | "cycle_time_gap_sec" | "timestamp_delay_sec" | "risk_score" | "overall_risk_score") =>
-      Number((current[key] + (next[key] - current[key]) * ratio).toFixed(1))
-
-    return {
-      time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`,
-      dateTime: formatDateTime(date),
-      timestamp: date.getTime(),
-      target_cycle_time_sec: interpolate("target_cycle_time_sec"),
-      actual_cycle_time_sec: interpolate("actual_cycle_time_sec"),
-      cycle_time_gap_sec: interpolate("cycle_time_gap_sec"),
-      timestamp_delay_sec: interpolate("timestamp_delay_sec"),
-      risk_score: interpolate("risk_score"),
-      overall_risk_score: interpolate("overall_risk_score"),
-    }
-  })
-})
-
-const latestPressData = pressData[pressData.length - 1]
+const latestPressData: PressDataPoint =
+  pressData.length > 0
+    ? pressData[pressData.length - 1]
+    : {
+        time: "",
+        dateTime: "",
+        timestamp: 0,
+        target_cycle_time_sec: 0,
+        actual_cycle_time_sec: 0,
+        cycle_time_gap_sec: 0,
+        timestamp_delay_sec: 0,
+        risk_score: 0,
+        overall_risk_score: 0,
+      }
 
 const getRiskSeverity = (score: number) => {
   if (score >= 70) return { label: "심각", className: "text-destructive" }
@@ -194,42 +189,28 @@ const pressAvailableDates = Array.from(
   new Set(pressData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
 
-// body_analysis_result 형태를 반영한 차체 로봇 1분 단위 목 데이터
-const bodyRobotData = pressData.map((point, index) => {
-  const vibrationWave = Math.abs(Math.sin(index / 17))
-  const isLatestRisk = index >= pressData.length - 8
-  const robotVibrationScore = isLatestRisk
-    ? Math.min(86, 68 + (index - (pressData.length - 8)) * 2.6)
-    : Math.round(22 + vibrationWave * 34 + point.timestamp_delay_sec * 2)
-  const frequencyPeakValue = Number(
-    (1.8 + vibrationWave * 3.4 + (isLatestRisk ? 3.2 : 0)).toFixed(1),
-  )
-  const riskScore = Math.round(
-    Math.min(92, robotVibrationScore * 0.72 + frequencyPeakValue * 3),
-  )
+// No local mock body data; rely on backend `bodyAnalysis` when available
+const bodyRobotData: any[] = []
 
-  return {
-    ...point,
-    robot_motion_status: isLatestRisk ? "COLLISION_RISK" : robotVibrationScore >= 55 ? "WARNING" : "NORMAL",
-    robot_operation_mode: isLatestRisk ? "AUTO_MANUAL_STOPPED" : "AUTO",
-    robot_vibration_score: robotVibrationScore,
-    frequency_peak_band: frequencyPeakValue >= 7 ? "HIGH (80–120Hz)" : frequencyPeakValue >= 4.5 ? "MID (30–80Hz)" : "LOW (0–30Hz)",
-    frequency_peak_value: frequencyPeakValue,
-    band_low: Number((frequencyPeakValue * 0.42).toFixed(1)),
-    band_mid: Number((frequencyPeakValue * 0.68).toFixed(1)),
-    band_high: Number((frequencyPeakValue * (isLatestRisk ? 1 : 0.35)).toFixed(1)),
-    risk_score: riskScore,
-    severity: riskScore >= 70 ? "CRITICAL" : riskScore >= 50 ? "WARNING" : "NORMAL",
-  }
-})
-
-const latestBodyData = bodyRobotData[bodyRobotData.length - 1]
+const latestBodyData =
+  bodyRobotData.length > 0
+    ? bodyRobotData[bodyRobotData.length - 1]
+    : {
+        dateTime: "",
+        robot_motion_status: "NORMAL",
+        robot_operation_mode: "AUTO",
+        robot_vibration_score: 0,
+        frequency_peak_band: "LOW",
+        frequency_peak_value: 0,
+        band_low: 0,
+        band_mid: 0,
+        band_high: 0,
+        risk_score: 0,
+      }
 const latestBodySeverity = getRiskSeverity(latestBodyData.risk_score)
 const BODY_CHART_WINDOW_SIZE = 31
 const PRESS_CHART_WINDOW_SIZE = 31
-const bodyAvailableDates = Array.from(
-  new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10))),
-).reverse()
+const bodyAvailableDates = Array.from(new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10)))).reverse()
 
 const paintData = [
   { eventTime: "2026-06-18T10:00:00", defectScore: 0.42, surfaceQualityScore: 88.4, thicknessValue: 121.2, thermalStdTemp: 2.1, visionLabel: "OK", riskScore: 34.2, severity: "NORMAL", isAbnormal: false, analysisMessage: "표면 품질 안정" },
@@ -493,30 +474,112 @@ export default function ManufacturingPage() {
       isFetchingRef.current = false
     }
   }, [])
+  // Body analysis (remote) state and mapping
+  const [bodyAnalysis, setBodyAnalysis] = useState<BodyAnomalyData | null>(null)
+  const [selectedBodyAnalysisDate, setSelectedBodyAnalysisDate] = useState<string | null>(null)
+  const [isBodyAnalysisLoading, setIsBodyAnalysisLoading] = useState(false)
+  const [bodyAnalysisError, setBodyAnalysisError] = useState<string | null>(null)
 
-  const visibleBodyData = bodyRobotData.slice(
+  const apiBodyData = (bodyAnalysis?.chart ?? []).map((point) => {
+      const dateTime = formatBackendTimestamp(point.timestamp)
+      const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+      const date = new Date(isoForParsing)
+      const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
+
+      const frequencyPeakValue = normalizeNumber(point.frequencyPeakValue)
+      const rawVibe = normalizeNumber(point.robotVibrationScore)
+      const robotVibrationScore = rawVibe <= 1 ? Math.round(rawVibe * 100) : rawVibe
+      const riskScore = normalizeNumber(point.riskScore)
+
+      const frequencyPeakBand =
+        frequencyPeakValue >= 7 ? "HIGH (80–120Hz)" : frequencyPeakValue >= 4.5 ? "MID (30–80Hz)" : "LOW (0–30Hz)"
+
+      return {
+        time: dateTime.slice(11, 19),
+        dateTime,
+        timestamp: epochMs,
+        target_cycle_time_sec: 0,
+        actual_cycle_time_sec: 0,
+        cycle_time_gap_sec: 0,
+        timestamp_delay_sec: 0,
+        risk_score: riskScore,
+        overall_risk_score: riskScore,
+        robot_motion_status: point.isAbnormal ? "WARNING" : "NORMAL",
+        robot_operation_mode: bodyAnalysis?.metrics?.robotOperationMode ?? "AUTO",
+        robot_vibration_score: robotVibrationScore,
+        frequency_peak_band: bodyAnalysis?.metrics?.frequencyPeakBand ?? frequencyPeakBand,
+        frequency_peak_value: frequencyPeakValue,
+        band_low: Number((frequencyPeakValue * 0.42).toFixed(1)),
+        band_mid: Number((frequencyPeakValue * 0.68).toFixed(1)),
+        band_high: Number((frequencyPeakValue * (point.isAbnormal ? 1 : 0.35)).toFixed(1)),
+      }
+    })
+
+  const fetchBodyAnalysisData = useCallback(async (date?: string | null) => {
+    setIsBodyAnalysisLoading(true)
+    setBodyAnalysisError(null)
+    try {
+      const result = await fetchBodyAnalysis({ date, limit: 60 })
+      console.debug("fetchBodyAnalysis result:", result)
+      setBodyAnalysis(result)
+    } catch (error) {
+      console.error("fetchBodyAnalysis error:", error)
+      setBodyAnalysisError(error instanceof Error ? error.message : "차체 이상 탐지 데이터를 불러오지 못했습니다.")
+    } finally {
+      setIsBodyAnalysisLoading(false)
+    }
+  }, [])
+
+  const sourceBodyData = bodyAnalysis ? apiBodyData : bodyRobotData
+
+  const visibleBodyData = sourceBodyData.slice(
     bodyChartStartIndex,
     bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
   )
+
+  const bodyAvailableDatesLocal = Array.from(new Set(sourceBodyData.map((item) => item.dateTime.slice(0, 10)))).reverse()
+
+  const bodyDateOptions =
+    Array.isArray(bodyAnalysis?.dateOptions) && bodyAnalysis!.dateOptions.length > 0
+      ? bodyAnalysis!.dateOptions.map((opt) => opt.date)
+      : bodyAvailableDatesLocal
+
   const selectedBodyDate =
-    visibleBodyData[Math.floor(visibleBodyData.length / 2)]?.dateTime.slice(0, 10) ??
-    bodyAvailableDates[0]
+    selectedBodyAnalysisDate ??
+    bodyAnalysis?.date ??
+    sourceBodyData[Math.floor(sourceBodyData.length / 2)]?.dateTime.slice(0, 10) ??
+    bodyDateOptions[0]
 
   const handleBodyDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedDate = event.target.value
-    const firstIndex = bodyRobotData.findIndex((item) => item.dateTime.startsWith(selectedDate))
-    const lastIndex = bodyRobotData.reduce(
-      (foundIndex, item, index) =>
-        item.dateTime.startsWith(selectedDate) ? index : foundIndex,
-      -1,
-    )
-
-    if (firstIndex < 0 || lastIndex < 0) return
-
-    setBodyChartStartIndex(
-      Math.max(firstIndex, lastIndex - BODY_CHART_WINDOW_SIZE + 1),
-    )
+    setSelectedBodyAnalysisDate(selectedDate)
+    // reset chart window to start of selected date; fetch will be triggered by effect
+    setBodyChartStartIndex(0)
   }
+
+  useEffect(() => {
+    void fetchBodyAnalysisData(selectedBodyAnalysisDate)
+  }, [fetchBodyAnalysisData, selectedBodyAnalysisDate])
+
+  const latestBodyData = sourceBodyData.length > 0
+    ? sourceBodyData[sourceBodyData.length - 1]
+    : bodyRobotData.length > 0
+      ? bodyRobotData[bodyRobotData.length - 1]
+      : {
+          dateTime: "",
+          robot_motion_status: "NORMAL",
+          robot_operation_mode: "AUTO",
+          robot_vibration_score: 0,
+          frequency_peak_band: "LOW",
+          frequency_peak_value: 0,
+          band_low: 0,
+          band_mid: 0,
+          band_high: 0,
+          risk_score: 0,
+        }
+
+  const latestBodySeverity = getRiskSeverity(Number(latestBodyData.risk_score ?? 0))
+
 
   const handleBodyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -1229,7 +1292,9 @@ export default function ManufacturingPage() {
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">로봇 모션 상태</p>
-                      <p className="whitespace-nowrap text-base font-bold text-destructive">{latestBodyData.robot_motion_status}</p>
+                      <p className={`whitespace-nowrap text-base font-bold ${latestBodyData.robot_motion_status === "NORMAL" ? "text-primary" : latestBodyData.robot_motion_status === "WARNING" ? "text-warning" : "text-destructive"}`}>
+                        {latestBodyData.robot_motion_status}
+                      </p>
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">운전 모드</p>
@@ -1262,12 +1327,18 @@ export default function ManufacturingPage() {
                         onChange={handleBodyDateChange}
                         className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                       >
-                        {bodyAvailableDates.map((date) => (
+                        {bodyDateOptions.map((date) => (
                           <option key={date} value={date}>{date}</option>
                         ))}
                       </select>
                     </label>
                   </div>
+                    {isBodyAnalysisLoading && (
+                      <div className="mb-2 text-xs text-muted-foreground">차체 분석 데이터를 불러오는 중...</div>
+                    )}
+                    {bodyAnalysisError && (
+                      <div className="mb-2 text-xs text-destructive">오류: {bodyAnalysisError}</div>
+                    )}
                   <div className="flex items-center gap-4 mb-2 text-xs">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-primary" />
@@ -1338,16 +1409,27 @@ export default function ManufacturingPage() {
                     </p>
                   </div>
                 </div>
-                <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
+                <div className={`${bodyAnalysis?.alert?.detected === false ? "bg-success/10 border-success/30" : "bg-destructive/10 border-destructive/30"} border rounded p-4`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="font-medium text-destructive">차체 로봇 충돌 위험 탐지</span>
+                    {bodyAnalysis?.alert?.detected === false ? (
+                      <CheckCircle className="w-4 h-4 text-success" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                    )}
+                    <span className={`font-medium ${bodyAnalysis?.alert?.detected === false ? "text-success" : "text-destructive"}`}>
+                      {bodyAnalysis?.alert?.title ?? (bodyAnalysis?.alert?.detected === false ? "차체 이상 미탐지" : "차체 이상 탐지")}
+                    </span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• robot_motion_status = COLLISION_RISK</li>
-                    <li>• robot_operation_mode = AUTO_MANUAL_STOPPED</li>
-                    <li>• 피크 진동값 급증 ({latestBodyData.frequency_peak_value.toFixed(1)} mm/s)</li>
-                    <li>• 고주파 대역 이상 감지 ({latestBodyData.frequency_peak_band})</li>
+                    {!bodyAnalysis ? (
+                      <li>• 이상 징후가 감지되지 않았습니다.</li>
+                    ) : bodyAnalysis.alert?.reasons && bodyAnalysis.alert.reasons.length > 0 ? (
+                      bodyAnalysis.alert.reasons.map((reason) => (
+                        <li key={reason}>• {reason}</li>
+                      ))
+                    ) : (
+                      <li>• {bodyAnalysis.alert?.detected === false ? "이상 징후가 감지되지 않았습니다." : "이상 사유가 존재하지 않습니다."}</li>
+                    )}
                   </ul>
                   <div className="mt-4 border-t border-destructive/20 pt-4">
                     <p className="text-xs font-medium">주파수 대역별 진동 분포</p>
