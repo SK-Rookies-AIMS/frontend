@@ -20,6 +20,10 @@ import {
   fetchDefectTransferCauses,
   fetchDefectTransferPredictions,
 } from "@/api/defectTransferApi"
+import {
+  type PressAnomalyData,
+  fetchPressAnomalyAnalysis,
+} from "@/api/pressAnomalyApi"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -92,7 +96,15 @@ type PressAnchor = (typeof latestPressAnchorData)[number] & {
 const formatDateTime = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
 
-const formatChartTick = (dateTime: string) => `${dateTime.slice(5, 10)} ${dateTime.slice(11)}`
+const formatChartTick = (dateTime: string) => dateTime.slice(11, 16)
+const formatBackendTimestamp = (timestamp: string) => {
+  const normalized = timestamp.replace("T", " ")
+  const matched = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/)
+  if (matched) return `${matched[1]} ${matched[2]}`
+  // 초가 없는 경우 HH:mm까지만 추출
+  const matchedShort = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
+  return matchedShort ? `${matchedShort[1]} ${matchedShort[2]}` : normalized
+}
 
 const formatDelayTime = (seconds: number): string => {
   if (seconds >= 3600) {
@@ -177,7 +189,7 @@ const getRiskSeverity = (score: number) => {
 }
 
 const latestOverallRisk = getRiskSeverity(latestPressData.overall_risk_score)
-const PRESS_CHART_WINDOW_SIZE = 31
+const PRESS_DAY_QUERY_LIMIT = 24 * 60 + 1
 const pressAvailableDates = Array.from(
   new Set(pressData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
@@ -214,6 +226,7 @@ const bodyRobotData = pressData.map((point, index) => {
 const latestBodyData = bodyRobotData[bodyRobotData.length - 1]
 const latestBodySeverity = getRiskSeverity(latestBodyData.risk_score)
 const BODY_CHART_WINDOW_SIZE = 31
+const PRESS_CHART_WINDOW_SIZE = 31
 const bodyAvailableDates = Array.from(
   new Set(bodyRobotData.map((item) => item.dateTime.slice(0, 10))),
 ).reverse()
@@ -325,6 +338,39 @@ function getDefectRiskTextClass(riskLevel: string, probability?: number) {
   return "text-success"
 }
 
+function normalizeNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function severityToRiskSeverity(severity: string | null | undefined, riskScore: number) {
+  if (severity === "CRITICAL") return { label: "심각", className: "text-destructive" }
+  if (severity === "WARNING") return { label: "경고", className: "text-warning" }
+  if (severity === "NORMAL") return { label: "정상", className: "text-success" }
+  return getRiskSeverity(riskScore)
+}
+
+function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number]): PressDataPoint {
+  // timestamp를 로컬 Date로 파싱하지 않고 백엔드 문자열을 그대로 사용해 시간대 차이를 방지
+  const dateTime = formatBackendTimestamp(point.timestamp)
+  // dateTime이 "YYYY-MM-DD HH:mm:ss" 형식이므로 getTime을 위한 Date 파싱은 ISO 형식 유지
+  const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+  const date = new Date(isoForParsing)
+  const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
+
+  return {
+    // time 필드: HH:mm:ss까지 표시해 백엔드 timestamp와 일치
+    time: dateTime.slice(11, 19),
+    dateTime,
+    timestamp: epochMs,
+    target_cycle_time_sec: normalizeNumber(point.targetCycleTimeSec),
+    actual_cycle_time_sec: normalizeNumber(point.actualCycleTimeSec),
+    cycle_time_gap_sec: normalizeNumber(point.cycleTimeGapSec),
+    timestamp_delay_sec: normalizeNumber(point.timestampDelaySec),
+    risk_score: normalizeNumber(point.riskScore),
+    overall_risk_score: normalizeNumber(point.riskScore),
+  }
+}
+
 export default function ManufacturingPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState("press")
@@ -339,6 +385,9 @@ export default function ManufacturingPage() {
   const isBottleneckLoadingRef = useRef(false)
   const bottleneckScrollRef = useRef<HTMLDivElement | null>(null)
   const [defectPredictionRows, setDefectPredictionRows] = useState<DefectTransferPredictionRow[]>([])
+  const defectPredictionVehicleOptions = defectPredictionRows.filter(
+    (row, index, rows) => rows.findIndex((item) => item.vehicleId === row.vehicleId) === index,
+  )
   const [defectPredictionCursor, setDefectPredictionCursor] = useState<number | null>(DEFECT_TRANSFER_INITIAL_CURSOR)
   const [hasNextDefectPrediction, setHasNextDefectPrediction] = useState(true)
   const [isDefectPredictionLoading, setIsDefectPredictionLoading] = useState(false)
@@ -358,17 +407,8 @@ export default function ManufacturingPage() {
   const isDefectCauseLoadingRef = useRef(false)
   const defectCauseScrollRef = useRef<HTMLDivElement | null>(null)
   const initializedDefectCauseVehicleRef = useRef<string | null>(null)
-  const [pressChartStartIndex, setPressChartStartIndex] = useState(
-    Math.max(0, pressData.length - PRESS_CHART_WINDOW_SIZE),
-  )
-  const [isPressChartDragging, setIsPressChartDragging] = useState(false)
   const [isPressChartHovered, setIsPressChartHovered] = useState(false)
-  const pressChartDragRef = useRef<{
-    pointerId: number
-    startX: number
-    startIndex: number
-    width: number
-  } | null>(null)
+  const [pressChartStartIndex, setPressChartStartIndex] = useState(0)
   const [bodyChartStartIndex, setBodyChartStartIndex] = useState(
     Math.max(0, bodyRobotData.length - BODY_CHART_WINDOW_SIZE),
   )
@@ -381,40 +421,78 @@ export default function ManufacturingPage() {
     width: number
   } | null>(null)
 
-  const visiblePressData = pressData.slice(
-    pressChartStartIndex,
-    pressChartStartIndex + PRESS_CHART_WINDOW_SIZE,
+  const [pressAnalysis, setPressAnalysis] = useState<PressAnomalyData | null>(null)
+  const [selectedPressAnalysisDate, setSelectedPressAnalysisDate] = useState<string | null>(null)
+  const [isPressAnalysisLoading, setIsPressAnalysisLoading] = useState(false)
+  const [pressAnalysisError, setPressAnalysisError] = useState<string | null>(null)
+
+  const apiPressData = pressAnalysis?.chart
+    .map(toPressDataPoint)
+    .filter((point) => Number.isFinite(point.timestamp)) ?? []
+  const rawPressDisplayData = pressAnalysis ? apiPressData : pressData
+
+  const latestPressDisplayData = pressAnalysis?.metrics
+    ? {
+        ...latestPressData,
+        target_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.targetCycleTimeSec),
+        actual_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.actualCycleTimeSec),
+        cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.cycleTimeGapSec),
+        timestamp_delay_sec: normalizeNumber(pressAnalysis.metrics.timestampDelaySec),
+        risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
+        overall_risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
+      }
+    : latestPressData
+
+  const latestPressDisplayRisk = severityToRiskSeverity(
+    pressAnalysis?.metrics?.severity,
+    latestPressDisplayData.overall_risk_score,
   )
+
+  const pressDisplayAvailableDates = (() => {
+    const dates = pressAnalysis?.dateOptions?.length
+      ? pressAnalysis.dateOptions.map((opt) => opt.date)
+      : Array.from(
+          new Set(rawPressDisplayData.map((item) => item.dateTime.slice(0, 10))),
+        ).reverse()
+    if (pressAnalysis?.date && !dates.includes(pressAnalysis.date)) {
+      return [pressAnalysis.date, ...dates]
+    }
+    return dates
+  })()
+
   const selectedPressDate =
-    visiblePressData[Math.floor(visiblePressData.length / 2)]?.dateTime.slice(0, 10) ??
-    pressAvailableDates[0]
+    selectedPressAnalysisDate ??
+    pressAnalysis?.date ??
+    rawPressDisplayData[Math.floor(rawPressDisplayData.length / 2)]?.dateTime.slice(0, 10) ??
+    pressDisplayAvailableDates[0]
+
+  const pressDisplayData = rawPressDisplayData
+
+  const visiblePressData = pressDisplayData
 
   const handlePressDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedDate = event.target.value
-    const firstIndex = pressData.findIndex((item) => item.dateTime.startsWith(selectedDate))
-    const lastIndex = pressData.reduce(
-      (foundIndex, item, index) =>
-        item.dateTime.startsWith(selectedDate) ? index : foundIndex,
-      -1,
-    )
-
-    if (firstIndex < 0 || lastIndex < 0) return
-
-    setPressChartStartIndex(
-      Math.max(firstIndex, lastIndex - PRESS_CHART_WINDOW_SIZE + 1),
-    )
+    setSelectedPressAnalysisDate(event.target.value)
   }
 
-  const handlePressChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    pressChartDragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startIndex: pressChartStartIndex,
-      width: event.currentTarget.getBoundingClientRect().width,
+  const isFetchingRef = useRef(false)
+  const fetchPressAnalysis = useCallback(async (date?: string | null) => {
+    isFetchingRef.current = true
+    setIsPressAnalysisLoading(true)
+    setPressAnalysisError(null)
+
+    try {
+      const result = await fetchPressAnomalyAnalysis({
+        date,
+        limit: PRESS_DAY_QUERY_LIMIT,
+      })
+      setPressAnalysis(result)
+    } catch (error) {
+      setPressAnalysisError(error instanceof Error ? error.message : "프레스 이상 탐지 데이터를 불러오지 못했습니다.")
+    } finally {
+      setIsPressAnalysisLoading(false)
+      isFetchingRef.current = false
     }
-    setIsPressChartDragging(true)
-  }
+  }, [])
 
   const visibleBodyData = bodyRobotData.slice(
     bodyChartStartIndex,
@@ -601,6 +679,10 @@ export default function ManufacturingPage() {
   }, [])
 
   useEffect(() => {
+    void fetchPressAnalysis(selectedPressAnalysisDate)
+  }, [fetchPressAnalysis, selectedPressAnalysisDate])
+
+  useEffect(() => {
     void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR)
   }, [fetchBottleneckRows])
 
@@ -617,6 +699,12 @@ export default function ManufacturingPage() {
   useEffect(() => {
     void fetchDefectPredictionRows(DEFECT_TRANSFER_INITIAL_CURSOR)
   }, [fetchDefectPredictionRows])
+
+  useEffect(() => {
+    if (!selectedVehicle && defectPredictionVehicleOptions.length > 0) {
+      setSelectedVehicle(defectPredictionVehicleOptions[0].vehicleId)
+    }
+  }, [selectedVehicle, defectPredictionVehicleOptions])
 
   useEffect(() => {
     const requestKey = selectedVehicle || "__default__"
@@ -679,41 +767,8 @@ export default function ManufacturingPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      const drag = pressChartDragRef.current
-      if (!drag || event.pointerId !== drag.pointerId) return
 
-      event.preventDefault()
-      const pixelsPerPoint = Math.max(5, drag.width / (PRESS_CHART_WINDOW_SIZE - 1))
-      const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
-      const maxStartIndex = pressData.length - PRESS_CHART_WINDOW_SIZE
 
-      setPressChartStartIndex(
-        Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
-      )
-    }
-
-    const handlePointerEnd = (event: PointerEvent) => {
-      if (pressChartDragRef.current?.pointerId !== event.pointerId) return
-      pressChartDragRef.current = null
-      setIsPressChartDragging(false)
-    }
-
-    window.addEventListener("pointermove", handlePointerMove, { passive: false })
-    window.addEventListener("pointerup", handlePointerEnd)
-    window.addEventListener("pointercancel", handlePointerEnd)
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove)
-      window.removeEventListener("pointerup", handlePointerEnd)
-      window.removeEventListener("pointercancel", handlePointerEnd)
-    }
-  }, [])
-
-  const defectPredictionVehicleOptions = defectPredictionRows.filter(
-    (row, index, rows) => rows.findIndex((item) => item.vehicleId === row.vehicleId) === index,
-  )
 
   return (
     <AuthGuard>
@@ -843,7 +898,7 @@ export default function ManufacturingPage() {
                   <tr className="text-muted-foreground text-xs">
                     <th className="text-left py-2">Vehicle ID</th>
                     <th className="text-left py-2">현재 공정</th>
-                    <th className="text-left py-2">예측 불량 공정</th>
+                    <th className="text-center py-2">예측 불량 공정</th>
                     <th className="text-center py-2">불량 확률</th>
                     <th className="text-center py-2">예상 시간</th>
                   </tr>
@@ -863,7 +918,7 @@ export default function ManufacturingPage() {
                       >
                         <td className="py-2 font-medium">{row.vehicleId}</td>
                         <td className="py-2">{row.currentProcess}</td>
-                        <td className="py-2 text-destructive">{row.predictedDefectProcess}</td>
+                        <td className="py-2 text-destructive text-center">{row.predictedDefectProcess}</td>
                         <td className="text-center">
                           <span className={`font-bold ${getDefectRiskTextClass(row.riskLevel, row.defectProbability)}`}>
                             {formatProbability(row.defectProbability)}
@@ -907,7 +962,9 @@ export default function ManufacturingPage() {
                   onChange={(event) => setSelectedVehicle(event.target.value)}
                   disabled={defectPredictionVehicleOptions.length === 0}
                 >
-                  <option value="">예측 불량 확률 최고 차량</option>
+                  {defectPredictionVehicleOptions.length === 0 && (
+                    <option value="">차량 없음</option>
+                  )}
                   {defectPredictionVehicleOptions.map((row) => (
                     <option key={`${row.vehicleId}-${row.carMasterId}`} value={row.vehicleId}>
                       {row.vehicleId}
@@ -1011,27 +1068,27 @@ export default function ManufacturingPage() {
                   <div className="flex items-center gap-8 mb-4">
                     <div>
                       <p className="text-xs text-muted-foreground">기준 사이클 타임</p>
-                      <p className="text-2xl font-bold">{latestPressData.target_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
+                      <p className="text-2xl font-bold">{latestPressDisplayData.target_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">실제 사이클 타임</p>
-                      <p className="text-2xl font-bold text-warning">{latestPressData.actual_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
+                      <p className="text-2xl font-bold text-warning">{latestPressDisplayData.actual_cycle_time_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">사이클 지연</p>
-                      <p className="text-2xl font-bold text-destructive">+{latestPressData.cycle_time_gap_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
+                      <p className="text-2xl font-bold text-destructive">{latestPressDisplayData.cycle_time_gap_sec >= 0 ? "+" : ""}{latestPressDisplayData.cycle_time_gap_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Timestamp 지연</p>
-                      <p className="text-2xl font-bold text-destructive">{latestPressData.timestamp_delay_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
+                      <p className="text-2xl font-bold text-destructive">{latestPressDisplayData.timestamp_delay_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">위험도</p>
-                      <p className="text-2xl font-bold text-warning">{latestPressData.risk_score} <span className="text-sm font-normal">/ 100</span></p>
+                      <p className="text-2xl font-bold text-warning">{latestPressDisplayData.risk_score.toFixed(1)} <span className="text-sm font-normal">/ 100</span></p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">전체 위험도</p>
-                      <p className={`text-2xl font-bold ${latestOverallRisk.className}`}>{latestOverallRisk.label}</p>
+                      <p className={`text-2xl font-bold ${latestPressDisplayRisk.className}`}>{latestPressDisplayRisk.label}</p>
                     </div>
                   </div>
                   <div className="mb-2 flex items-center justify-between gap-3">
@@ -1044,7 +1101,7 @@ export default function ManufacturingPage() {
                         onChange={handlePressDateChange}
                         className="rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                       >
-                        {pressAvailableDates.map((date) => (
+                        {pressDisplayAvailableDates.map((date) => (
                           <option key={date} value={date}>
                             {date}
                           </option>
@@ -1066,68 +1123,101 @@ export default function ManufacturingPage() {
                       <span>Timestamp 지연</span>
                     </div>
                   </div>
-                  <div
-                    className={`chart-line-reveal select-none ${isPressChartDragging ? "cursor-grabbing" : "cursor-grab"}`}
-                    style={{ touchAction: "none" }}
-                    onPointerDownCapture={handlePressChartPointerDown}
-                    onMouseEnter={() => setIsPressChartHovered(true)}
-                    onMouseLeave={() => setIsPressChartHovered(false)}
-                  >
-                    <ResponsiveContainer width="100%" height={210}>
-                      <LineChart
-                        key={activeTab}
-                        data={visiblePressData}
-                        margin={{ top: 5, right: 24, left: 4, bottom: 4 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis
-                          dataKey="dateTime"
-                          interval={4}
-                          padding={{ left: 8, right: 12 }}
-                          tick={{ fontSize: 10 }}
-                          stroke="#64748b"
-                          tickFormatter={formatChartTick}
-                        />
-                        <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
-                        <Tooltip
-                          labelFormatter={(label) => `분석 시각 ${label}`}
-                          formatter={(value, name) => [`${Number(value).toFixed(1)} sec`, name]}
-                          contentStyle={{
-                            backgroundColor: "var(--popover)",
-                            border: "1px solid var(--border)",
-                            borderRadius: 8,
-                            color: "var(--popover-foreground)",
-                          }}
-                          labelStyle={{ color: "var(--popover-foreground)" }}
-                          wrapperStyle={{
-                            visibility:
-                              isPressChartHovered && !isPressChartDragging ? "visible" : "hidden",
-                            pointerEvents: "none",
-                          }}
-                        />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={false} strokeWidth={2} />
-                        <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={false} strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {pressDisplayData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-[210px] bg-muted/5 border border-dashed border-border rounded-lg text-muted-foreground text-sm">
+                      {isPressAnalysisLoading ? (
+                        <p>프레스 분석 데이터를 불러오는 중입니다...</p>
+                      ) : (
+                        <>
+                          <p>선택한 날짜({selectedPressDate})에 분석 데이터가 없습니다.</p>
+                          {pressDisplayAvailableDates.length > 0 && (
+                            <p className="text-xs mt-1 text-muted-foreground/60">다른 날짜를 선택하여 조회할 수 있습니다.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className="chart-line-reveal select-none"
+                      onMouseEnter={() => setIsPressChartHovered(true)}
+                      onMouseLeave={() => setIsPressChartHovered(false)}
+                    >
+                      <ResponsiveContainer width="100%" height={210}>
+                        <LineChart
+                          key={activeTab}
+                          data={visiblePressData}
+                          margin={{ top: 5, right: 24, left: 4, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis
+                            dataKey="dateTime"
+                            interval={Math.max(0, Math.floor(visiblePressData.length / 6) - 1)}
+                            padding={{ left: 8, right: 12 }}
+                            tick={{ fontSize: 10 }}
+                            stroke="#64748b"
+                            tickFormatter={formatChartTick}
+                          />
+                          <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                          <Tooltip
+                            labelFormatter={(label: string) => {
+                              // label은 dateTime 필드 값 ("YYYY-MM-DD HH:mm:ss" 또는 "YYYY-MM-DD HH:mm")
+                              // 백엔드 eventTime과 일치하는 형식으로 표시
+                              return `이벤트 시각 ${label}`
+                            }}
+                            formatter={(value, name) => [`${Number(value).toFixed(1)} sec`, name]}
+                            contentStyle={{
+                              backgroundColor: "var(--popover)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 8,
+                              color: "var(--popover-foreground)",
+                            }}
+                            labelStyle={{ color: "var(--popover-foreground)" }}
+                            wrapperStyle={{
+                              visibility: isPressChartHovered ? "visible" : "hidden",
+                              pointerEvents: "none",
+                            }}
+                          />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                   <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
-                    <p>그래프 안을 좌우로 드래그하면 전날 날짜와 시간까지 이동할 수 있습니다.</p>
-                    <p className="shrink-0 font-medium text-foreground">
-                      {visiblePressData[0]?.dateTime} ~ {visiblePressData[visiblePressData.length - 1]?.dateTime}
+                    <p>
+                      {isPressAnalysisLoading
+                        ? "프레스 이상 탐지 데이터를 불러오는 중입니다."
+                        : pressAnalysisError ?? "선택 날짜의 전체 시간 범위를 한눈에 표시합니다."}
                     </p>
+                    {visiblePressData.length > 0 && (
+                      <p className="shrink-0 font-medium text-foreground">
+                        {visiblePressData[0]?.dateTime} ~ {visiblePressData[visiblePressData.length - 1]?.dateTime}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="bg-destructive/10 border border-destructive/30 rounded p-4">
+                <div className={`${pressAnalysis?.alert?.detected === false ? "bg-success/10 border-success/30" : "bg-destructive/10 border-destructive/30"} border rounded p-4`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="font-medium text-destructive">프레스 이상 정지 탐지</span>
+                    {pressAnalysis?.alert?.detected === false ? (
+                      <CheckCircle className="w-4 h-4 text-success" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                    )}
+                    <span className={`font-medium ${pressAnalysis?.alert?.detected === false ? "text-success" : "text-destructive"}`}>
+                      {pressAnalysis?.alert?.title ?? (pressAnalysis?.alert?.detected === false ? "프레스 이상 없음" : "프레스 이상 정지 탐지")}
+                    </span>
                   </div>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    <li>• count_increase_yn = true</li>
-                    <li>• 실제 사이클 타임이 기준보다 초과</li>
-                    <li>• Timestamp 지연 발생</li>
-                    <li>• press_analysis_result 기준 이상 정지 의심</li>
+                    {!pressAnalysis ? (
+                      <li>• 이상 징후가 감지되지 않았습니다.</li>
+                    ) : pressAnalysis.alert?.reasons && pressAnalysis.alert.reasons.length > 0 ? (
+                      pressAnalysis.alert.reasons.map((reason) => (
+                        <li key={reason}>• {reason}</li>
+                      ))
+                    ) : (
+                      <li>• {pressAnalysis.alert?.detected === false ? "이상 징후가 감지되지 않았습니다." : "이상 사유가 존재하지 않습니다."}</li>
+                    )}
                   </ul>
                 </div>
               </div>
