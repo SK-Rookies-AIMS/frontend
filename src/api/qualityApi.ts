@@ -1,4 +1,4 @@
-const BASE_URL = "http://127.0.0.1:8083/api/quality/inspection"
+const BASE_URL = "/api/quality/inspection"
 
 async function request(url: string) {
   const response = await fetch(url)
@@ -7,7 +7,7 @@ async function request(url: string) {
     throw new Error(`API Error: ${response.status}`)
   }
 
-  return response.json()
+  return response.json() 
 }
 
 export async function fetchInspectionProcess() {
@@ -22,10 +22,8 @@ export async function fetchRiskHistory() {
   return request(`${BASE_URL}/risk-history`)
 }
 
-export async function fetchRiskTrend(range: string) {
-  return request(
-    `${BASE_URL}/risk-trend?range=${encodeURIComponent(range)}`
-  )
+export async function fetchRiskTrend() {
+  return request(`${BASE_URL}/risk-trend`)
 }
 
 export async function fetchStatusDetail() {

@@ -5,6 +5,8 @@ import { useTheme } from "@/components/theme-provider"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
+import { useManual } from "@/hooks/use-manual"
+import type { ManualResponse } from "@/types/manual"
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -19,15 +21,56 @@ export function Mascot() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { topEvent } = useMascotAlert()
+  const {
+    loading,
+} = useManual(topEvent?.id)
+  const [manual, setManual] = useState<ManualResponse | null>(null)
+  const [loadingManual, setLoadingManual] = useState(false)
   const isAuthPage = pathname === "/login" || pathname === "/signup"
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
-    if (topEvent) {
+
+      if (!topEvent) {
+          setBubbleMode("none")
+          setManual(null)
+          return
+      }
+
       setBubbleMode("alert")
-    } else {
-      setBubbleMode("none")
-    }
+
+      const fetchManual = async () => {
+
+          try {
+
+              setLoadingManual(true)
+
+              const response = await fetch(
+                  "http://localhost:8000/manual/current"
+              )
+
+              if (!response.ok) {
+                  throw new Error("AI Manual 조회 실패")
+              }
+
+              const data = await response.json()
+
+              setManual(data)
+
+          } catch (e) {
+
+              console.error(e)
+
+          } finally {
+
+              setLoadingManual(false)
+
+          }
+
+      }
+
+      fetchManual()
+
   }, [topEvent?.id])
 
   // 테마에 따른 마스코트 이미지 선택
@@ -71,6 +114,14 @@ export function Mascot() {
           <p className="text-xs text-white/70 leading-relaxed">
             저를 한 번 더 누르면 조치 방법을 자세히 알려드릴게요.
           </p>
+          {manual && (
+
+          <p className="text-xs text-cyan-300 leading-relaxed">
+
+          {manual.summary}
+
+          </p>
+          )}
         </div>
       )
     }
@@ -78,34 +129,67 @@ export function Mascot() {
     // 상세 조치 안내
     return (
       <div className="flex flex-col gap-2.5">
-        <div className="flex items-center gap-1.5">
-          <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
-          <span className="text-xs font-semibold text-destructive">조치 안내</span>
-        </div>
-        <p className="text-sm text-white leading-relaxed">
-          아래 순서대로 조치해 주세요.
-        </p>
-        <ol className="flex flex-col gap-1.5 text-xs text-white/90 leading-relaxed list-decimal pl-4">
-          <li>
-            상단 메뉴에서 <span className="font-semibold text-white">알림(이벤트) 페이지</span>로 이동하세요.
-          </li>
-          <li>
-            이벤트명 <span className="font-semibold text-white">&apos;{topEvent.title}&apos;</span> 항목을 찾으세요.
-          </li>
-          <li>
-            이벤트 코드{" "}
-            <span className="font-mono font-semibold text-white">{topEvent.logCode}</span>의 상세 화면을 누르세요.
-          </li>
-          <li>AI 추천 조치 내용을 확인하고 현장 조치 후 상태를 업데이트하세요.</li>
-        </ol>
-        <button
-          onClick={goToEvent}
-          className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/15 hover:bg-white/25 transition-colors px-3 py-2 text-xs font-medium text-white"
-        >
-          이벤트 페이지로 이동
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+      <div className="flex items-center gap-1.5">
+        <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+        <span className="text-xs font-semibold text-destructive">
+          AI 조치 매뉴얼
+        </span>
       </div>
+
+      {/* AI 요약 */}
+      {manual?.summary && (
+        <p className="text-sm text-white leading-relaxed">
+          {manual.summary}
+        </p>
+      )}
+
+      {/* 로딩 중 */}
+      {loading && (
+        <p className="text-xs text-white/70">
+          AI가 조치 매뉴얼을 생성하고 있습니다...
+        </p>
+      )}
+
+      {/* AI 조치 순서 */}
+      {!loading && manual?.action_steps && (
+        <>
+          <p className="text-sm text-white leading-relaxed">
+            아래 순서대로 조치해 주세요.
+          </p>
+
+          <ol className="flex flex-col gap-1.5 text-xs text-white/90 leading-relaxed list-decimal pl-4">
+            {manual.action_steps.map((step, index) => (
+              <li key={index}>{step}</li>
+            ))}
+          </ol>
+        </>
+      )}
+
+      {/* AI 주의사항 */}
+      {!loading &&
+        manual?.precautions &&
+        manual.precautions.length > 0 && (
+          <div className="mt-2">
+            <p className="text-xs font-semibold text-yellow-300 mb-1">
+              ⚠ 주의사항
+            </p>
+
+            <ul className="list-disc pl-4 text-xs text-white/80 space-y-1">
+              {manual.precautions.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+      <button
+        onClick={goToEvent}
+        className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-lg bg-white/15 hover:bg-white/25 transition-colors px-3 py-2 text-xs font-medium text-white"
+      >
+        이벤트 페이지로 이동
+        <ArrowRight className="w-3.5 h-3.5" />
+      </button>
+    </div>
     )
   }
 

@@ -2,7 +2,7 @@
 
 import { Link } from "react-router-dom"
 import { AlertTriangle, ChevronRight, TrendingUp, Zap } from "lucide-react"
-import { Mascot } from "./mascot"
+import { Mascot } from "../mascot/mascot"
 
 // 우선순위 점수 계산을 위한 인터페이스
 interface PriorityEvent {
