@@ -22,10 +22,8 @@ export async function fetchRiskHistory() {
   return request(`${BASE_URL}/risk-history`)
 }
 
-export async function fetchRiskTrend(range: string) {
-  return request(
-    `${BASE_URL}/risk-trend?range=${encodeURIComponent(range)}`
-  )
+export async function fetchRiskTrend() {
+  return request(`${BASE_URL}/risk-trend`)
 }
 
 export async function fetchStatusDetail() {
