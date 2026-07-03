@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Header } from "@/components/dashboard/header"
-import { Mascot } from "@/components/dashboard/mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { Footer } from "@/components/dashboard/footer"
 import { AuthGuard } from "@/components/auth-guard"
 import {

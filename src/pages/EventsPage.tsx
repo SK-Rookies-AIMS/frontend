@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Header } from "@/components/dashboard/header"
-import { Mascot } from "@/components/dashboard/mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { Footer } from "@/components/dashboard/footer"
 import { useEvents } from "@/components/dashboard/event-notification"
 import { AuthGuard } from "@/components/auth-guard"

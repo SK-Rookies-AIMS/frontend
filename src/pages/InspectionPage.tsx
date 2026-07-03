@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react"
 
 import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
-import { Mascot } from "@/components/dashboard/mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { AuthGuard } from "@/components/auth-guard"
 import { connectWebSocket } from "@/lib/qualityWebsocket";
 
@@ -39,7 +39,8 @@ import {
   fetchRiskHistory,
   fetchStatusDetail,
   fetchDriveDetail,
-} from "@/lib/qualityApi"
+  fetchRiskTrend,
+} from "@/api/qualityApi"
 
 const PAGE_SIZE = 10
 
@@ -63,6 +64,7 @@ export default function InspectionPage() {
   const [riskHistoryData, setRiskHistoryData] = useState<any[]>([])
   const [statusDetailData, setStatusDetailData] = useState<any[]>([])
   const [driveDetailData, setDriveDetailData] = useState<any[]>([])
+  const [riskTrendData, setRiskTrendData] = useState<any[]>([])
 
   const [statusPage, setStatusPage] = useState(1)
   const [drivePage, setDrivePage] = useState(1)
@@ -139,13 +141,14 @@ async function loadDashboard(refresh = false) {
     }
   }
 
-  const [process, summary, riskHistory, statusDetail, driveDetail] =
+  const [process, summary, riskHistory, statusDetail, driveDetail, riskTrend] =
     await Promise.all([
       safeCall(fetchInspectionProcess, []),
       safeCall(fetchInspectionSummary, {}),
       safeCall(fetchRiskHistory, []),
       safeCall(fetchStatusDetail, []),
       safeCall(fetchDriveDetail, []),
+      safeCall(fetchRiskTrend, []),
     ])
 
   setProcessData(Array.isArray(process) ? process : [])
@@ -159,6 +162,7 @@ async function loadDashboard(refresh = false) {
   setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
   setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
   setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+  setRiskTrendData(Array.isArray(riskTrend) ? riskTrend : [])
 
   if (refresh) {
     setIsRefreshing(false)
@@ -194,7 +198,7 @@ async function loadDashboard(refresh = false) {
     return processData
       .filter(item => getDate(item.createdAt) === latestDate)
       .slice(0, 4)
-  }, [processData])
+    }, [processData])
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
   const derivedSummary = useMemo(() => {
@@ -248,21 +252,19 @@ async function loadDashboard(refresh = false) {
 
   // 위험도 분포 계산
   const riskDistribution = useMemo(() => {
-    const total = statusDetailData.length || 1
-    const high = statusDetailData.filter((d) => (d.statusScore ?? 0) >= 75).length
-    const medium = statusDetailData.filter(
-      (d) => (d.statusScore ?? 0) >= 40 && (d.statusScore ?? 0) < 75
-    ).length
-    const low = statusDetailData.filter((d) => (d.statusScore ?? 0) < 40).length
+    const high = riskTrendData.find((r: any) => r.riskLevel === "HIGH")
+    const medium = riskTrendData.find((r: any) => r.riskLevel === "MEDIUM")
+    const low = riskTrendData.find((r: any) => r.riskLevel === "LOW")
+
     return {
-      high,
-      medium,
-      low,
-      highPct: Math.round((high / total) * 100),
-      mediumPct: Math.round((medium / total) * 100),
-      lowPct: Math.round((low / total) * 100),
+      high: high?.riskCount ?? 0,
+      medium: medium?.riskCount ?? 0,
+      low: low?.riskCount ?? 0,
+      highPct: high?.riskRatio ?? 0,
+      mediumPct: medium?.riskRatio ?? 0,
+      lowPct: low?.riskRatio ?? 0,
     }
-  }, [statusDetailData])
+  }, [riskTrendData])
 
   // 집계 테이블 데이터
   const statusRows = useMemo(
@@ -456,7 +458,7 @@ async function loadDashboard(refresh = false) {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
               </div>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -544,6 +546,7 @@ async function loadDashboard(refresh = false) {
                       {riskDistribution.highPct}%
                     </div>
                   )}
+
                   {riskDistribution.mediumPct > 0 && (
                     <div
                       className="bg-yellow-400 flex items-center justify-center text-[10px] font-medium text-black"
@@ -552,6 +555,7 @@ async function loadDashboard(refresh = false) {
                       {riskDistribution.mediumPct}%
                     </div>
                   )}
+
                   {riskDistribution.lowPct > 0 && (
                     <div
                       className="bg-green-500 flex items-center justify-center text-[10px] font-medium text-white"
@@ -559,10 +563,6 @@ async function loadDashboard(refresh = false) {
                     >
                       {riskDistribution.lowPct}%
                     </div>
-                  )}
-                  {/* 데이터 없을 때 placeholder */}
-                  {riskDistribution.high + riskDistribution.medium + riskDistribution.low === 0 && (
-                    <div className="w-full bg-slate-700" />
                   )}
                 </div>
 
