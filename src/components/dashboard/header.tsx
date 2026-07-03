@@ -8,6 +8,21 @@ import { Home, Factory, ClipboardCheck, Sun, Moon, Clock, AlertTriangle, LogOut,
 import { getStoredAccessToken } from "@/api/authStorage"
 import { decodeJwt } from "@/lib/jwt-utils"
 
+import { jwtDecode } from "jwt-decode"
+
+import UserProfileModal from "@/components/user/UserProfileModal"
+
+interface JwtPayload {
+  sub: string
+  role: string
+  empNo: number
+  id: number
+  name: string
+  workExperience: number
+  iat: number
+  exp: number
+}
+
 interface HeaderProps {
   currentTime: Date
 }
@@ -28,6 +43,9 @@ export function Header({ currentTime }: HeaderProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [timeLeft, setTimeLeft] = useState<number>(0)
+
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false)
+  const [userInfo, setUserInfo] = useState<JwtPayload | null>(null)
   
   // 로그인 사용자 정보
   const [currentUser, setCurrentUser] = useState({ name: "알수없음", role: "주니어" })
@@ -45,6 +63,20 @@ export function Header({ currentTime }: HeaderProps) {
     }
   }, [])
 
+  function handleUserClick() {
+    const token = sessionStorage.getItem("aims-auth-accessToken")
+    if (!token) return
+
+    try {
+      const decoded = jwtDecode<JwtPayload>(token)
+
+      setUserInfo(decoded)
+
+      setIsUserModalOpen(true)
+    } catch (e) {
+      console.error("JWT Decode 실패", e)
+    }
+  }
   // 세션 타이머
   useEffect(() => {
     const checkExpiry = () => {
@@ -135,6 +167,7 @@ export function Header({ currentTime }: HeaderProps) {
   const isDark = mounted ? (resolvedTheme || theme) === "dark" : true
 
   return (
+    <>
     <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
       <div className="flex items-center gap-8">
         {/* Logo */}
@@ -208,7 +241,10 @@ export function Header({ currentTime }: HeaderProps) {
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center gap-2 cursor-pointer">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={handleUserClick}
+        >
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
             <svg viewBox="0 0 24 24" className="w-5 h-5 text-primary" fill="currentColor">
               <circle cx="12" cy="8" r="4" />
@@ -238,6 +274,12 @@ export function Header({ currentTime }: HeaderProps) {
         </button>
       </div>
     </header>
+    <UserProfileModal
+      open={isUserModalOpen}
+      user={userInfo}
+      onClose={() => setIsUserModalOpen(false)}
+      />
+    </>
   )
 }
 
