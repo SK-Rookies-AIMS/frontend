@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react"
 
 import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
-import { Mascot } from "@/components/mascot/Mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { AuthGuard } from "@/components/auth-guard"
 import { connectWebSocket } from "@/lib/qualityWebsocket";
 
