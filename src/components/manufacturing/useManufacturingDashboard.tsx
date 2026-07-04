@@ -148,7 +148,10 @@ const datedLatestPressAnchorData: PressAnchor[] = latestPressAnchorData.map((ite
 
 const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchorData]
 
-type PressDataPoint = PressAnchor
+type PressDataPoint = PressAnchor & {
+  isAbnormal?: boolean
+  severity?: string
+}
 
 // Press mock data removed; rely on backend `pressAnalysis` when available
 const pressData: PressDataPoint[] = []
@@ -429,6 +432,8 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
     timestamp_delay_sec: normalizeNumber(point.timestampDelaySec),
     risk_score: normalizeNumber(point.riskScore),
     overall_risk_score: normalizeNumber(point.riskScore),
+    isAbnormal: point.isAbnormal ?? false,
+    severity: point.severity ?? "NORMAL",
   }
 }
 
@@ -702,7 +707,10 @@ export function useManufacturingDashboard() {
           risk_score: 0,
         }
 
-  const latestBodySeverity = getRiskSeverity(Number(latestBodyData.risk_score ?? 0))
+  const latestBodySeverity = severityToRiskSeverity(
+    bodyAnalysis?.metrics?.severity,
+    Number(latestBodyData.risk_score ?? 0)
+  )
 
 
   const handleBodyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
