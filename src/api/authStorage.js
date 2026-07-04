@@ -1,5 +1,4 @@
-const TOKEN_KEYS = ["accessToken", "token", "authToken", "auth_token", "
-  -accessToken"];
+const TOKEN_KEYS = ["accessToken", "token", "authToken", "auth_token", "aims-auth-accessToken"];
 const JSON_TOKEN_KEYS = ["auth", "user", "login", "session", "authState"];
 
 function pickToken(value) {

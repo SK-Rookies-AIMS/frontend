@@ -16,7 +16,7 @@ export const SEVERITY_CODES: Record<string, string> = {
 }
 
 export type EventStatus = "조치 필요" | "조치 완료" | "조치 불필요"
-export type Severity = "위험" | "경고"
+type Severity = "위험" | "경고"
 
 export interface EventItem {
   id: number

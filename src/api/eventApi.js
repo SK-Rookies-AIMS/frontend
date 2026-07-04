@@ -10,4 +10,18 @@ export const eventApi = {
       throw error;
     }
   },
+  updateEvent: async (logNo, actionStatus, actionBy = null, reason = null) => {
+    try {
+      const response = await axiosInstance.post('/api/event/update_event', {
+        logNo,
+        actionStatus,
+        actionBy,
+        reason,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating event:', error);
+      throw error;
+    }
+  },
 };

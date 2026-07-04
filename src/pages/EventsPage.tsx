@@ -7,6 +7,7 @@ import { Footer } from "@/components/dashboard/footer"
 import { useEvents } from "@/components/dashboard/event-notification"
 import { eventApi } from "@/api/eventApi"
 import { AuthGuard } from "@/components/auth-guard"
+import { jwtDecode } from "jwt-decode"
 import {
   generateLogCode,
   calculatePriorityScore,
@@ -48,12 +49,26 @@ import { cn } from "@/lib/utils"
 
 type PriorityFilter = "전체" | "높음" | "중간" | "낮음"
 
+// JWT 토큰에서 이메일 추출
+const getActionByFromToken = (): string => {
+  if (typeof window === "undefined") return "시스템"
+  const token = sessionStorage.getItem("aims-auth-accessToken")
+  if (!token) return "시스템"
+  try {
+    const decoded = jwtDecode<{ email?: string; sub?: string }>(token)
+    return decoded.email || decoded.sub || "시스템"
+  } catch (e) {
+    return "시스템"
+  }
+}
+
 export default function EventsPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [pageSize, setPageSize] = useState(10)
+  const [actionReason, setActionReason] = useState("")
   const [severityFilter, setSeverityFilter] = useState<"전체" | Severity>("전체")
   const [statusFilter, setStatusFilter] = useState<"전체" | EventStatus>("전체")
   const [areaFilter, setAreaFilter] = useState("전체")
@@ -94,8 +109,15 @@ export default function EventsPage() {
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
-          status: item.actionStatus === 'COMPLETED' ? '조치 완료' : (item.actionStatus === 'REQUIRED' ? '조치 필요' : '조치 불필요'),
-          equipmentNo: item.equipmentId || '000',
+          status:
+            item.actionStatus === "COMPLETED"
+                ? "조치 완료"
+                : item.actionStatus === "INCOMPLETE"
+                ? "조치 미완료"
+                : item.actionStatus === "NOT_NEEDED"
+                ? "조치 불필요"
+                : "조치 필요",
+          equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
           eventCount: 0,
           currentImpact: 0,
@@ -118,8 +140,15 @@ export default function EventsPage() {
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
-          status: item.actionStatus === 'COMPLETED' ? '조치 완료' : (item.actionStatus === 'REQUIRED' ? '조치 필요' : '조치 불필요'),
-          equipmentNo: item.equipmentId || '000',
+          status:
+            item.actionStatus === "COMPLETED"
+                ? "조치 완료"
+                : item.actionStatus === "INCOMPLETE"
+                ? "조치 미완료"
+                : item.actionStatus === "NOT_NEEDED"
+                ? "조치 불필요"
+                : "조치 필요",
+          equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
           eventCount: 0,
           currentImpact: 0,
@@ -139,6 +168,10 @@ export default function EventsPage() {
   useEffect(() => {
     fetchEvents(currentPage, pageSize)
   }, [fetchEvents, currentPage, pageSize])
+
+  useEffect(() => {
+    setActionReason("")
+  }, [selectedEvent])
 
   const getStatusStyle = (status: EventStatus) => {
     switch (status) {
@@ -167,33 +200,106 @@ export default function EventsPage() {
     }
   }
 
-  const handleStatusChange = (eventId: number) => {
-    // 테이블의 '조치 완료' 버튼: 상태를 '조치 완료'로 업데이트
-    // -> 마스코트/알림은 미조치 위험 이벤트만 안내하므로 자동으로 제외됨
-    updateEventStatus(eventId, "조치 완료")
-    setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-    setAiTrustScore(prev => Math.min(100, prev + 2))
-    setAiDistrustScore(prev => Math.max(0, prev - 2))
+  const handleStatusChange = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 완료: COMPLETED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "COMPLETED",
+        actionBy,
+        "테이블에서 즉시 조치 완료 처리"
+      )
+
+      if (response && response.success) {
+        // 1. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 완료")
+        
+        // 2. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        
+        // 3. AI 스코어 및 통계 업데이트
+        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
+        setAiTrustScore(prev => Math.min(100, prev + 2))
+        setAiDistrustScore(prev => Math.max(0, prev - 2))
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to update event status:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 조치 완료 처리 - AI 신뢰도 증가, 불신 지수 감소
-  const handleActionComplete = (eventId: number) => {
-    setAiTrustScore(prev => Math.min(100, prev + 2))
-    setAiDistrustScore(prev => Math.max(0, prev - 2))
-    setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-    // 상태를 '조치 완료'로 업데이트 -> 마스코트가 더 이상 안내하지 않음
-    updateEventStatus(eventId, "조치 완료")
-    setSelectedEvent(null)
+  const handleActionComplete = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 완료: COMPLETED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "COMPLETED",
+        actionBy,
+        actionReason || "상세 보기에서 조치 완료 처리"
+      )
+
+      if (response && response.success) {
+        // 1. AI 스코어 및 통계 업데이트
+        setAiTrustScore(prev => Math.min(100, prev + 2))
+        setAiDistrustScore(prev => Math.max(0, prev - 2))
+        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
+
+        // 2. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 완료")
+
+        // 3. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+
+        setSelectedEvent(null)
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to complete event action:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 조치 불필요 처리 - AI 신뢰도 감소, 불신 지수 증가
-  const handleActionUnnecessary = (eventId: number) => {
-    setAiTrustScore(prev => Math.max(0, prev - 3))
-    setAiDistrustScore(prev => Math.min(100, prev + 3))
-    setActionStats(prev => ({ ...prev, ign: prev.ign + 1 }))
-    // 상태를 '조치 불필요'로 업데이트 -> 마스코트가 더 이상 안내하지 않음
-    updateEventStatus(eventId, "조치 불필요")
-    setSelectedEvent(null)
+  const handleActionUnnecessary = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 불필요: NOT_NEEDED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "NOT_NEEDED",
+        actionBy,
+        actionReason || "상세 보기에서 조치 불필요 처리"
+      )
+
+      if (response && response.success) {
+        // 1. AI 스코어 및 통계 업데이트
+        setAiTrustScore(prev => Math.max(0, prev - 3))
+        setAiDistrustScore(prev => Math.min(100, prev + 3))
+        setActionStats(prev => ({ ...prev, ign: prev.ign + 1 }))
+
+        // 2. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 불필요")
+
+        // 3. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
+
+        setSelectedEvent(null)
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to update event to action unnecessary:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 우선순위 등급 결정 함수
@@ -1049,6 +1155,22 @@ export default function EventsPage() {
                         <p className="font-medium">{selectedEvent.impactPrediction.estimatedDelay}</p>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 조치 사유 입력 (조치 필요시) */}
+                {selectedEvent.status === "조치 필요" && (
+                  <div className="border-t border-border pt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-foreground">조치 사유 / 내역</span>
+                    </div>
+                    <textarea
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      placeholder="이벤트 조치에 대한 사유나 조치 내역을 입력해주세요. (선택사항)"
+                      className="w-full bg-input border border-border rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition resize-none"
+                      rows={3}
+                    />
                   </div>
                 )}
 
