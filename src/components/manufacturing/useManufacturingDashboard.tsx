@@ -628,7 +628,7 @@ export function useManufacturingDashboard() {
         timestamp_delay_sec: 0,
         risk_score: riskScore,
         overall_risk_score: riskScore,
-        robot_motion_status: point.isAbnormal ? "WARNING" : "NORMAL",
+        robot_motion_status: bodyAnalysis?.metrics?.robotMotionStatus ?? (point.isAbnormal ? "WARNING" : "NORMAL"),
         robot_operation_mode: bodyAnalysis?.metrics?.robotOperationMode ?? "AUTO",
         robot_vibration_score: robotVibrationScore,
         frequency_peak_band: bodyAnalysis?.metrics?.frequencyPeakBand ?? frequencyPeakBand,
