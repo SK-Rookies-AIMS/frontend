@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Header } from "@/components/dashboard/header"
 import { Mascot } from "@/components/mascot/mascot"
 import { Footer } from "@/components/dashboard/footer"
 import { useEvents } from "@/components/dashboard/event-notification"
+import { eventApi } from "@/api/eventApi"
 import { AuthGuard } from "@/components/auth-guard"
+import { jwtDecode } from "jwt-decode"
 import {
   generateLogCode,
   calculatePriorityScore,
@@ -41,18 +43,24 @@ import {
   BarChart,
   Bar,
 } from "recharts"
-
-const eventTrendData = [
-  { time: "00:00", danger: 5, warning: 3 },
-  { time: "04:00", danger: 8, warning: 5 },
-  { time: "08:00", danger: 23, warning: 15 },
-  { time: "12:00", danger: 18, warning: 8 },
-  { time: "16:00", danger: 28, warning: 12 },
-  { time: "20:00", danger: 15, warning: 6 },
-  { time: "24:00", danger: 10, warning: 5 },
-]
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { cn } from "@/lib/utils"
 
 type PriorityFilter = "전체" | "높음" | "중간" | "낮음"
+
+// JWT 토큰에서 이메일 추출
+const getActionByFromToken = (): string => {
+  if (typeof window === "undefined") return "시스템"
+  const token = sessionStorage.getItem("aims-auth-accessToken")
+  if (!token) return "시스템"
+  try {
+    const decoded = jwtDecode<{ email?: string; sub?: string }>(token)
+    return decoded.email || decoded.sub || "시스템"
+  } catch (e) {
+    return "시스템"
+  }
+}
 
 export default function EventsPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -60,22 +68,114 @@ export default function EventsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [pageSize, setPageSize] = useState(10)
+  const [actionReason, setActionReason] = useState("")
   const [severityFilter, setSeverityFilter] = useState<"전체" | Severity>("전체")
   const [statusFilter, setStatusFilter] = useState<"전체" | EventStatus>("전체")
   const [areaFilter, setAreaFilter] = useState("전체")
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("전체")
+  const [startDate, setStartDate] = useState<Date | undefined>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d;
+  })
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date())
   const [aiTrustScore, setAiTrustScore] = useState(85) // AI 신뢰도 점수 (전체)
   const [aiDistrustScore, setAiDistrustScore] = useState(72) // AI 불신 지수
   const [actionStats, setActionStats] = useState({ act: 42, view: 31, ign: 55 }) // ACT, VIEW, IGN 건수
-  // 이벤트 단일 상태 및 상태 업데이트 (마스코트/알림과 공유)
-  const { events: eventsData, updateEventStatus } = useEvents()
+  const { updateEventStatus } = useEvents()
+  
+  // API 데이터 상태
+  const [eventsData, setEventsData] = useState<EventItem[]>([])
+  const [allEventsData, setAllEventsData] = useState<EventItem[]>([]) // 추가: 전체 데이터
+  const [loading, setLoading] = useState(true)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
+  const fetchEvents = useCallback(async (page: number, size: number) => {
+    setLoading(true)
+    try {
+      // 페이지별 데이터 fetch
+      const response = await eventApi.getOverallEvents(page - 1, size)
+      // 전체 데이터 fetch (요약용 - size를 충분히 크게 설정)
+      const allResponse = await eventApi.getOverallEvents(0, 10000)
+      
+      if (response.success) {
+        const formattedEvents: EventItem[] = response.data.content.map((item: any) => ({
+          id: item.logNo,
+          datetime: item.createdAt,
+          severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
+          area: item.processCode,
+          subArea: item.stationCode || 'N/A',
+          title: item.title || '제목 없음',
+          content: item.contents || '내용 없음',
+          // 상태 및 조치: actionStatus 사용
+          status:
+            item.actionStatus === "COMPLETED"
+                ? "조치 완료"
+                : item.actionStatus === "INCOMPLETE"
+                ? "조치 미완료"
+                : item.actionStatus === "NOT_NEEDED"
+                ? "조치 불필요"
+                : "조치 필요",
+          equipmentId: item.equipmentId || '000',
+          eventDate: item.createdAt.substring(5, 10).replace('-', ''),
+          eventCount: 0,
+          currentImpact: 0,
+          followUpImpact: 0,
+          // 우선순위 점수 및 레벨 반영
+          priorityScore: item.priorityScore,
+          // 알림 유형 한글 매핑 (PROCESS -> 공정, EQUIPMENT -> 설비)
+          alertType: item.alertType === "PROCESS" ? "공정" : (item.alertType === "EQUIPMENT" ? "설비" : item.alertType || "알 수 없음"),
+        }))
+        setEventsData(formattedEvents)
+        setTotalElements(response.data.totalElements)
+        setTotalPages(response.data.totalPages)
+      }
+
+      if (allResponse.success) {
+        const formattedAllEvents: EventItem[] = allResponse.data.content.map((item: any) => ({
+          id: item.logNo,
+          datetime: item.createdAt,
+          severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
+          area: item.processCode,
+          subArea: item.stationCode || 'N/A',
+          title: item.title || '제목 없음',
+          content: item.contents || '내용 없음',
+          // 상태 및 조치: actionStatus 사용
+          status:
+            item.actionStatus === "COMPLETED"
+                ? "조치 완료"
+                : item.actionStatus === "INCOMPLETE"
+                ? "조치 미완료"
+                : item.actionStatus === "NOT_NEEDED"
+                ? "조치 불필요"
+                : "조치 필요",
+          equipmentId: item.equipmentId || '000',
+          eventDate: item.createdAt.substring(5, 10).replace('-', ''),
+          eventCount: 0,
+          currentImpact: 0,
+          followUpImpact: 0,
+          // 우선순위 점수 및 레벨 반영
+          priorityScore: item.priorityScore,
+          // 알림 유형 한글 매핑 (PROCESS -> 공정, EQUIPMENT -> 설비)
+          alertType: item.alertType === "PROCESS" ? "공정" : (item.alertType === "EQUIPMENT" ? "설비" : item.alertType || "알 수 없음"),
+        }))
+        setAllEventsData(formattedAllEvents)
+      }
+    } catch (error) {
+      console.error("Failed to fetch events", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [])
+    fetchEvents(currentPage, pageSize)
+  }, [fetchEvents, currentPage, pageSize])
+
+  useEffect(() => {
+    setActionReason("")
+  }, [selectedEvent])
 
   const getStatusStyle = (status: EventStatus) => {
     switch (status) {
@@ -104,33 +204,106 @@ export default function EventsPage() {
     }
   }
 
-  const handleStatusChange = (eventId: number) => {
-    // 테이블의 '조치 완료' 버튼: 상태를 '조치 완료'로 업데이트
-    // -> 마스코트/알림은 미조치 위험 이벤트만 안내하므로 자동으로 제외됨
-    updateEventStatus(eventId, "조치 완료")
-    setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-    setAiTrustScore(prev => Math.min(100, prev + 2))
-    setAiDistrustScore(prev => Math.max(0, prev - 2))
+  const handleStatusChange = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 완료: COMPLETED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "COMPLETED",
+        actionBy,
+        "테이블에서 즉시 조치 완료 처리"
+      )
+
+      if (response && response.success) {
+        // 1. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 완료")
+        
+        // 2. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        
+        // 3. AI 스코어 및 통계 업데이트
+        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
+        setAiTrustScore(prev => Math.min(100, prev + 2))
+        setAiDistrustScore(prev => Math.max(0, prev - 2))
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to update event status:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 조치 완료 처리 - AI 신뢰도 증가, 불신 지수 감소
-  const handleActionComplete = (eventId: number) => {
-    setAiTrustScore(prev => Math.min(100, prev + 2))
-    setAiDistrustScore(prev => Math.max(0, prev - 2))
-    setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-    // 상태를 '조치 완료'로 업데이트 -> 마스코트가 더 이상 안내하지 않음
-    updateEventStatus(eventId, "조치 완료")
-    setSelectedEvent(null)
+  const handleActionComplete = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 완료: COMPLETED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "COMPLETED",
+        actionBy,
+        actionReason || "상세 보기에서 조치 완료 처리"
+      )
+
+      if (response && response.success) {
+        // 1. AI 스코어 및 통계 업데이트
+        setAiTrustScore(prev => Math.min(100, prev + 2))
+        setAiDistrustScore(prev => Math.max(0, prev - 2))
+        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
+
+        // 2. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 완료")
+
+        // 3. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+
+        setSelectedEvent(null)
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to complete event action:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 조치 불필요 처리 - AI 신뢰도 감소, 불신 지수 증가
-  const handleActionUnnecessary = (eventId: number) => {
-    setAiTrustScore(prev => Math.max(0, prev - 3))
-    setAiDistrustScore(prev => Math.min(100, prev + 3))
-    setActionStats(prev => ({ ...prev, ign: prev.ign + 1 }))
-    // 상태를 '조치 불필요'로 업데이트 -> 마스코트가 더 이상 안내하지 않음
-    updateEventStatus(eventId, "조치 불필요")
-    setSelectedEvent(null)
+  const handleActionUnnecessary = async (eventId: number) => {
+    try {
+      const actionBy = getActionByFromToken()
+      // API 호출 (조치 불필요: NOT_NEEDED)
+      const response = await eventApi.updateEvent(
+        String(eventId),
+        "NOT_NEEDED",
+        actionBy,
+        actionReason || "상세 보기에서 조치 불필요 처리"
+      )
+
+      if (response && response.success) {
+        // 1. AI 스코어 및 통계 업데이트
+        setAiTrustScore(prev => Math.max(0, prev - 3))
+        setAiDistrustScore(prev => Math.min(100, prev + 3))
+        setActionStats(prev => ({ ...prev, ign: prev.ign + 1 }))
+
+        // 2. Context 상태 업데이트 (알림/마스코트)
+        updateEventStatus(eventId, "조치 불필요")
+
+        // 3. 로컬 상태 업데이트
+        setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
+        setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
+
+        setSelectedEvent(null)
+      } else {
+        alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
+      }
+    } catch (error) {
+      console.error("Failed to update event to action unnecessary:", error)
+      alert("이벤트 조치 상태 업데이트 중 오류가 발생했습니다.")
+    }
   }
 
   // 우선순위 등급 결정 함수
@@ -140,23 +313,42 @@ export default function EventsPage() {
     return "낮음"
   }
 
+  // 영역 필터 매핑
+  const AREA_MAPPING: Record<string, string> = {
+    "프레스": "PRESS",
+    "차체": "BODY",
+    "도장": "PAINT",
+    "의장": "ASSEMBLY",
+  }
+
   const filteredEvents = eventsData.filter(event => {
     if (severityFilter !== "전체" && event.severity !== severityFilter) return false
     if (statusFilter !== "전체" && event.status !== statusFilter) return false
-    if (areaFilter !== "전체" && !event.area.includes(areaFilter)) return false
+    if (areaFilter !== "전체") {
+      const apiArea = AREA_MAPPING[areaFilter]
+      if (apiArea && event.area !== apiArea) return false
+      // Fallback for existing data if necessary, or strictly enforce API mapping
+      if (!apiArea && !event.area.includes(areaFilter)) return false
+    }
     if (priorityFilter !== "전체") {
-      const priorityScore = calculatePriorityScore(event)
+      const priorityScore = event.priorityScore || 0
       const priorityLevel = getPriorityLevel(priorityScore)
       if (priorityLevel !== priorityFilter) return false
     }
+    // 날짜 필터링 추가
+    const eventDate = new Date(event.datetime.split(' ')[0])
+    if (startDate && eventDate < startDate) return false
+    if (endDate && eventDate > endDate) return false
+    
     if (searchQuery && !event.title.includes(searchQuery) && !event.content.includes(searchQuery)) return false
     return true
   }).sort((a, b) => calculatePriorityScore(b) - calculatePriorityScore(a)) // 우선순위 점수 높은 순 정렬
 
   // 페이지네이션 계산
   const totalEvents = filteredEvents.length
-  const totalPages = Math.max(1, Math.ceil(totalEvents / pageSize))
-  const safePage = Math.min(currentPage, totalPages)
+  // const totalPages = Math.max(1, Math.ceil(totalEvents / pageSize)) // 중복 선언 제거
+  const computedTotalPages = Math.max(1, Math.ceil(totalEvents / pageSize))
+  const safePage = Math.min(currentPage, computedTotalPages)
   const startIndex = (safePage - 1) * pageSize
   const endIndex = Math.min(startIndex + pageSize, totalEvents)
   const paginatedEvents = filteredEvents.slice(startIndex, endIndex)
@@ -165,22 +357,49 @@ export default function EventsPage() {
   // 필터 변경 시 1페이지로 리셋
   useEffect(() => {
     setCurrentPage(1)
-  }, [severityFilter, statusFilter, areaFilter, priorityFilter, searchQuery, pageSize])
+  }, [severityFilter, statusFilter, areaFilter, priorityFilter, startDate, endDate, searchQuery, pageSize])
 
   // 표시할 페이지 번호 목록 (현재 페이지 주변 최대 5개)
   const getPageNumbers = () => {
     const pages: number[] = []
     let start = Math.max(1, safePage - 2)
-    let end = Math.min(totalPages, start + 4)
+    let end = Math.min(computedTotalPages, start + 4)
     start = Math.max(1, end - 4)
     for (let p = start; p <= end; p++) pages.push(p)
     return pages
   }
   const pageNumbers = getPageNumbers()
 
-  const dangerCount = eventsData.filter(e => e.severity === "위험").length
-  const warningCount = eventsData.filter(e => e.severity === "경고").length
-  const actionNeededCount = eventsData.filter(e => e.status === "조치 필요").length
+  // 요약 통계 계산 (전체 데이터 기반)
+  const today = new Date().toISOString().substring(0, 10)
+  const allEvents = allEventsData
+  const todayEvents = allEvents.filter(e => e.datetime.startsWith(today))
+  
+  // 오늘 이벤트 시간별 추이 계산 (동적)
+  const eventTrendData = useMemo(() => {
+    const hours = ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "24:00"];
+    return hours.map(hour => {
+      const startHour = parseInt(hour);
+      const endHour = startHour + 4;
+      const eventsInBucket = todayEvents.filter(e => {
+        const eHour = parseInt(e.datetime.substring(11, 13));
+        return eHour >= startHour && eHour < endHour;
+      });
+      return {
+        time: hour,
+        danger: eventsInBucket.filter(e => e.severity === "위험").length,
+        warning: eventsInBucket.filter(e => e.severity === "경고").length
+      };
+    });
+  }, [todayEvents]);
+  
+  const totalEventsCount = allEvents.length
+  const actionNeededCount = allEvents.filter(e => e.status === "조치 필요").length
+  const dangerCount = allEvents.filter(e => e.severity === "위험").length
+  const warningCount = allEvents.filter(e => e.severity === "경고").length
+
+  const todayDangerCount = todayEvents.filter(e => e.severity === "위험").length
+  const todayWarningCount = todayEvents.filter(e => e.severity === "경고").length
 
   return (
     <AuthGuard>
@@ -204,19 +423,27 @@ export default function EventsPage() {
             <div className="flex items-center gap-3 mb-4">
               {/* Date Range */}
               <div className="flex items-center gap-2">
-                <input 
-                  type="text" 
-                  value="2025-05-19" 
-                  readOnly
-                  className="px-3 py-2 bg-card border border-border rounded-lg text-sm w-32"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="px-3 py-2 bg-card border border-border rounded-lg text-sm w-32 text-left">
+                      {startDate ? startDate.toLocaleDateString() : "시작일"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+                  </PopoverContent>
+                </Popover>
                 <span className="text-muted-foreground">~</span>
-                <input 
-                  type="text" 
-                  value="2025-05-20" 
-                  readOnly
-                  className="px-3 py-2 bg-card border border-border rounded-lg text-sm w-32"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="px-3 py-2 bg-card border border-border rounded-lg text-sm w-32 text-left">
+                      {endDate ? endDate.toLocaleDateString() : "종료일"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Severity Filter */}
@@ -301,6 +528,7 @@ export default function EventsPage() {
                     <th className="text-left py-3 px-4 font-medium">로그 번호</th>
                     <th className="text-center py-3 px-4 font-medium">우선순위</th>
                     <th className="text-left py-3 px-4 font-medium">심각도</th>
+                    <th className="text-left py-3 px-4 font-medium">유형</th>
                     <th className="text-left py-3 px-4 font-medium">영역</th>
                     <th className="text-left py-3 px-4 font-medium">알림 제목</th>
                     <th className="text-left py-3 px-4 font-medium">내용</th>
@@ -311,7 +539,7 @@ export default function EventsPage() {
                 </thead>
                 <tbody>
                   {paginatedEvents.map((event) => {
-                    const priorityScore = calculatePriorityScore(event)
+                    const priorityScore = event.priorityScore || 0
                     const priorityLevel = getPriorityLevel(priorityScore)
                     const priorityColor = priorityLevel === "높음" ? "text-destructive bg-destructive/20" : 
                                           priorityLevel === "중간" ? "text-warning bg-warning/20" : 
@@ -320,7 +548,7 @@ export default function EventsPage() {
                     return (
                     <tr key={event.id} className="border-t border-border hover:bg-secondary/20">
                       <td className="py-3 px-4 font-mono text-xs text-primary">
-                        {generateLogCode(event.severity, event.area, event.equipmentNo, event.eventDate, event.eventCount)}
+                        {event.id}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex flex-col items-center gap-1">
@@ -337,6 +565,16 @@ export default function EventsPage() {
                             {event.severity}
                           </span>
                         </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={cn(
+                          "px-2.5 py-0.5 rounded text-xs font-semibold border",
+                          event.alertType === "공정" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
+                          event.alertType === "설비" ? "bg-purple-500/10 text-purple-500 border-purple-500/20" : 
+                          "bg-muted text-muted-foreground border-border"
+                        )}>
+                          {event.alertType || "알 수 없음"}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <div>
@@ -415,7 +653,7 @@ export default function EventsPage() {
                     key={page}
                     onClick={() => setCurrentPage(page)}
                     className={`w-8 h-8 rounded text-sm ${
-                      safePage === page 
+                      currentPage === page 
                         ? "bg-primary text-primary-foreground" 
                         : "hover:bg-secondary"
                     }`}
@@ -429,7 +667,7 @@ export default function EventsPage() {
                     <button 
                       onClick={() => setCurrentPage(totalPages)}
                       className={`w-8 h-8 rounded text-sm ${
-                        safePage === totalPages ? "bg-primary text-primary-foreground" : "hover:bg-secondary"
+                        currentPage === totalPages ? "bg-primary text-primary-foreground" : "hover:bg-secondary"
                       }`}
                     >
                       {totalPages}
@@ -475,55 +713,55 @@ export default function EventsPage() {
           <div className="w-80 space-y-4">
             {/* Summary Stats */}
             <div className="bg-card border border-border rounded-lg p-4">
-              <h3 className="text-sm font-medium mb-4">알림 요약</h3>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">전체 알림</span>
-                  <span className="text-2xl font-bold">{totalEvents}건</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">조치 필요</span>
-                  <span className="text-2xl font-bold text-primary">{actionNeededCount}건</span>
-                </div>
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-destructive" />
-                    <span className="text-destructive">위험</span>
-                  </div>
-                  <span className="font-bold">{dangerCount}건</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-warning" />
-                    <span className="text-warning">경고</span>
-                  </div>
-                  <span className="font-bold">{warningCount}건</span>
-                </div>
+            <h3 className="text-sm font-medium mb-4">알림 요약</h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">전체 알림</span>
+                <span className="text-2xl font-bold">{totalEventsCount}건</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">조치 필요</span>
+                <span className="text-2xl font-bold text-primary">{actionNeededCount}건</span>
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-border">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive" />
+                  <span className="text-destructive">위험</span>
+                </div>
+                <span className="font-bold">{dangerCount}건</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning" />
+                  <span className="text-warning">경고</span>
+                </div>
+                <span className="font-bold">{warningCount}건</span>
+              </div>
+            </div>
             </div>
 
             {/* Event Trend Chart */}
             <div className="bg-card border border-border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium">오늘 이벤트 현황</h3>
-                <button className="text-xs text-muted-foreground hover:text-foreground">
-                  ?
-                </button>
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium">오늘 이벤트 현황</h3>
+              <button className="text-xs text-muted-foreground hover:text-foreground">
+                ?
+              </button>
+            </div>
 
-              <div className="flex items-center gap-4 mb-3 text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-0.5 bg-destructive" />
-                  <span className="text-muted-foreground">위험</span>
-                  <span className="font-bold">{dangerCount}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-0.5 bg-warning" />
-                  <span className="text-muted-foreground">경고</span>
-                  <span className="font-bold">{warningCount}</span>
-                </div>
+            <div className="flex items-center gap-4 mb-3 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-0.5 bg-destructive" />
+                <span className="text-muted-foreground">위험</span>
+                <span className="font-bold">{todayDangerCount}</span>
               </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-0.5 bg-warning" />
+                <span className="text-muted-foreground">경고</span>
+                <span className="font-bold">{todayWarningCount}</span>
+              </div>
+            </div>
 
               <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
@@ -707,6 +945,19 @@ export default function EventsPage() {
                     <p>
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${getStatusStyle(selectedEvent.status)}`}>
                         {selectedEvent.status}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">알림 유형</label>
+                    <p className="mt-1">
+                      <span className={cn(
+                        "px-2.5 py-0.5 rounded text-xs font-semibold border",
+                        selectedEvent.alertType === "공정" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
+                        selectedEvent.alertType === "설비" ? "bg-purple-500/10 text-purple-500 border-purple-500/20" : 
+                        "bg-muted text-muted-foreground border-border"
+                      )}>
+                        {selectedEvent.alertType || "알 수 없음"}
                       </span>
                     </p>
                   </div>
@@ -932,6 +1183,22 @@ export default function EventsPage() {
                         <p className="font-medium">{selectedEvent.impactPrediction.estimatedDelay}</p>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 조치 사유 입력 (조치 필요시) */}
+                {selectedEvent.status === "조치 필요" && (
+                  <div className="border-t border-border pt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-foreground">조치 사유 / 내역</span>
+                    </div>
+                    <textarea
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      placeholder="이벤트 조치에 대한 사유나 조치 내역을 입력해주세요. (선택사항)"
+                      className="w-full bg-input border border-border rounded-lg p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition resize-none"
+                      rows={3}
+                    />
                   </div>
                 )}
 
