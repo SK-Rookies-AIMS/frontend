@@ -80,20 +80,25 @@ export async function fetchBodyAnalysis({
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
+  let result: ApiEnvelope<Partial<BodyAnomalyData>> | null = null
+  try {
+    result = await response.json()
+  } catch (e) {
+    // JSON 파싱 실패 시
+  }
+
+  if (result && result.success && result.data) {
+    return {
+      ...result.data,
+      dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
+      chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      alert: result.data.alert ?? null,
+    } as BodyAnomalyData
+  }
+
   if (!response.ok) {
-    throw new Error(`차체 이상 탐지 API 요청 실패 (${response.status})`)
+    throw new Error(result?.message || `차체 이상 탐지 API 요청 실패 (${response.status})`)
   }
 
-  const result: ApiEnvelope<Partial<BodyAnomalyData>> = await response.json()
-
-  if (!result.success || !result.data) {
-    throw new Error(result.message || "차체 이상 탐지 API 응답이 실패 상태입니다.")
-  }
-
-  return {
-    ...result.data,
-    dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
-    chart: Array.isArray(result.data.chart) ? result.data.chart : [],
-    alert: result.data.alert ?? null,
-  } as BodyAnomalyData
+  throw new Error(result?.message || "차체 이상 탐지 API 응답이 실패 상태입니다.")
 }

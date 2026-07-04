@@ -12,6 +12,8 @@ export type BottleneckRow = {
 export type BottleneckApiResponse = {
   success: boolean
   data?: {
+    mostBottleneckProcess?: string
+    mostBottleneckRiskLevel?: string
     content?: BottleneckRow[]
     hasNext?: boolean
     nextCursor?: number | null
@@ -44,6 +46,8 @@ export async function fetchBottleneckAnalysis({
   }
 
   return {
+    mostBottleneckProcess: result.data?.mostBottleneckProcess ?? null,
+    mostBottleneckRiskLevel: result.data?.mostBottleneckRiskLevel ?? null,
     content: Array.isArray(result.data?.content) ? result.data.content : [],
     hasNext: Boolean(result.data?.hasNext),
     nextCursor: result.data?.nextCursor ?? null,

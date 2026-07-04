@@ -83,24 +83,31 @@ export async function fetchPressAnomalyAnalysis({
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
-  if (!response.ok) {
-    throw new Error(`프레스 이상 탐지 API 요청 실패 (${response.status})`)
-  }
-
-  const result: ApiEnvelope<Omit<PressAnomalyData, "chart" | "alert" | "dateOptions"> & {
+  type ResultType = ApiEnvelope<Omit<PressAnomalyData, "chart" | "alert" | "dateOptions"> & {
     dateOptions?: PressDateOption[]
     chart?: PressAnomalyChartPoint[]
     alert?: PressAnomalyAlert | null
-  }> = await response.json()
+  }>
 
-  if (!result.success || !result.data) {
-    throw new Error(result.message || "프레스 이상 탐지 API 응답이 실패 상태입니다.")
+  let result: ResultType | null = null
+  try {
+    result = await response.json()
+  } catch (e) {
+    // JSON parsing failed
   }
 
-  return {
-    ...result.data,
-    dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
-    chart: Array.isArray(result.data.chart) ? result.data.chart : [],
-    alert: result.data.alert ?? null,
+  if (result && result.success && result.data) {
+    return {
+      ...result.data,
+      dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
+      chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      alert: result.data.alert ?? null,
+    }
   }
+
+  if (!response.ok) {
+    throw new Error(result?.message || `프레스 이상 탐지 API 요청 실패 (${response.status})`)
+  }
+
+  throw new Error(result?.message || "프레스 이상 탐지 API 응답이 실패 상태입니다.")
 }
