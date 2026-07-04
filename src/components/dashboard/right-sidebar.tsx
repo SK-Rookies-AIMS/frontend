@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { AlertTriangle, ChevronRight, TrendingUp, Zap } from "lucide-react"
-import { Mascot } from "./mascot"
+import { Mascot } from "../mascot/mascot"
 import { eventApi } from "@/api/eventApi"
 import { PROCESS_CODE_MAP } from "@/lib/events-data"
 
