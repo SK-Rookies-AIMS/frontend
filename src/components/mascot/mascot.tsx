@@ -7,6 +7,7 @@ import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 import { useManual } from "@/hooks/use-manual"
 import type { ManualResponse } from "@/types/manual"
+import { getCurrentManual } from "@/api/manualApi"
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -23,7 +24,7 @@ export function Mascot() {
   const { topEvent } = useMascotAlert()
   const {
     loading,
-} = useManual(topEvent?.id)
+  } = useManual(topEvent?.id)
   const [manual, setManual] = useState<ManualResponse | null>(null)
   const [loadingManual, setLoadingManual] = useState(false)
   const isAuthPage = pathname === "/login" || pathname === "/signup"
@@ -46,7 +47,7 @@ export function Mascot() {
               setLoadingManual(true)
 
               const response = await fetch(
-                  "http://localhost:8000/manual/current"
+                  "http://localhost:8000/manual"
               )
 
               if (!response.ok) {
@@ -144,14 +145,20 @@ export function Mascot() {
       )}
 
       {/* 로딩 중 */}
-      {loading && (
-        <p className="text-xs text-white/70">
-          AI가 조치 매뉴얼을 생성하고 있습니다...
-        </p>
+      {loadingManual && (
+        <div className="speech-bubble">
+          {loadingManual ? (
+            <p>🤔 Watchy가 조치 매뉴얼을 분석 중입니다...</p>
+          ) : manual ? (
+            <p>{manual.summary}</p>
+          ) : (
+            <p>현재 분석할 이벤트가 없습니다.</p>
+          )}
+        </div>
       )}
 
       {/* AI 조치 순서 */}
-      {!loading && manual?.action_steps && (
+      {!loadingManual && manual?.action_steps && (
         <>
           <p className="text-sm text-white leading-relaxed">
             아래 순서대로 조치해 주세요.
