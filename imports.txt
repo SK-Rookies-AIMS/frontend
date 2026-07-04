@@ -1,0 +1,46 @@
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Header } from "@/components/dashboard/header"
+import { Mascot } from "@/components/dashboard/mascot"
+import { Footer } from "@/components/dashboard/footer"
+import { AuthGuard } from "@/components/auth-guard"
+import {
+  BOTTLENECK_INITIAL_CURSOR,
+  BOTTLENECK_PAGE_SIZE,
+  type BottleneckRow,
+  fetchBottleneckAnalysis,
+} from "@/api/bottleneckApi"
+import {
+  DEFECT_TRANSFER_INITIAL_CURSOR,
+  DEFECT_TRANSFER_PAGE_SIZE,
+  type DefectTransferCauseData,
+  type DefectTransferCauseRow,
+  type DefectTransferPredictionRow,
+  fetchDefectTransferCauses,
+  fetchDefectTransferPredictions,
+} from "@/api/defectTransferApi"
+import {
+  type PressAnomalyData,
+  fetchPressAnomalyAnalysis,
+} from "@/api/pressAnomalyApi"
+import {
+  type BodyAnomalyData,
+  fetchBodyAnalysis,
+} from "@/api/bodyAnalysisApi"
+import {
+  getAssemblyDashboard,
+  getAssemblyAvailableDates,
+  getEquipmentOperationRate,
+  getPaintAvailableDates,
+  getPaintDashboard,
+} from "@/api/processDashboardApi"
+import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+} from "recharts"
