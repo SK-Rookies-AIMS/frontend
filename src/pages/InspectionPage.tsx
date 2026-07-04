@@ -456,7 +456,7 @@ async function loadDashboard(refresh = false) {
             {/* 차트 */}
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
+                <h3 className="text-sm font-semibold">검사 단계별 안전 결과 추이</h3>
               </div>
               <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
@@ -626,21 +626,21 @@ async function loadDashboard(refresh = false) {
                 {detailType === 'status' ? (
                   /* ── 차량 상태 결과 (fetchStatusDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="속도"         value={selectedDetail.speed} />
-                    <DetailCard icon={<Battery />}  label="배터리 전압"  value={selectedDetail.batteryVoltage} />
-                    <DetailCard icon={<Fuel />}     label="연료율"       value={selectedDetail.fuelRate} />
-                    <DetailCard icon={<Gauge />}    label="진동량" value={selectedDetail.att} />
+                    <DetailCard icon={<Activity />} label="속도  (기준:80km/h)"         value={`${selectedDetail.speed} km/h`} />
+                    <DetailCard icon={<Battery />}  label="배터리 전압 (기준:11~13V)"  value={`${selectedDetail.batteryVoltage} V`} />
+                    <DetailCard icon={<Fuel />}     label="연료율 (기준:8~10km/L)"       value={`${selectedDetail.fuelRate} km/L`} />
+                    <DetailCard icon={<Gauge />}    label="진동량 (기준:1500~2000RPM)" value={`${selectedDetail.att} RPM`} />
                     <DetailCard icon={<Gauge />}    label="차량 종류"       value={selectedDetail.carCode} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 ) : (
                   /* ── 운전자 입력 결과 (fetchDriveDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="조향각"    value={selectedDetail.steeringAngle} />
-                    <DetailCard icon={<Gauge />}    label="브레이크 강도"    value={selectedDetail.brakePressure} />
+                    <DetailCard icon={<Activity />} label="조향각 (degree)"    value={`${selectedDetail.steeringAngle} °`} />
+                    <DetailCard icon={<Gauge />}    label="브레이크 강도 (Force/Tension)"    value={`${selectedDetail.brakePressure} kgf`} />
                     <DetailCard icon={<PlayCircle />} label="운전 방식" value={selectedDetail.drivingPattern} />
-                    <DetailCard icon={<PlayCircle />} label="운행 점수" value={selectedDetail.driveScore} />
-                    <DetailCard icon={<Activity />}    label="가속량"    value={selectedDetail.throttlePosition} />
+                    <DetailCard icon={<PlayCircle />} label="운행 점수 (100점 만점)" value={`${selectedDetail.driveScore} 점`} />
+                    <DetailCard icon={<Activity />}    label="가속량 (국제표준단위)"    value={`${selectedDetail.throttlePosition} m/s²`}/>
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 )}
