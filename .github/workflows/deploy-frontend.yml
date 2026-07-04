@@ -22,7 +22,7 @@ env:
   ECR_REPOSITORY: aims/frontend
   FRONTEND_CONTEXT: .
   INFRA_REPOSITORY: SK-Rookies-AIMS/infra
-  INFRA_MANIFEST_PATH: k8s/frontend/frontend.yaml
+  INFRA_MANIFEST_PATH: k8s/frontend/kustomization.yaml
 
 jobs:
   deploy:
@@ -78,9 +78,13 @@ jobs:
         run: |
           MANIFEST="infra/${INFRA_MANIFEST_PATH}"
 
-          sed -i -E "s|^([[:space:]]*)image:.*$|\1image: ${IMAGE_URI}|" "$MANIFEST"
+          IMAGE_TAG="${IMAGE_URI##*:}"
 
-          grep -n "image:" "$MANIFEST"
+          sed -i -E \
+            "s|^([[:space:]]*)newTag:.*$|\1newTag: ${IMAGE_TAG}|" \
+            "$MANIFEST"
+
+          grep -n "newTag:" "$MANIFEST"
 
           cd infra
 
