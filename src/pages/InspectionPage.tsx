@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 
 import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
-import { Mascot } from "@/components/dashboard/mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { AuthGuard } from "@/components/auth-guard"
+import { connectWebSocket } from "@/lib/qualityWebsocket";
 
 import {
   Car,
@@ -18,6 +19,7 @@ import {
   Battery,
   Fuel,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react"
 
 import {
@@ -37,20 +39,24 @@ import {
   fetchRiskHistory,
   fetchStatusDetail,
   fetchDriveDetail,
-} from "@/lib/qualityApi"
+  fetchRiskTrend,
+} from "@/api/qualityApi"
 
 const PAGE_SIZE = 10
 
 
 // 기본 프로세스 카드 (API 실패 시 skeleton 표시용)
 const DEFAULT_PROCESSES = [
-  { id: "p1", processName: "외관 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p2", processName: "기능 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p3", processName: "주행 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
-  { id: "p4", processName: "최종 검사", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p1", processName: "VISUAL", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p2", processName: "FUNCTION", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p3", processName: "DRIVE", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
+  { id: "p4", processName: "FINAL", processStatus: "WAIT", totalVehicleCount: 0, progressRate: 0 },
 ]
 
 export default function InspectionPage() {
+  const [refreshInterval, setRefreshInterval] = useState("10")
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false)
+
   const [currentTime, setCurrentTime] = useState(new Date())
 
   const [processData, setProcessData] = useState<any[]>([])
@@ -58,12 +64,29 @@ export default function InspectionPage() {
   const [riskHistoryData, setRiskHistoryData] = useState<any[]>([])
   const [statusDetailData, setStatusDetailData] = useState<any[]>([])
   const [driveDetailData, setDriveDetailData] = useState<any[]>([])
+  const [riskTrendData, setRiskTrendData] = useState<any[]>([])
 
   const [statusPage, setStatusPage] = useState(1)
   const [drivePage, setDrivePage] = useState(1)
   const [selectedDetail, setSelectedDetail] = useState<any>(null)
   const [detailType, setDetailType] = useState<'status'|'drive'>('status')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  useEffect(() => {
+  if (!autoRefreshEnabled) return
+
+  const seconds = Number(refreshInterval)
+
+  if (isNaN(seconds) || seconds <= 0) return
+
+  const timer = setInterval(() => {
+    loadDashboard(true)
+  }, seconds * 1000)
+
+  return () => clearInterval(timer)
+}, [autoRefreshEnabled, refreshInterval])
+
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -74,50 +97,108 @@ export default function InspectionPage() {
     loadDashboard()
   }, [])
 
-  async function loadDashboard() {
+  useEffect(() => {
+
+    const disconnect = connectWebSocket({
+
+          onSummary: (data) => {
+              setSummaryData(data);
+          },
+
+          onProcess: (data) => {
+              setProcessData(data);
+          },
+
+          onStatus: (data) => {
+              setStatusDetailData(data);
+          },
+
+          onDrive: (data) => {
+              setDriveDetailData(data);
+          }
+
+      });
+
+      return () => {
+          disconnect();
+      };
+
+  }, []);
+
+async function loadDashboard(refresh = false) {
+  if (refresh) {
+    setIsRefreshing(true)
+  } else {
     setIsLoading(true)
-    // 각 API를 독립적으로 호출 — 하나가 500이어도 나머지는 정상 렌더링
-    const safeCall = async (fn: () => Promise<any>, fallback: any) => {
-      try { return await fn() } catch (e) { console.error(e); return fallback }
-    }
+  }
 
-    const [process, summary, riskHistory, statusDetail, driveDetail] =
-      await Promise.all([
-        safeCall(fetchInspectionProcess, []),
-        safeCall(fetchInspectionSummary, {}),
-        safeCall(fetchRiskHistory, []),
-        safeCall(fetchStatusDetail, []),
-        safeCall(fetchDriveDetail, []),
-      ])
-
-    setProcessData(Array.isArray(process) ? process : [])
-    if (Array.isArray(summary) && summary.length > 0) {
-      setSummaryData(summary[summary.length - 1])
-    } else {
-      setSummaryData(summary || {})
+  const safeCall = async (fn: () => Promise<any>, fallback: any) => {
+    try {
+      return await fn()
+    } catch (e) {
+      console.error(e)
+      return fallback
     }
-    setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
-    setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
-    setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+  }
+
+  const [process, summary, riskHistory, statusDetail, driveDetail, riskTrend] =
+    await Promise.all([
+      safeCall(fetchInspectionProcess, []),
+      safeCall(fetchInspectionSummary, {}),
+      safeCall(fetchRiskHistory, []),
+      safeCall(fetchStatusDetail, []),
+      safeCall(fetchDriveDetail, []),
+      safeCall(fetchRiskTrend, []),
+    ])
+
+  setProcessData(Array.isArray(process) ? process : [])
+
+  if (Array.isArray(summary) && summary.length > 0) {
+    setSummaryData(summary[summary.length - 1])
+  } else {
+    setSummaryData(summary || {})
+  }
+
+  setRiskHistoryData(Array.isArray(riskHistory) ? riskHistory : [])
+  setStatusDetailData(Array.isArray(statusDetail) ? statusDetail : [])
+  setDriveDetailData(Array.isArray(driveDetail) ? driveDetail : [])
+  setRiskTrendData(Array.isArray(riskTrend) ? riskTrend : [])
+
+  if (refresh) {
+    setIsRefreshing(false)
+  } else {
     setIsLoading(false)
   }
+}
 
   // 최신 시간대 기준 최대 4개 추출
   // createdAt 필드가 없으면 processData 전체를 그대로 사용
+  const currentDateRef = useRef<string | null>(null)
+  const getDate = (dt: string) =>
+  new Date(dt).toISOString().split("T")[0]
   const latestProcesses = useMemo(() => {
     if (!processData.length) return DEFAULT_PROCESSES
-    const hasTime = processData.some((item: any) => item.createdAt)
-    if (!hasTime) return processData.slice(0, 4)
-    const grouped = processData.reduce((acc: any, item: any) => {
-      const time = item.createdAt ?? "unknown"
-      if (!acc[time]) acc[time] = []
-      acc[time].push(item)
-      return acc
-    }, {})
-    const sortedTimes = Object.keys(grouped).sort()
-    const latestTime = sortedTimes[sortedTimes.length - 1]
-    return (grouped[latestTime] || []).slice(0, 4)
-  }, [processData])
+
+    // 1. 가장 최신 데이터 기준 날짜 찾기
+    const sorted = [...processData].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+
+    const latestDate = getDate(sorted[sorted.length - 1].createdAt)
+
+    // 2. 날짜 바뀌었으면 완전 초기화
+    if (currentDateRef.current && currentDateRef.current !== latestDate) {
+      currentDateRef.current = latestDate
+      return DEFAULT_PROCESSES
+    }
+
+    currentDateRef.current = latestDate
+
+    // 3. 해당 날짜 데이터만 필터링
+    return processData
+      .filter(item => getDate(item.createdAt) === latestDate)
+      .slice(0, 4)
+    }, [processData])
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
   const derivedSummary = useMemo(() => {
@@ -148,38 +229,42 @@ export default function InspectionPage() {
   const activeSummary = derivedSummary ?? summaryData ?? {}
 
   // 위험도 그래프 데이터 변환
-  const chartData = riskHistoryData.reduce((acc, item) => {
-    const round = `Round ${item.inspectionRound}`
+  const chartData = useMemo(() => {
+    const grouped = riskHistoryData.reduce(
+      (acc: Record<string, any>, item: any) => {
+        const date = item.startTime.split(" ")[0]
 
-    let existing = acc.find(v => v.round === round)
+        if (!acc[date]) {
+          acc[date] = {
+            time: date.slice(5).replace("-", "/"),
+          }
+        }
 
-    if (!existing) {
-      existing = { round }
-      acc.push(existing)
-    }
+        acc[date][item.inspectionType] = item.riskScore
 
-    existing[item.inspectionType] = item.riskScore
+        return acc
+      },
+      {}
+    )
 
-    return acc
-  }, [])
+    return Object.values(grouped)
+  }, [riskHistoryData])
 
   // 위험도 분포 계산
   const riskDistribution = useMemo(() => {
-    const total = statusDetailData.length || 1
-    const high = statusDetailData.filter((d) => (d.statusScore ?? 0) >= 75).length
-    const medium = statusDetailData.filter(
-      (d) => (d.statusScore ?? 0) >= 40 && (d.statusScore ?? 0) < 75
-    ).length
-    const low = statusDetailData.filter((d) => (d.statusScore ?? 0) < 40).length
+    const high = riskTrendData.find((r: any) => r.riskLevel === "HIGH")
+    const medium = riskTrendData.find((r: any) => r.riskLevel === "MEDIUM")
+    const low = riskTrendData.find((r: any) => r.riskLevel === "LOW")
+
     return {
-      high,
-      medium,
-      low,
-      highPct: Math.round((high / total) * 100),
-      mediumPct: Math.round((medium / total) * 100),
-      lowPct: Math.round((low / total) * 100),
+      high: high?.riskCount ?? 0,
+      medium: medium?.riskCount ?? 0,
+      low: low?.riskCount ?? 0,
+      highPct: high?.riskRatio ?? 0,
+      mediumPct: medium?.riskRatio ?? 0,
+      lowPct: low?.riskRatio ?? 0,
     }
-  }, [statusDetailData])
+  }, [riskTrendData])
 
   // 집계 테이블 데이터
   const statusRows = useMemo(
@@ -214,9 +299,9 @@ export default function InspectionPage() {
   )
 
   function renderProcessIcon(name: string) {
-    if (name.includes("외관")) return <Car className="w-5 h-5" />
-    if (name.includes("기능")) return <Gauge className="w-5 h-5" />
-    if (name.includes("주행")) return <PlayCircle className="w-5 h-5" />
+    if (name.includes("VISUAL")) return <Car className="w-5 h-5" />
+    if (name.includes("FUNCTION")) return <Gauge className="w-5 h-5" />
+    if (name.includes("DRIVE")) return <PlayCircle className="w-5 h-5" />
     return <CheckCircle2 className="w-5 h-5" />
   }
 
@@ -247,7 +332,49 @@ export default function InspectionPage() {
 
           {/* ── TITLE ── */}
           <div className="mb-5">
-            <h1 className="text-xl font-bold mb-1">품질 / 검사 단계 모니터링</h1>
+            <div className="flex items-center gap-5 mb-1">
+              <h1 className="text-xl font-bold">
+                품질 / 검사 단계 모니터링
+              </h1>
+
+              <div className="flex items-center gap-2">
+
+                <input
+                  type="number"
+                  min={1}
+                  value={refreshInterval}
+                  onChange={(e) => setRefreshInterval(e.target.value)}
+                  className="w-20 px-2 py-1 text-xs rounded bg-slate-800 border border-slate-700"
+                />
+
+                <span className="text-xs text-muted-foreground">
+                  초
+                </span>
+
+                <button
+                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+                  className={`px-3 py-1 rounded text-xs transition-colors ${
+                    autoRefreshEnabled
+                      ? "bg-green-600 text-white"
+                      : "bg-slate-700 text-slate-300"
+                  }`}
+                >
+                  {autoRefreshEnabled ? "자동 ON" : "자동 OFF"}
+                </button>
+
+                <button
+                  onClick={() => loadDashboard(true)}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-cyan-400 transition-colors disabled:opacity-50 px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800"
+                >
+                  <RefreshCw
+                    className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  {isRefreshing ? "갱신 중..." : "새로고침"}
+                </button>
+
+              </div>
+            </div>
             <p className="text-sm text-muted-foreground">
               각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.
             </p>
@@ -288,7 +415,7 @@ export default function InspectionPage() {
                         {renderProcessIcon(process.processName)}
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">차량 대수</p>
+                        <p className="text-xs text-muted-foreground">목표 차량 대수</p>
                         <p className="text-2xl font-bold leading-tight">
                           {process.totalVehicleCount}
                           <span className="text-sm font-normal ml-1 text-muted-foreground">대</span>
@@ -331,7 +458,7 @@ export default function InspectionPage() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
               </div>
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -419,6 +546,7 @@ export default function InspectionPage() {
                       {riskDistribution.highPct}%
                     </div>
                   )}
+
                   {riskDistribution.mediumPct > 0 && (
                     <div
                       className="bg-yellow-400 flex items-center justify-center text-[10px] font-medium text-black"
@@ -427,6 +555,7 @@ export default function InspectionPage() {
                       {riskDistribution.mediumPct}%
                     </div>
                   )}
+
                   {riskDistribution.lowPct > 0 && (
                     <div
                       className="bg-green-500 flex items-center justify-center text-[10px] font-medium text-white"
@@ -434,10 +563,6 @@ export default function InspectionPage() {
                     >
                       {riskDistribution.lowPct}%
                     </div>
-                  )}
-                  {/* 데이터 없을 때 placeholder */}
-                  {riskDistribution.high + riskDistribution.medium + riskDistribution.low === 0 && (
-                    <div className="w-full bg-slate-700" />
                   )}
                 </div>
 

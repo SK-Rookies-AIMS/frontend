@@ -58,8 +58,8 @@ export function getStoredAccessToken() {
   }
 
   return (
-    readStorageToken(window.localStorage) ||
     readStorageToken(window.sessionStorage) ||
+    readStorageToken(window.localStorage) ||
     ""
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Header } from "@/components/dashboard/header"
-import { Mascot } from "@/components/dashboard/mascot"
+import { Mascot } from "@/components/mascot/mascot"
 import { Footer } from "@/components/dashboard/footer"
 import { useEvents } from "@/components/dashboard/event-notification"
 import { eventApi } from "@/api/eventApi"
