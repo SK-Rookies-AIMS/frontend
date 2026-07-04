@@ -1,5 +1,3 @@
-// 이벤트 데이터 / 타입 / 유틸 - 이벤트 페이지와 알림(마스코트) Provider가 공유하는 단일 진실 공급원
-
 // 공정 코드 매핑
 export const PROCESS_CODE_MAP: Record<string, string> = {
   "PRESS": "프레스",
@@ -60,6 +58,7 @@ export interface EventItem {
     estimatedDelay: string
   }
   aiScore?: number // AI 지수 (마스코트 우선 안내용)
+  alertType?: string // 알림 유형 ("공정" | "설비")
 }
 
 // 로그 코드 생성 함수 (- 없이)
@@ -96,9 +95,7 @@ export function isActionableStatus(status: EventStatus): boolean {
   return status === "조치 필요"
 }
 
-// 이벤트(알림)가 발생할 수 있는 생산 공정만 허용한다.
-// 차체/도장/의장/프레스 공정에서만 이벤트가 발생하고,
-// 검사 공정·자재 관리 등은 알림을 띄우지 않는다.
+
 const ALLOWED_PROCESS_KEYWORDS = ["차체", "도장", "의장", "프레스", "용접", "조립"]
 
 export function isProductionProcess(area: string): boolean {

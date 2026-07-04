@@ -31,7 +31,6 @@ export function RightSidebar() {
       try {
         const response = await eventApi.getOverallEvents(0, 50)
         if (response.success) {
-          console.log("API response item sample:", response.data.content[0]); // 디버깅 로그 추가
           const allEvents: Event[] = response.data.content.map((item: any) => ({
             id: item.logNo,
             title: item.title,
@@ -39,8 +38,8 @@ export function RightSidebar() {
             equipmentNo: item.equipmentId,
             stationCode: item.stationCode || 'N/A',
             datetime: item.createdAt,
-            severity: item.severity === 'CRITICAL' ? '위험' : '경고',
-            // item.riskScore를 currentImpact에 매핑하도록 시도
+            severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : '경고',
+
             currentImpact: item.currentImpact || item.riskScore || 0, 
             followUpImpact: item.followUpImpact || 0,
             affectedProcesses: (item.affectedProcesses || []).map((p: string) => PROCESS_CODE_MAP[p] || p),
@@ -134,7 +133,6 @@ function AlertItem({ title, location, stationCode, time, iconType }: {
 
 function PriorityItem({ event, rank }: { event: Event; rank: number }) {
   const isError = event.severity === "위험"
-  // 5칸 박스 렌더링 함수 (1칸당 20점)
   const renderImpactBars = (score: number, isError: boolean) => {
     const filled = Math.min(5, Math.ceil(score / 20));
     return (

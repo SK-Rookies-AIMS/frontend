@@ -92,8 +92,8 @@ export function EquipmentStatus() {
               tempStatus: "normal",
               humidityStatus: "normal",
               powerStatus: "normal",
-              icon: null, // Will be set in render
-              hasWarning: calculatedPercent < 50 // Example warning logic
+              icon: null,
+              hasWarning: calculatedPercent < 50
             }
           })
           setEquipmentList(mappedData)

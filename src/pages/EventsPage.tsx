@@ -103,7 +103,7 @@ export default function EventsPage() {
         const formattedEvents: EventItem[] = response.data.content.map((item: any) => ({
           id: item.logNo,
           datetime: item.createdAt,
-          severity: item.severity === 'CRITICAL' ? '위험' : (item.severity === 'WARNING' ? '경고' : '위험'),
+          severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
           subArea: item.stationCode || 'N/A',
           title: item.title || '제목 없음',
@@ -124,6 +124,8 @@ export default function EventsPage() {
           followUpImpact: 0,
           // 우선순위 점수 및 레벨 반영
           priorityScore: item.priorityScore,
+          // 알림 유형 한글 매핑 (PROCESS -> 공정, EQUIPMENT -> 설비)
+          alertType: item.alertType === "PROCESS" ? "공정" : (item.alertType === "EQUIPMENT" ? "설비" : item.alertType || "알 수 없음"),
         }))
         setEventsData(formattedEvents)
         setTotalElements(response.data.totalElements)
@@ -134,7 +136,7 @@ export default function EventsPage() {
         const formattedAllEvents: EventItem[] = allResponse.data.content.map((item: any) => ({
           id: item.logNo,
           datetime: item.createdAt,
-          severity: item.severity === 'CRITICAL' ? '위험' : (item.severity === 'WARNING' ? '경고' : '위험'),
+          severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
           subArea: item.stationCode || 'N/A',
           title: item.title || '제목 없음',
@@ -155,6 +157,8 @@ export default function EventsPage() {
           followUpImpact: 0,
           // 우선순위 점수 및 레벨 반영
           priorityScore: item.priorityScore,
+          // 알림 유형 한글 매핑 (PROCESS -> 공정, EQUIPMENT -> 설비)
+          alertType: item.alertType === "PROCESS" ? "공정" : (item.alertType === "EQUIPMENT" ? "설비" : item.alertType || "알 수 없음"),
         }))
         setAllEventsData(formattedAllEvents)
       }
@@ -524,6 +528,7 @@ export default function EventsPage() {
                     <th className="text-left py-3 px-4 font-medium">로그 번호</th>
                     <th className="text-center py-3 px-4 font-medium">우선순위</th>
                     <th className="text-left py-3 px-4 font-medium">심각도</th>
+                    <th className="text-left py-3 px-4 font-medium">유형</th>
                     <th className="text-left py-3 px-4 font-medium">영역</th>
                     <th className="text-left py-3 px-4 font-medium">알림 제목</th>
                     <th className="text-left py-3 px-4 font-medium">내용</th>
@@ -560,6 +565,16 @@ export default function EventsPage() {
                             {event.severity}
                           </span>
                         </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={cn(
+                          "px-2.5 py-0.5 rounded text-xs font-semibold border",
+                          event.alertType === "공정" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
+                          event.alertType === "설비" ? "bg-purple-500/10 text-purple-500 border-purple-500/20" : 
+                          "bg-muted text-muted-foreground border-border"
+                        )}>
+                          {event.alertType || "알 수 없음"}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <div>
@@ -930,6 +945,19 @@ export default function EventsPage() {
                     <p>
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${getStatusStyle(selectedEvent.status)}`}>
                         {selectedEvent.status}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">알림 유형</label>
+                    <p className="mt-1">
+                      <span className={cn(
+                        "px-2.5 py-0.5 rounded text-xs font-semibold border",
+                        selectedEvent.alertType === "공정" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : 
+                        selectedEvent.alertType === "설비" ? "bg-purple-500/10 text-purple-500 border-purple-500/20" : 
+                        "bg-muted text-muted-foreground border-border"
+                      )}>
+                        {selectedEvent.alertType || "알 수 없음"}
                       </span>
                     </p>
                   </div>
