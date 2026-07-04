@@ -439,6 +439,8 @@ export function useManufacturingDashboard() {
   const [activeTab, setActiveTab] = useState("press")
   const [selectedVehicle, setSelectedVehicle] = useState("")
   const [bottleneckRows, setBottleneckRows] = useState<BottleneckRow[]>([])
+  const [mostBottleneckProcess, setMostBottleneckProcess] = useState<string | null>(null)
+  const [mostBottleneckRiskLevel, setMostBottleneckRiskLevel] = useState<string | null>(null)
   const [bottleneckCursor, setBottleneckCursor] = useState<number | null>(BOTTLENECK_INITIAL_CURSOR)
   const [hasNextBottleneck, setHasNextBottleneck] = useState(true)
   const [isBottleneckLoading, setIsBottleneckLoading] = useState(false)
@@ -747,22 +749,36 @@ export function useManufacturingDashboard() {
     (assemblyDashboard.summary?.missingPartCount ?? 0) +
     (assemblyDashboard.summary?.fasteningErrorCount ?? 0)
   const topProcessStages = processStages.map((stage) => {
+    if (stage.id === "05") {
+      return {
+        ...stage,
+        defectRate: defectPredictionRows[0]?.defectProbability ?? stage.defectRate,
+        targetProcess: bottleneckRows[0]?.processCode ?? stage.targetProcess,
+      }
+    }
+
     if (stage.rate === null) return stage
 
     const operationRate = stage.processCode
       ? operationRateByProcess[stage.processCode]?.operationRate
       : undefined
     const events =
-      stage.processCode === "PAINT"
-        ? paintAbnormalEventCount
-        : stage.processCode === "ASSEMBLY"
-          ? assemblyAbnormalEventCount
-          : stage.events
+      stage.processCode === "PRESS"
+        ? (pressAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
+        : stage.processCode === "BODY"
+          ? (bodyAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
+          : stage.processCode === "PAINT"
+            ? paintAbnormalEventCount
+            : stage.processCode === "ASSEMBLY"
+              ? assemblyAbnormalEventCount
+              : stage.events
 
     return {
       ...stage,
       rate: Number.isFinite(operationRate) ? Math.round(operationRate as number) : stage.rate,
       events,
+      isBottleneck: mostBottleneckProcess ? stage.name === mostBottleneckProcess : stage.isBottleneck,
+      bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "위험",
     }
   })
   const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_PAGE_SIZE
@@ -797,6 +813,10 @@ export function useManufacturingDashboard() {
       })
 
       setBottleneckRows((prevRows) => [...prevRows, ...result.content])
+      if (cursor === BOTTLENECK_INITIAL_CURSOR) {
+        setMostBottleneckProcess(result.mostBottleneckProcess)
+        setMostBottleneckRiskLevel(result.mostBottleneckRiskLevel)
+      }
       hasNextBottleneckRef.current = result.hasNext
       setHasNextBottleneck(result.hasNext)
       setBottleneckCursor(result.hasNext ? result.nextCursor : null)
@@ -1251,6 +1271,8 @@ export function useManufacturingDashboard() {
     activeTab,
     setActiveTab,
     topProcessStages,
+    mostBottleneckProcess,
+    mostBottleneckRiskLevel,
     processStageCount: processStages.length,
     bottleneckRows,
     isBottleneckLoading,

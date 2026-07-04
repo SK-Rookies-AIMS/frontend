@@ -9,6 +9,7 @@ type ProcessStage = {
   defectRate?: number
   targetProcess?: string
   isBottleneck?: boolean
+  bottleneckRiskLevel?: string | null
 }
 
 type ProcessFlowSummaryProps = {
@@ -29,7 +30,7 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
           >
             {stage.isBottleneck && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">
-                병목 구간 (위험)
+                병목 구간 ({stage.bottleneckRiskLevel || "위험"})
               </div>
             )}
             <div className="mb-2 flex items-center gap-2">
