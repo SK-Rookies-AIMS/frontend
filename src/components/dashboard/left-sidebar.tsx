@@ -395,9 +395,9 @@ export function LeftSidebar() {
 
           <StatusRow
             color="bg-primary"
-            label="IDLE"
-            count={getCountByStatus("IDLE")}
-            percent={getPercentByStatus("IDLE")}
+            label="WARNING"
+            count={getCountByStatus("WARNING")}
+            percent={getPercentByStatus("WARNING")}
           />
 
           <StatusRow
@@ -413,14 +413,6 @@ export function LeftSidebar() {
             count={getCountByStatus("FAULT")}   
             percent={getPercentByStatus("FAULT")}
           />
-
-          <StatusRow
-            color="bg-muted-foreground"
-            label="MAINTENANCE"
-            count={getCountByStatus("MAINTENANCE")}
-            percent={getPercentByStatus("MAINTENANCE")}
-          />
-
         </div>
       </div>
 

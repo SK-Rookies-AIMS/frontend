@@ -88,7 +88,7 @@ export function RightSidebar() {
         </div>
         <div className="space-y-2">
           {failures.map((event) => (
-            <AlertItem key={event.id} title={event.title} location={event.area} equipmentId={event.equipmentId} time={event.datetime.split(' ')[1] || event.datetime} iconType="error" />
+            <AlertItem key={event.id} title={event.title} location={event.area} equipmentId={event.equipmentId} riskScore={event.riskScore} time={event.datetime.split(' ')[1] || event.datetime} iconType="error" />
           ))}
         </div>
       </div>
@@ -156,7 +156,7 @@ function PriorityItem({ event, rank }: { event: Event; rank: number }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className={`text-xs font-medium truncate ${isError ? "text-destructive" : "text-warning"}`}>{event.title}</p>
-          <p className="text-[10px] text-muted-foreground mb-2">{event.area} | {event.riskScore}</p>
+          <p className="text-[10px] text-muted-foreground mb-2">{event.area} | {event.equipmentId}</p>
           
           <div className="space-y-1.5 mb-2">
             <div className="flex items-center justify-between text-[10px]">
@@ -174,10 +174,11 @@ function PriorityItem({ event, rank }: { event: Event; rank: number }) {
               <TrendingUp className="w-3 h-3 text-primary" />
               <span className="text-[10px] font-mono font-bold text-primary">{event.priorityScore}점</span>
             </div>
-            <div className="flex items-center gap-1">
+            {/* 영향 공정 주석 처리 */}
+            {/* <div className="flex items-center gap-1">
               <span className="text-[10px] text-muted-foreground">영향 공정:</span>
               <span className="text-[10px] text-primary">{event.affectedProcesses.join(", ") || "없음"}</span>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
