@@ -69,9 +69,9 @@ export default function EventsPage() {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [pageSize, setPageSize] = useState(10)
   const [actionReason, setActionReason] = useState("")
-  const [severityFilter, setSeverityFilter] = useState<"전체" | Severity>("전체")
-  const [statusFilter, setStatusFilter] = useState<"전체" | EventStatus>("전체")
-  const [areaFilter, setAreaFilter] = useState("전체")
+  const [severityFilter, setSeverityFilter] = useState<"전체" | "DANGER" | "CAUTION">("전체")
+  const [statusFilter, setStatusFilter] = useState<"전체" | "PENDING" | "COMPLETED" | "INCOMPLETE" | "NOT_NEEDED">("전체")
+  const [areaFilter, setAreaFilter] = useState("전체") // DB enum values: PRESS, BODY, PAINT, ASSEMBLY, INSPECTION
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("전체")
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
     const d = new Date();
@@ -94,10 +94,14 @@ export default function EventsPage() {
   const fetchEvents = useCallback(async (page: number, size: number) => {
     setLoading(true)
     try {
-      // 페이지별 데이터 fetch
-      const response = await eventApi.getOverallEvents(page - 1, size)
+      // 페이지별 데이터 fetch with optional area filter
+      const filters: any = {};
+      if (areaFilter !== "전체") {
+        filters.processCode = areaFilter;
+      }
+      const response = await eventApi.getOverallEvents(page - 1, size, filters);
       // 전체 데이터 fetch (요약용 - size를 충분히 크게 설정)
-      const allResponse = await eventApi.getOverallEvents(0, 10000)
+      const allResponse = await eventApi.getOverallEvents(0, 10000);
       
       if (response.success) {
         const formattedEvents: EventItem[] = response.data.content.map((item: any) => ({
@@ -105,7 +109,7 @@ export default function EventsPage() {
           datetime: item.createdAt,
           severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
-          subArea: item.stationCode || 'N/A',
+          subArea: "ID : " + (item.equipmentId || 'N/A'),
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
@@ -116,6 +120,8 @@ export default function EventsPage() {
                 ? "조치 미완료"
                 : item.actionStatus === "NOT_NEEDED"
                 ? "조치 불필요"
+                : item.actionStatus === "PENDING"
+                ? "조치 대기중"
                 : "조치 필요",
           equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
@@ -138,7 +144,7 @@ export default function EventsPage() {
           datetime: item.createdAt,
           severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
-          subArea: item.stationCode || 'N/A',
+          subArea: "ID : " + (item.equipmentId || 'N/A'),
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
@@ -177,24 +183,30 @@ export default function EventsPage() {
     setActionReason("")
   }, [selectedEvent])
 
-  const getStatusStyle = (status: EventStatus) => {
-    switch (status) {
-      case "조치 필요":
-        return "bg-destructive/20 text-destructive border-destructive/30"
-      case "조치 완료":
-        return "bg-success/20 text-success border-success/30"
-      case "조치 불필요":
-        return "bg-muted text-muted-foreground border-border"
-      default:
-        return "bg-secondary text-muted-foreground"
-    }
-  }
+const getStatusStyle = (status: string) => {
+  switch (status) {
+    case "조치 미완료":
+      return "bg-amber-100 text-amber-700 border-amber-300"
 
-  const getSeverityStyle = (severity: Severity) => {
-    return severity === "위험" 
-      ? "bg-destructive/20 text-destructive" 
-      : "bg-warning/20 text-warning"
+    case "조치 완료":
+      return "bg-green-100 text-green-700 border-green-300"
+
+    case "조치 필요":
+      return "bg-red-100 text-red-700 border-red-300"
+
+    case "조치 불필요":
+      return "bg-gray-100 text-gray-600 border-gray-300"
+
+    default:
+      return "bg-secondary text-muted-foreground border-border"
   }
+}
+
+  const getSeverityStyle = (severity: string) => {
+  return severity === "위험"
+    ? "bg-destructive/20 text-destructive"
+    : "bg-warning/20 text-warning"
+}
 
   const getImpactLevelStyle = (level: "높음" | "중간" | "낮음") => {
     switch (level) {
@@ -208,7 +220,7 @@ export default function EventsPage() {
     try {
       const actionBy = getActionByFromToken()
       // API 호출 (조치 완료: COMPLETED)
-      const response = await eventApi.updateEvent(
+      const response = await eventApi.updateEventAction(
         String(eventId),
         "COMPLETED",
         actionBy,
@@ -241,7 +253,7 @@ export default function EventsPage() {
     try {
       const actionBy = getActionByFromToken()
       // API 호출 (조치 완료: COMPLETED)
-      const response = await eventApi.updateEvent(
+      const response = await eventApi.updateEventAction(
         String(eventId),
         "COMPLETED",
         actionBy,
@@ -276,7 +288,7 @@ export default function EventsPage() {
     try {
       const actionBy = getActionByFromToken()
       // API 호출 (조치 불필요: NOT_NEEDED)
-      const response = await eventApi.updateEvent(
+      const response = await eventApi.updateEventAction(
         String(eventId),
         "NOT_NEEDED",
         actionBy,
@@ -308,41 +320,52 @@ export default function EventsPage() {
 
   // 우선순위 등급 결정 함수
   const getPriorityLevel = (score: number): "높음" | "중간" | "낮음" => {
-    if (score >= 60) return "높음"
-    if (score >= 40) return "중간"
+    if (score >= 267) return "높음"
+    if (score >= 134) return "중간"
     return "낮음"
   }
 
   // 영역 필터 매핑
   const AREA_MAPPING: Record<string, string> = {
-    "프레스": "PRESS",
-    "차체": "BODY",
-    "도장": "PAINT",
-    "의장": "ASSEMBLY",
-  }
+  "PRESS": "PRESS",
+  "BODY": "BODY",
+  "PAINT": "PAINT",
+  "ASSEMBLY": "ASSEMBLY",
+  "INSPECTION": "INSPECTION",
+};
 
-  const filteredEvents = eventsData.filter(event => {
-    if (severityFilter !== "전체" && event.severity !== severityFilter) return false
-    if (statusFilter !== "전체" && event.status !== statusFilter) return false
+const AREA_KOREAN_MAP: Record<string, string> = {
+  PRESS: "프레스",
+  BODY: "차체",
+  PAINT: "도장",
+  ASSEMBLY: "의장",
+  INSPECTION: "검사",
+};
+  const severityMap: Record<string, string> = { DANGER: "위험", CAUTION: "경고" };
+  const statusMap: Record<string, string> = { PENDING: "조치 필요", COMPLETED: "조치 완료", INCOMPLETE: "조치 미완료", NOT_NEEDED: "조치 불필요" };
+  const filteredEvents = allEventsData.filter(event => {
+    // Severity filter (DB enum -> Korean)
+    if (severityFilter !== "전체" && event.severity !== severityMap[severityFilter]) return false;
+    // Status filter (DB enum -> Korean)
+    if (statusFilter !== "전체" && event.status !== statusMap[statusFilter]) return false;
+    // Area filter (English code)
     if (areaFilter !== "전체") {
-      const apiArea = AREA_MAPPING[areaFilter]
-      if (apiArea && event.area !== apiArea) return false
-      // Fallback for existing data if necessary, or strictly enforce API mapping
-      if (!apiArea && !event.area.includes(areaFilter)) return false
+      if (event.area !== areaFilter) return false;
     }
+    // Priority filter
     if (priorityFilter !== "전체") {
-      const priorityScore = event.priorityScore || 0
-      const priorityLevel = getPriorityLevel(priorityScore)
-      if (priorityLevel !== priorityFilter) return false
+      const priorityScore = event.priorityScore || 0;
+      const priorityLevel = getPriorityLevel(priorityScore);
+      if (priorityLevel !== priorityFilter) return false;
     }
-    // 날짜 필터링 추가
-    const eventDate = new Date(event.datetime.split(' ')[0])
-    if (startDate && eventDate < startDate) return false
-    if (endDate && eventDate > endDate) return false
-    
-    if (searchQuery && !event.title.includes(searchQuery) && !event.content.includes(searchQuery)) return false
-    return true
-  }).sort((a, b) => calculatePriorityScore(b) - calculatePriorityScore(a)) // 우선순위 점수 높은 순 정렬
+    // Date range filter
+    const eventDate = new Date(event.datetime.split(' ')[0]);
+    if (startDate && eventDate < startDate) return false;
+    if (endDate && eventDate > endDate) return false;
+    // Search filter
+    if (searchQuery && !event.title.includes(searchQuery) && !event.content.includes(searchQuery)) return false;
+    return true;
+  }).sort((a, b) => calculatePriorityScore(b) - calculatePriorityScore(a));
 
   // 페이지네이션 계산
   const totalEvents = filteredEvents.length
@@ -450,12 +473,12 @@ export default function EventsPage() {
               <div className="relative">
                 <select 
                   value={severityFilter}
-                  onChange={(e) => setSeverityFilter(e.target.value as "전체" | Severity)}
+                  onChange={(e) => setSeverityFilter(e.target.value as "전체" | "DANGER" | "CAUTION")}
                   className="appearance-none flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm pr-8"
                 >
                   <option value="전체">전체 심각도</option>
-                  <option value="위험">위험</option>
-                  <option value="경고">경고</option>
+                  <option value="DANGER">위험</option>
+                  <option value="CAUTION">경고</option>
                 </select>
                 <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -464,13 +487,14 @@ export default function EventsPage() {
               <div className="relative">
                 <select 
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as "전체" | EventStatus)}
+                  onChange={(e) => setStatusFilter(e.target.value as "전체" | "PENDING" | "COMPLETED" | "INCOMPLETE" | "NOT_NEEDED")}
                   className="appearance-none flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm pr-8"
                 >
                   <option value="전체">전체 상태</option>
-                  <option value="조치 필요">조치 필요</option>
-                  <option value="조치 완료">조치 완료</option>
-                  <option value="조치 불필요">조치 불필요</option>
+                  <option value="PENDING">조치 필요</option>
+                  <option value="COMPLETED">조치 완료</option>
+                  <option value="INCOMPLETE">조치 미완료</option>
+                  <option value="NOT_NEEDED">조치 불필요</option>
                 </select>
                 <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -483,11 +507,11 @@ export default function EventsPage() {
                   className="appearance-none flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm pr-8"
                 >
                   <option value="전체">전체 영역</option>
-                  <option value="프레스">프레스</option>
-                  <option value="차체">차체</option>
-                  <option value="도장">도장</option>
-                  <option value="의장">의장</option>
-                  <option value="검사">검사</option>
+                  <option value="PRESS">프레스</option>
+                  <option value="BODY">차체</option>
+                  <option value="PAINT">도장</option>
+                  <option value="ASSEMBLY">의장</option>
+                  <option value="INSPECTION">검사</option>
                 </select>
                 <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -500,9 +524,9 @@ export default function EventsPage() {
                   className="appearance-none flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm pr-8"
                 >
                   <option value="전체">전체 우선순위</option>
-                  <option value="높음">높음 (60+)</option>
-                  <option value="중간">중간 (40-59)</option>
-                  <option value="낮음">낮음 (0-39)</option>
+                  <option value="높음">높음 (267~400)</option>
+                  <option value="중간">중간 (134~266)</option>
+                  <option value="낮음">낮음 (0-133)</option>
                 </select>
                 <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -562,7 +586,7 @@ export default function EventsPage() {
                         <div className="flex items-center gap-2">
                           <AlertTriangle className={`w-4 h-4 ${event.severity === "위험" ? "text-destructive" : "text-warning"}`} />
                           <span className={`px-2 py-0.5 rounded text-xs ${getSeverityStyle(event.severity)}`}>
-                            {event.severity}
+                            {severityMap[event.severity] || event.severity}
                           </span>
                         </div>
                       </td>
@@ -597,7 +621,7 @@ export default function EventsPage() {
                             onClick={() => handleStatusChange(event.id)}
                             className="px-3 py-1 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/80"
                           >
-                            조치 완료
+                            조치 처리
                           </button>
                         ) : (
                           <button

@@ -18,6 +18,7 @@ export type DefectTransferCauseRow = {
   value: string
   impact: number
   message: string
+  mainCauses?: { message: string; impact: number }[]
 }
 
 export type DefectTransferCauseData = {
@@ -115,4 +116,3 @@ export async function fetchDefectTransferCauses({
     nextCursor: result.data.nextCursor ?? null,
   }
 }
-

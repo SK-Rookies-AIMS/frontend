@@ -12,9 +12,10 @@ interface Event {
   title: string
   area: string
   equipmentNo: string
-  stationCode: string
+  equipmentId: string
   datetime: string
   severity: "위험" | "경고"
+  riskScore: number
   currentImpact: number
   followUpImpact: number
   affectedProcesses: string[]
@@ -36,11 +37,11 @@ export function RightSidebar() {
             title: item.title,
             area: PROCESS_CODE_MAP[item.processCode] || item.processCode,
             equipmentNo: item.equipmentId,
-            stationCode: item.stationCode || 'N/A',
+            equipmentId: String(item.equipmentId ?? ''),
             datetime: item.createdAt,
             severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : '경고',
-
-            currentImpact: item.currentImpact || item.riskScore || 0, 
+            riskScore: item.riskScore ?? 0,
+            currentImpact: item.riskScore ?? 0,
             followUpImpact: item.followUpImpact || 0,
             affectedProcesses: (item.affectedProcesses || []).map((p: string) => PROCESS_CODE_MAP[p] || p),
             priorityScore: item.priorityScore || 0
@@ -87,7 +88,7 @@ export function RightSidebar() {
         </div>
         <div className="space-y-2">
           {failures.map((event) => (
-            <AlertItem key={event.id} title={event.title} location={event.area} stationCode={event.stationCode} time={event.datetime.split(' ')[1] || event.datetime} iconType="error" />
+            <AlertItem key={event.id} title={event.title} location={event.area} equipmentId={event.equipmentId} time={event.datetime.split(' ')[1] || event.datetime} iconType="error" />
           ))}
         </div>
       </div>
@@ -102,7 +103,7 @@ export function RightSidebar() {
         </div>
         <div className="space-y-2">
           {warnings.map((event) => (
-            <AlertItem key={event.id} title={event.title} location={event.area} stationCode={event.stationCode} time={event.datetime.split(' ')[1] || event.datetime} iconType="warning" />
+            <AlertItem key={event.id} title={event.title} location={event.area} equipmentId={event.equipmentId} riskScore={event.riskScore} time={event.datetime.split(' ')[1] || event.datetime} iconType="warning" />
           ))}
         </div>
       </div>
@@ -112,8 +113,8 @@ export function RightSidebar() {
   )
 }
 
-function AlertItem({ title, location, stationCode, time, iconType }: { 
-  title: string; location: string; stationCode: string; time: string; iconType: "warning" | "error";
+function AlertItem({ title, location, equipmentId, riskScore, time, iconType }: { 
+  title: string; location: string; equipmentId: string; riskScore: number; time: string; iconType: "warning" | "error";
 }) {
   const isError = iconType === "error"
   return (
@@ -123,7 +124,7 @@ function AlertItem({ title, location, stationCode, time, iconType }: {
       </div>
       <div className="flex-1 min-w-0">
         <p className={`text-xs font-medium ${isError ? "text-destructive" : "text-warning"}`}>{title}</p>
-        <p className="text-[10px] text-muted-foreground">{location} | {stationCode}</p>
+        <p className="text-[10px] text-muted-foreground">{location} | {equipmentId}</p>
         <p className="text-[10px] text-muted-foreground">{time}</p>
       </div>
     </div>
@@ -155,14 +156,16 @@ function PriorityItem({ event, rank }: { event: Event; rank: number }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className={`text-xs font-medium truncate ${isError ? "text-destructive" : "text-warning"}`}>{event.title}</p>
-          <p className="text-[10px] text-muted-foreground mb-2">{event.area} | {event.stationCode}</p>
+          <p className="text-[10px] text-muted-foreground mb-2">{event.area} | {event.riskScore}</p>
           
           <div className="space-y-1.5 mb-2">
             <div className="flex items-center justify-between text-[10px]">
-              <span className="text-muted-foreground">현재 영향</span>
-              {renderImpactBars(event.currentImpact, isError)}
-              <span className="text-muted-foreground">후속 영향</span>
-              {renderImpactBars(event.followUpImpact, false)}
+              <span className="text-muted-foreground">현재 위험도</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`font-mono font-bold ${isError ? "text-destructive" : "text-warning"}`}>
+                </span>
+                {renderImpactBars(event.riskScore, isError)}
+              </div>
             </div>
           </div>
           
