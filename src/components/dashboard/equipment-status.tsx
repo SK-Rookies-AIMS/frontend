@@ -185,7 +185,7 @@ function EquipmentCard({
         <span className="font-medium">{running} EA</span>
       </div>
 
-      {/* Footer metrics - 온도, 습도, 전력사용량 with status colors */}
+
       <div className="flex items-center justify-between text-[10px] pt-2 border-t border-border">
         <div className="flex items-center gap-1 text-muted-foreground">
           <span className="w-4 h-4 flex items-center justify-center">🌡️</span>
