@@ -80,16 +80,29 @@ export function ShapCauseAnalysisPanel({
       <h4 className="text-xs text-muted-foreground mb-1 mt-3">주요 원인</h4>
       <div ref={scrollRef} className="h-[114px] overflow-y-auto pr-1" onScroll={onScroll}>
         <div className="space-y-2">
-          {defectCauseRows.map((factor) => (
-            <div key={`${factor.rank}-${factor.feature}`} className="flex items-center gap-2">
-              <span className="text-xs w-4">{factor.rank}</span>
-              <span className="text-xs flex-1" title={factor.message}>
-                {factor.label || factor.feature} {factor.value}
-              </span>
-              <span className="text-xs text-muted-foreground">영향도 {factor.impact}</span>
-              <ImpactBar value={Math.abs(factor.impact)} />
-            </div>
-          ))}
+          {defectCauseRows.flatMap((factor) =>
+            factor.mainCauses && factor.mainCauses.length > 0
+              ? factor.mainCauses.map((cause, causeIndex) => (
+                  <div key={`${factor.rank}-${factor.feature}-${causeIndex}`} className="flex items-center gap-2">
+                    <span className="text-xs w-4">{causeIndex + 1}</span>
+                    <span className="text-xs flex-1" title={cause.message}>
+                      {cause.message}
+                    </span>
+                    <span className="text-xs text-muted-foreground">영향도 {cause.impact.toFixed(4)}</span>
+                    <ImpactBar value={Math.abs(cause.impact)} />
+                  </div>
+                ))
+              : (
+                  <div key={`${factor.rank}-${factor.feature}`} className="flex items-center gap-2">
+                    <span className="text-xs w-4">{factor.rank}</span>
+                    <span className="text-xs flex-1" title={factor.message}>
+                      {factor.label || factor.feature} {factor.value}
+                    </span>
+                    <span className="text-xs text-muted-foreground">영향도 {factor.impact}</span>
+                    <ImpactBar value={Math.abs(factor.impact)} />
+                  </div>
+                )
+          )}
           {!isLoading && defectCauseRows.length === 0 && (
             <div className="py-4 text-center text-xs text-muted-foreground">
               SHAP 원인 분석 데이터가 없습니다.
