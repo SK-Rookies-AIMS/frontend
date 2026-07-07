@@ -209,6 +209,8 @@ const bodyAvailableDates = Array.from(new Set(bodyRobotData.map((item) => item.d
 type PaintChartDatum = {
   eventTime: string
   time: string
+  dateTime: string
+  timestamp: number
   defectScore: number
   defectScoreScaled: number
   surfaceQualityScore: number
@@ -220,28 +222,111 @@ type PaintChartDatum = {
   severity?: string
 }
 
+type PaintStatus = "NORMAL" | "WARNING" | "DANGER"
+
+type ThresholdDirection = "HIGHER_IS_BETTER" | "LOWER_IS_BETTER" | "IN_RANGE_IS_BETTER"
+
+type SurfaceQualityThreshold = {
+  label: string
+  unit: string
+  direction: "HIGHER_IS_BETTER"
+  warningBelow?: number | null
+  dangerBelow?: number | null
+}
+
+type ThicknessThreshold = {
+  label: string
+  unit: string
+  direction: "IN_RANGE_IS_BETTER"
+  target?: number | null
+  normalMin?: number | null
+  normalMax?: number | null
+  warningMin?: number | null
+  warningMax?: number | null
+}
+
+type UpperLimitThreshold = {
+  label: string
+  unit: string
+  direction: "LOWER_IS_BETTER"
+  warningAbove?: number | null
+  dangerAbove?: number | null
+}
+
+type PaintDashboardThresholds = {
+  surfaceQualityScore?: SurfaceQualityThreshold | null
+  thicknessValue?: ThicknessThreshold | null
+  defectScore?: UpperLimitThreshold | null
+  thermalStdTemp?: UpperLimitThreshold | null
+}
+
+type PaintMetricPoint = {
+  time: string
+  value: number | null
+  status: PaintStatus
+  visionLabel: string | null
+  imagePosition: string | null
+  riskScore: number | null
+  analysisResultId: number | null
+}
+
+type PaintMetricMarker = {
+  time: string
+  value: number | null
+  label: string
+  imagePosition: string | null
+  status: PaintStatus
+  analysisResultId: number | null
+}
+
+type PaintMetricChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: PaintMetricPoint[]
+  markers: PaintMetricMarker[]
+}
+
+type PaintDashboardCharts = {
+  surfaceQuality?: PaintMetricChart | null
+  thickness?: PaintMetricChart | null
+  defectScore?: PaintMetricChart | null
+  thermalStdTemp?: PaintMetricChart | null
+}
+
+type PaintAlertDetail = {
+  time?: string | null
+  visionLabel?: string | null
+  imagePosition?: string | null
+  thicknessValue?: number | null
+  surfaceQualityScore?: number | null
+  defectScore?: number | null
+  thermalStdTemp?: number | null
+  riskScore?: number | null
+  status?: PaintStatus | null
+  severity?: string | null
+}
+
 type PaintDashboardData = {
   selectedDate: string | null
+  from?: string | null
+  to?: string | null
+  chartStartAt?: string | null
+  chartEndAt?: string | null
   summary: {
     analysisCount: number
-    defectRate: number
-    averageSurfaceQualityScore: number
+    averageThicknessValue: number | null
+    defectRate: number | null
+    averageSurfaceQualityScore: number | null
     alertCount: number
+    averageThermalStdTemp: number | null
   }
-  chart: Array<{
-    time: string
-    defectScore: number
-    surfaceQualityScore: number
-    thicknessValue: number
-    riskScore: number
-    imagePosition?: string
-    visionLabel?: string
-    thermalStdTemp?: number
-    severity?: string
-  }>
+  thresholds: PaintDashboardThresholds
+  charts: PaintDashboardCharts
   alert: {
     title: string
     messages: string[]
+    detail?: PaintAlertDetail | null
   } | null
 }
 
@@ -258,6 +343,8 @@ type AssemblyVehicleRow = {
   status: string
   time?: string
 }
+
+type AssemblyFilter = "all" | "abnormal" | "sequence" | "fastening" | "missing"
 
 type AssemblyDashboardData = {
   selectedDate: string | null
@@ -294,11 +381,14 @@ const emptyPaintDashboard: PaintDashboardData = {
   selectedDate: null,
   summary: {
     analysisCount: 0,
+    averageThicknessValue: 0,
     defectRate: 0,
     averageSurfaceQualityScore: 0,
     alertCount: 0,
+    averageThermalStdTemp: 0,
   },
-  chart: [],
+  thresholds: {},
+  charts: {},
   alert: null,
 }
 
@@ -315,7 +405,7 @@ const emptyAssemblyDashboard: AssemblyDashboardData = {
   alert: null,
 }
 
-const ASSEMBLY_PAGE_SIZE = 5
+const ASSEMBLY_TABLE_PAGE_SIZE = 12
 
 const formatApiTime = (value: string) => {
   if (!value) return "-"
@@ -386,6 +476,28 @@ function getRiskTextClass(riskScore: number) {
   if (riskScore >= 80) return "text-destructive"
   if (riskScore >= 50) return "text-warning"
   return "text-success"
+}
+
+function getAssemblyVehicleKey(row: AssemblyVehicleRow, index = 0) {
+  const stableParts = [row.carMasterId, row.carDisplayId, row.time].filter(
+    (value) => value !== undefined && value !== null && value !== "",
+  )
+  return stableParts.length > 0 ? stableParts.join("-") : `assembly-row-${index}`
+}
+
+function getAssemblySeverityRank(row: AssemblyVehicleRow) {
+  const status = `${row.severity ?? ""} ${row.status ?? ""}`.toUpperCase()
+  if (status.includes("DANGER") || status.includes("CRITICAL") || status.includes("위험")) return 2
+  if (status.includes("WARNING") || status.includes("주의") || status.includes("경고")) return 1
+  return 0
+}
+
+function getAssemblyErrorTotal(row: AssemblyVehicleRow) {
+  return (row.sequenceErrorCount ?? 0) + (row.missingPartCount ?? 0) + (row.fasteningErrorCount ?? 0)
+}
+
+function isAssemblyAbnormal(row: AssemblyVehicleRow) {
+  return getAssemblySeverityRank(row) > 0 || getAssemblyErrorTotal(row) > 0 || (row.riskScore ?? 0) > 0
 }
 
 function formatProbability(value: number) {
@@ -499,6 +611,8 @@ export function useManufacturingDashboard() {
   } | null>(null)
   const [selectedPaintDate, setSelectedPaintDate] = useState("")
   const [selectedAssemblyDate, setSelectedAssemblyDate] = useState("")
+  const [selectedAssemblyVehicleKey, setSelectedAssemblyVehicleKey] = useState<string | null>(null)
+  const [assemblyFilter, setAssemblyFilterState] = useState<AssemblyFilter>("all")
   const [paintAvailableDates, setPaintAvailableDates] = useState<string[]>([])
   const [assemblyAvailableDates, setAssemblyAvailableDates] = useState<string[]>([])
   const [assemblyPage, setAssemblyPage] = useState(1)
@@ -726,24 +840,40 @@ export function useManufacturingDashboard() {
 
   const paintKpis = {
     analysisCount: paintDashboard.summary?.analysisCount ?? 0,
-    defectRate: paintDashboard.summary?.defectRate ?? 0,
-    averageQuality: paintDashboard.summary?.averageSurfaceQualityScore ?? 0,
+    averageThickness: paintDashboard.summary?.averageThicknessValue ?? null,
+    defectRate: paintDashboard.summary?.defectRate ?? null,
+    averageQuality: paintDashboard.summary?.averageSurfaceQualityScore ?? null,
     riskAlarmCount: paintDashboard.summary?.alertCount ?? 0,
+    averageThermalStdTemp: paintDashboard.summary?.averageThermalStdTemp ?? null,
   }
-  const paintChartData: PaintChartDatum[] = (paintDashboard.chart ?? []).map((row) => ({
-    eventTime: row.time,
-    time: formatApiTime(row.time),
-    defectScore: row.defectScore ?? 0,
-    defectScoreScaled: (row.defectScore ?? 0) <= 1 ? (row.defectScore ?? 0) * 100 : (row.defectScore ?? 0),
-    surfaceQualityScore: row.surfaceQualityScore ?? 0,
-    thicknessValue: row.thicknessValue ?? 0,
-    riskScore: row.riskScore ?? 0,
-    imagePosition: row.imagePosition,
-    visionLabel: row.visionLabel,
-    thermalStdTemp: row.thermalStdTemp,
-    severity: row.severity,
-  }))
   const assemblyData = assemblyDashboard.vehicles ?? []
+  const sortedAssemblyData = assemblyData
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const severityDiff = getAssemblySeverityRank(right.row) - getAssemblySeverityRank(left.row)
+      if (severityDiff !== 0) return severityDiff
+
+      const riskDiff = (right.row.riskScore ?? 0) - (left.row.riskScore ?? 0)
+      if (riskDiff !== 0) return riskDiff
+
+      const errorDiff = getAssemblyErrorTotal(right.row) - getAssemblyErrorTotal(left.row)
+      if (errorDiff !== 0) return errorDiff
+
+      return left.index - right.index
+    })
+    .map(({ row }) => row)
+  const filteredAssemblyData = sortedAssemblyData.filter((row) => {
+    if (assemblyFilter === "abnormal") return isAssemblyAbnormal(row)
+    if (assemblyFilter === "sequence") return (row.sequenceErrorCount ?? 0) > 0
+    if (assemblyFilter === "fastening") return (row.fasteningErrorCount ?? 0) > 0
+    if (assemblyFilter === "missing") return (row.missingPartCount ?? 0) > 0
+    return true
+  })
+  const selectedAssemblyVehicle =
+    filteredAssemblyData.find((row, index) => getAssemblyVehicleKey(row, index) === selectedAssemblyVehicleKey) ??
+    filteredAssemblyData[0] ??
+    sortedAssemblyData[0] ??
+    null
   const assemblyKpis = {
     carCount: assemblyDashboard.summary?.vehicleCount ?? 0,
     sequenceErrors: assemblyDashboard.summary?.sequenceErrorCount ?? 0,
@@ -789,12 +919,17 @@ export function useManufacturingDashboard() {
       bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "위험",
     }
   })
-  const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_PAGE_SIZE
-  const assemblyTotalPages = Math.max(1, Math.ceil(assemblyData.length / ASSEMBLY_PAGE_SIZE))
-  const pagedAssemblyData = assemblyData.slice(
+  const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_TABLE_PAGE_SIZE
+  const assemblyTotalPages = Math.max(1, Math.ceil(filteredAssemblyData.length / ASSEMBLY_TABLE_PAGE_SIZE))
+  const pagedAssemblyData = filteredAssemblyData.slice(
     assemblyStartIndex,
-    assemblyStartIndex + ASSEMBLY_PAGE_SIZE,
+    assemblyStartIndex + ASSEMBLY_TABLE_PAGE_SIZE,
   )
+  const setAssemblyFilter = (filter: AssemblyFilter) => {
+    setAssemblyFilterState(filter)
+    setAssemblyPage(1)
+    setSelectedAssemblyVehicleKey(null)
+  }
   const paintDateOptions =
     selectedPaintDate && !paintAvailableDates.includes(selectedPaintDate)
       ? [selectedPaintDate, ...paintAvailableDates]
@@ -1012,6 +1147,15 @@ export function useManufacturingDashboard() {
   const applyPaintDashboard = (
     result: Partial<PaintDashboardData> | null | undefined,
   ) => {
+    const normalizeMetricChart = (chart: PaintMetricChart | null | undefined): PaintMetricChart | null => {
+      if (!chart) return null
+      return {
+        ...chart,
+        points: Array.isArray(chart.points) ? chart.points : [],
+        markers: Array.isArray(chart.markers) ? chart.markers : [],
+      }
+    }
+
     setPaintDashboard({
       ...emptyPaintDashboard,
       ...result,
@@ -1019,7 +1163,16 @@ export function useManufacturingDashboard() {
         ...emptyPaintDashboard.summary,
         ...result?.summary,
       },
-      chart: Array.isArray(result?.chart) ? result.chart : [],
+      thresholds: {
+        ...emptyPaintDashboard.thresholds,
+        ...result?.thresholds,
+      },
+      charts: {
+        surfaceQuality: normalizeMetricChart(result?.charts?.surfaceQuality),
+        thickness: normalizeMetricChart(result?.charts?.thickness),
+        defectScore: normalizeMetricChart(result?.charts?.defectScore),
+        thermalStdTemp: normalizeMetricChart(result?.charts?.thermalStdTemp),
+      },
       alert: result?.alert ?? null,
       selectedDate: result?.selectedDate ?? null,
     })
@@ -1337,7 +1490,6 @@ export function useManufacturingDashboard() {
     paintDatesError,
     paintDashboardError,
     isPaintDashboardLoading,
-    paintChartData,
     paintDashboard,
     assemblyKpis,
     selectedAssemblyDate,
@@ -1349,11 +1501,18 @@ export function useManufacturingDashboard() {
     assemblyDashboardError,
     isAssemblyDashboardLoading,
     assemblyData,
+    filteredAssemblyData,
     pagedAssemblyData,
     assemblyStartIndex,
     assemblyPage,
     assemblyTotalPages,
     setAssemblyPage,
+    assemblyFilter,
+    setAssemblyFilter,
+    selectedAssemblyVehicle,
+    selectedAssemblyVehicleKey,
+    setSelectedAssemblyVehicleKey,
+    getAssemblyVehicleKey,
     assemblyDashboard,
     formatChartTick,
     formatDelayTime,
