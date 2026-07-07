@@ -183,20 +183,24 @@ export default function EventsPage() {
     setActionReason("")
   }, [selectedEvent])
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return "bg-destructive/20 text-destructive border-destructive/30"
-      case "COMPLETED":
-        return "bg-success/20 text-success border-success/30"
-      case "NOT_NEEDED":
-        return "bg-muted text-muted-foreground border-border"
-      case "INCOMPLETE":
-        return "bg-warning/20 text-warning border-warning/30"
-      default:
-        return "bg-secondary text-muted-foreground"
-    }
+const getStatusStyle = (status: string) => {
+  switch (status) {
+    case "조치 미완료":
+      return "bg-amber-100 text-amber-700 border-amber-300"
+
+    case "조치 완료":
+      return "bg-green-100 text-green-700 border-green-300"
+
+    case "조치 필요":
+      return "bg-red-100 text-red-700 border-red-300"
+
+    case "조치 불필요":
+      return "bg-gray-100 text-gray-600 border-gray-300"
+
+    default:
+      return "bg-secondary text-muted-foreground border-border"
   }
+}
 
   const getSeverityStyle = (severity: string) => {
   return severity === "위험"
@@ -617,7 +621,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                             onClick={() => handleStatusChange(event.id)}
                             className="px-3 py-1 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/80"
                           >
-                            조치 완료
+                            조치 처리
                           </button>
                         ) : (
                           <button
