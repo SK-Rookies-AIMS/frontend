@@ -1,0 +1,188 @@
+import { useEffect, useRef, useState } from "react";
+import { Client } from "@stomp/stompjs";
+
+import { AgvOperationResponse } from "@/types/agv";
+
+import {
+    ProcessFlowAgv,
+    toProcessFlowAgvs,
+} from "@/lib/agv-mapper";
+
+const WS_URL =
+    import.meta.env.VITE_WS_URL ??
+    "ws://localhost:8081/ws";
+
+export function useAgvWebsocket() {
+
+    const [agvs, setAgvs] =
+        useState<ProcessFlowAgv[]>([]);
+
+    const latestDtos =
+        useRef<AgvOperationResponse[]>([]);
+
+    const clientRef =
+        useRef<Client | null>(null);
+
+    async function loadInitialAgvs() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/main/process-flow",
+                    {
+                        credentials: "include",
+                    }
+                );
+
+            if (!response.ok) {
+
+                console.error(
+                    "[AGV] 초기 조회 실패",
+                    response.status
+                );
+
+                return;
+            }
+
+            const body =
+                await response.json();
+
+            latestDtos.current =
+                body.data?.agvs ?? [];
+
+        } catch (e) {
+
+            console.error(
+                "[AGV] 초기 조회 실패",
+                e
+            );
+
+        }
+
+    }
+
+    useEffect(() => {
+
+        let animationId = 0;
+
+        const connect = async () => {
+
+            await loadInitialAgvs();
+
+            const client =
+                new Client({
+
+                    brokerURL: WS_URL,
+
+                    reconnectDelay: 3000,
+
+                    onConnect: () => {
+
+                        console.log(
+                            "[WS] connected"
+                        );
+
+                        client.subscribe(
+                            "/topic/agv",
+                            message => {
+
+                                try {
+
+                                    const body =
+                                        JSON.parse(
+                                            message.body
+                                        );
+
+                                    latestDtos.current =
+                                        body as AgvOperationResponse[];
+
+                                } catch (e) {
+
+                                    console.error(
+                                        e
+                                    );
+
+                                }
+
+                            }
+                        );
+
+                    },
+
+                    onDisconnect: () => {
+
+                        console.log(
+                            "[WS] disconnected"
+                        );
+
+                    },
+
+                    onStompError: frame => {
+
+                        console.error(
+                            frame
+                        );
+
+                    },
+
+                    onWebSocketError: e => {
+
+                        console.error(
+                            e
+                        );
+
+                    }
+
+                });
+
+            client.activate();
+
+            clientRef.current =
+                client;
+
+        };
+
+        connect();
+
+        const animate = () => {
+
+            setAgvs(
+
+                toProcessFlowAgvs(
+
+                    latestDtos.current,
+
+                    Date.now()
+
+                )
+
+            );
+
+            animationId =
+                requestAnimationFrame(
+                    animate
+                );
+
+        };
+
+        animationId =
+            requestAnimationFrame(
+                animate
+            );
+
+        return () => {
+
+            cancelAnimationFrame(
+                animationId
+            );
+
+            clientRef.current?.deactivate();
+
+        };
+
+    }, []);
+
+    return agvs;
+
+}
