@@ -13,8 +13,8 @@ export const SEVERITY_CODES: Record<string, string> = {
   "경고": "W",
 }
 
-export type EventStatus = "조치 필요" | "조치 완료" | "조치 불필요"
-type Severity = "위험" | "경고"
+export type EventStatus = "조치 필요" | "조치 완료" | "조치 불필요" | "조치 대기중"
+export type Severity = "위험" | "경고"
 
 export interface EventItem {
   id: number
@@ -160,7 +160,7 @@ function generateSampleEvents(): EventItem[] {
     },
   ]
 
-  const statuses: EventStatus[] = ["조치 필요", "조치 완료", "조치 불필요"]
+  const statuses: EventStatus[] = ["조치 필요", "조치 완료", "조치 불필요", "조치 대기중"]
   const impactLevels: ("높음" | "중간" | "낮음")[] = ["높음", "중간", "낮음"]
   const allProcessNames = ["차체", "도장", "의장", "프레스"]
 
