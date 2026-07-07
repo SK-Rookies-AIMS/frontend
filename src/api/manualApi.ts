@@ -1,13 +1,17 @@
-import { ManualResponse } from "@/types/manual"
+import type { ManualApiResponse } from "@/types/manual"
 
 const BASE_URL = "http://localhost:8000"
 
-export async function getCurrentManual(): Promise<ManualResponse> {
-  const response = await fetch(`${BASE_URL}/manual`);
+export async function getCurrentManual(
+  userId: number
+): Promise<ManualApiResponse> {
+  const response = await fetch(
+    `${BASE_URL}/manual/${userId}`
+  )
 
   if (!response.ok) {
-    throw new Error("AI Manual 조회 실패");
+    throw new Error("AI Manual 조회 실패")
   }
 
-  return response.json();
+  return response.json()
 }
