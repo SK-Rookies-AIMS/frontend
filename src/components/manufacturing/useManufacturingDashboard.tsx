@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   BOTTLENECK_INITIAL_CURSOR,
   BOTTLENECK_PAGE_SIZE,
@@ -609,19 +609,23 @@ export function useManufacturingDashboard() {
   const [isBodyAnalysisLoading, setIsBodyAnalysisLoading] = useState(false)
   const [bodyAnalysisError, setBodyAnalysisError] = useState<string | null>(null)
 
-  const apiBodyData = (bodyAnalysis?.chart ?? []).map((point) => {
+  const apiBodyData = useMemo(() => {
+    return (bodyAnalysis?.chart ?? []).map((point: any) => {
       const dateTime = formatBackendTimestamp(point.timestamp)
       const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
       const date = new Date(isoForParsing)
       const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
-      const frequencyPeakValue = normalizeNumber(point.frequencyPeakValue)
-      const rawVibe = normalizeNumber(point.robotVibrationScore)
-      const robotVibrationScore = rawVibe <= 1 ? Math.round(rawVibe * 100) : rawVibe
+      const vibrationPeak = normalizeNumber(point.vibrationPeak)
+      const rawVibe = normalizeNumber(point.vibrationScore)
+      const robotVibrationScore = rawVibe
       const riskScore = normalizeNumber(point.riskScore)
 
-      const frequencyPeakBand =
-        frequencyPeakValue >= 7 ? "HIGH (80–120Hz)" : frequencyPeakValue >= 4.5 ? "MID (30–80Hz)" : "LOW (0–30Hz)"
+      const frequencyPeakBand = bodyAnalysis?.metrics?.frequencyPeakBand ?? "LOW"
+
+      const rawTargetVibe = normalizeNumber(point.targetVibrationScore)
+      const targetVibrationScore = rawTargetVibe
+      const targetVibrationPeak = normalizeNumber(point.targetVibrationPeak ?? bodyAnalysis?.metrics?.targetVibrationPeak)
 
       return {
         time: dateTime.slice(11, 19),
@@ -636,13 +640,19 @@ export function useManufacturingDashboard() {
         robot_motion_status: bodyAnalysis?.metrics?.robotMotionStatus ?? (point.isAbnormal ? "WARNING" : "NORMAL"),
         robot_operation_mode: bodyAnalysis?.metrics?.robotOperationMode ?? "AUTO",
         robot_vibration_score: robotVibrationScore,
-        frequency_peak_band: bodyAnalysis?.metrics?.frequencyPeakBand ?? frequencyPeakBand,
-        frequency_peak_value: frequencyPeakValue,
-        band_low: Number((frequencyPeakValue * 0.42).toFixed(1)),
-        band_mid: Number((frequencyPeakValue * 0.68).toFixed(1)),
-        band_high: Number((frequencyPeakValue * (point.isAbnormal ? 1 : 0.35)).toFixed(1)),
+        target_vibration_score: targetVibrationScore,
+        target_frequency_peak_value: targetVibrationPeak,
+        frequency_peak_band: frequencyPeakBand,
+        frequency_peak_value: vibrationPeak,
+        vibration_peak: vibrationPeak,
+        target_vibration_peak: targetVibrationPeak,
+        vibration_rms: normalizeNumber(point.vibrationRms),
+        band_low: 0,
+        band_mid: 0,
+        band_high: 0,
       }
     })
+  }, [bodyAnalysis]);
 
   const fetchBodyAnalysisData = useCallback(async (date?: string | null) => {
     setIsBodyAnalysisLoading(true)
@@ -690,7 +700,7 @@ export function useManufacturingDashboard() {
     void fetchBodyAnalysisData(selectedBodyAnalysisDate)
   }, [fetchBodyAnalysisData, selectedBodyAnalysisDate])
 
-  const latestBodyData = sourceBodyData.length > 0
+  const lastChartPoint = sourceBodyData.length > 0
     ? sourceBodyData[sourceBodyData.length - 1]
     : bodyRobotData.length > 0
       ? bodyRobotData[bodyRobotData.length - 1]
@@ -699,6 +709,8 @@ export function useManufacturingDashboard() {
           robot_motion_status: "NORMAL",
           robot_operation_mode: "AUTO",
           robot_vibration_score: 0,
+          target_vibration_score: 0.75,
+          target_frequency_peak_value: 30,
           frequency_peak_band: "LOW",
           frequency_peak_value: 0,
           band_low: 0,
@@ -706,6 +718,17 @@ export function useManufacturingDashboard() {
           band_high: 0,
           risk_score: 0,
         }
+
+  const latestBodyData = bodyAnalysis?.metrics ? {
+    ...lastChartPoint,
+    robot_motion_status: bodyAnalysis.metrics.robotMotionStatus ?? lastChartPoint.robot_motion_status,
+    robot_operation_mode: bodyAnalysis.metrics.robotOperationMode ?? lastChartPoint.robot_operation_mode,
+    robot_vibration_score: bodyAnalysis.metrics.vibrationScore ?? lastChartPoint.robot_vibration_score,
+    frequency_peak_band: bodyAnalysis.metrics.frequencyPeakBand ?? lastChartPoint.frequency_peak_band,
+    frequency_peak_value: bodyAnalysis.metrics.frequencyPeakValue ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.frequency_peak_value,
+    vibration_peak: bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
+    risk_score: bodyAnalysis.metrics.riskScore ?? lastChartPoint.risk_score,
+  } : lastChartPoint;
 
   const latestBodySeverity = severityToRiskSeverity(
     bodyAnalysis?.metrics?.severity,
