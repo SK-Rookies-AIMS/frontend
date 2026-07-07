@@ -157,7 +157,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">운전 모드</p>
-                      <p className="whitespace-nowrap text-base font-bold text-warning">{latestBodyData.robot_operation_mode}</p>
+                      <p className="whitespace-nowrap text-base font-bold text-sky-500">{latestBodyData.robot_operation_mode}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs text-muted-foreground">진동 가속도</p>
