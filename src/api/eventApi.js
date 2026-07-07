@@ -14,6 +14,14 @@ export const eventApi = {
       console.error('Error fetching events:', error);
       throw error;
     }
+  },getEventsBySeverity: async (severity, page = 0, size = 5) => {
+    try {
+      const response = await axiosInstance.get(`/api/event?severity=${severity}&page=${page}&size=${size}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching events by severity (${severity}):`, error);
+      throw error;
+    }
   },
   getEventByLogNo: async (logNo) => {
     try {
@@ -33,6 +41,12 @@ export const eventApi = {
       throw error;
     }
   },
+  /**
+   * @param {string} logNo
+   * @param {string} actionStatus
+   * @param {string | null} [actionBy]
+   * @param {string | null} [reason]
+   */
   updateEventAction: async (logNo, actionStatus, actionBy = null, reason = null) => {
     try {
       const response = await axiosInstance.patch(`/api/event/${logNo}/action`, {

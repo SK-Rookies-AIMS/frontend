@@ -109,7 +109,7 @@ export default function EventsPage() {
           datetime: item.createdAt,
           severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
-          subArea: item.stationCode || 'N/A',
+          subArea: "ID : " + (item.equipmentId || 'N/A'),
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
@@ -120,6 +120,8 @@ export default function EventsPage() {
                 ? "조치 미완료"
                 : item.actionStatus === "NOT_NEEDED"
                 ? "조치 불필요"
+                : item.actionStatus === "PENDING"
+                ? "조치 대기중"
                 : "조치 필요",
           equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
@@ -142,7 +144,7 @@ export default function EventsPage() {
           datetime: item.createdAt,
           severity: (item.severity === 'DANGER' || item.severity === 'CRITICAL') ? '위험' : (item.severity === 'CAUTION' || item.severity === 'WARNING' ? '경고' : '위험'),
           area: item.processCode,
-          subArea: item.stationCode || 'N/A',
+          subArea: "ID : " + (item.equipmentId || 'N/A'),
           title: item.title || '제목 없음',
           content: item.contents || '내용 없음',
           // 상태 및 조치: actionStatus 사용
@@ -578,7 +580,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className={`w-4 h-4 ${event.severity === "DANGER" ? "text-destructive" : "text-warning"}`} />
+                          <AlertTriangle className={`w-4 h-4 ${event.severity === "위험" ? "text-destructive" : "text-warning"}`} />
                           <span className={`px-2 py-0.5 rounded text-xs ${getSeverityStyle(event.severity)}`}>
                             {severityMap[event.severity] || event.severity}
                           </span>
