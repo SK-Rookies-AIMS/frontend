@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { EventNotificationProvider } from "@/components/dashboard/event-notification";
 import "./styles/globals.css";
 
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
