@@ -23,10 +23,22 @@ export default function ManufacturingPage() {
       <div className="min-h-screen bg-background flex flex-col">
         <Header currentTime={dashboard.currentTime} />
         <main className="flex-1 p-4 overflow-auto relative">
-          <div className="mb-4">
-            <h1 className="text-lg font-semibold">
-              전체 공정 흐름 요약 및 병목 탐지 <span className="text-muted-foreground font-normal">(실시간)</span>
-            </h1>
+          <div className="mb-5 flex items-center gap-3">
+            {/* Live pulse indicator */}
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+              <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold tracking-wide text-slate-100">
+                전체 공정 흐름 요약 및 병목 탐지
+                <span className="ml-2 text-[11px] font-semibold tracking-widest text-cyan-400/80 uppercase align-middle">
+                  실시간
+                </span>
+              </h1>
+              <p className="text-[11px] text-slate-500 mt-0.5 tracking-wide">
+                프레스 → 차체 → 도장 → 의장 · 공정별 가동률 및 이상 이벤트 모니터링
+              </p>
+            </div>
           </div>
 
           <ProcessFlowSummary
