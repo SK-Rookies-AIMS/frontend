@@ -2,27 +2,46 @@ import { getStoredAccessToken } from "./authStorage"
 
 export const BODY_ANALYSIS_DEFAULT_LIMIT = 30
 
+export type BodyFrequencyZone = {
+  avg: number
+  max: number
+}
+
 export type BodyAnalysisMetrics = {
   robotMotionStatus: string | null
   robotOperationMode: string | null
-  robotVibrationScore: number | null
+  targetVibrationScore: number | null
+  vibrationScore: number | null
+  targetVibrationPeak: number | null
+  vibrationPeak: number | null
+  vibrationRms: number | null
   frequencyPeakValue: number | null
   frequencyPeakBand: string | null
   riskScore: number | null
   riskScoreScale: string | null
   severity: string | null
-  frequencyBands?: { LOW?: number; MEDIUM?: number; HIGH?: number } | null
+  frequencyBands?: Record<string, number> | null
 }
 
 export type BodyAnalysisChartPoint = {
   eventId: string
   analysisId: string
   timestamp: string
-  robotVibrationScore: number | null
-  frequencyPeakValue: number | null
+  targetVibrationScore: number | null
+  vibrationScore: number | null
+  targetVibrationPeak: number | null
+  vibrationPeak: number | null
+  vibrationRms: number | null
   riskScore: number | null
   isAbnormal: boolean
   severity: string | null
+}
+
+export type BodyFrequencyChartPoint = {
+  timestamp: string
+  band: string
+  value: number
+  targetValue: number
 }
 
 export type BodyAnalysisAlert = {
@@ -36,6 +55,26 @@ export type BodyDateOption = {
   sampleEventId: string
 }
 
+export type BodyRiskScoreChartPoint = {
+  eventId: string
+  analysisId: string
+  timestamp: string
+  targetVibrationScore: number | null
+  vibrationScore: number | null
+  riskScore: number | null
+  isAbnormal: boolean
+  severity: string | null
+}
+
+export type BodyVibrationChartPoint = {
+  eventId: string
+  analysisId: string
+  timestamp: string
+  targetVibrationPeak: number | null
+  vibrationPeak: number | null
+  vibrationRms: number | null
+}
+
 export type BodyAnomalyData = {
   date?: string | null
   from?: string | null
@@ -43,7 +82,11 @@ export type BodyAnomalyData = {
   previousEndAt?: string | null
   dateOptions: BodyDateOption[]
   metrics: BodyAnalysisMetrics | null
-  chart: BodyAnalysisChartPoint[]
+  chart?: BodyAnalysisChartPoint[]
+  riskScoreChart?: BodyRiskScoreChartPoint[]
+  vibrationChart?: BodyVibrationChartPoint[]
+  frequencyChart?: BodyFrequencyChartPoint[]
+  frequencyZoneAnalysis?: Record<string, BodyFrequencyZone>
   alert: BodyAnalysisAlert | null
 }
 
@@ -92,6 +135,9 @@ export async function fetchBodyAnalysis({
       ...result.data,
       dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
       chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      riskScoreChart: Array.isArray(result.data.riskScoreChart) ? result.data.riskScoreChart : [],
+      vibrationChart: Array.isArray(result.data.vibrationChart) ? result.data.vibrationChart : [],
+      frequencyChart: Array.isArray(result.data.frequencyChart) ? result.data.frequencyChart : [],
       alert: result.data.alert ?? null,
     } as BodyAnomalyData
   }
