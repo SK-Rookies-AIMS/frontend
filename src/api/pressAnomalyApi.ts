@@ -28,6 +28,23 @@ export type PressAnomalyChartPoint = {
   severity: PressAnomalySeverity
 }
 
+export type PressRiskTrendPoint = {
+  eventId: string
+  analysisId: string
+  timestamp: string
+  value: number | null
+  countIncreaseYn: boolean
+  isAbnormal: boolean
+  severity: PressAnomalySeverity
+}
+
+export type PressRiskTrendChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: PressRiskTrendPoint[]
+}
+
 export type PressAnomalyAlert = {
   detected: boolean
   title: string | null
@@ -47,6 +64,9 @@ export type PressAnomalyData = {
   dateOptions: PressDateOption[]
   metrics: PressAnomalyMetrics | null
   chart: PressAnomalyChartPoint[]
+  charts?: {
+    riskScore?: PressRiskTrendChart | null
+  }
   alert: PressAnomalyAlert | null
 }
 
@@ -83,9 +103,12 @@ export async function fetchPressAnomalyAnalysis({
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
-  type ResultType = ApiEnvelope<Omit<PressAnomalyData, "chart" | "alert" | "dateOptions"> & {
+  type ResultType = ApiEnvelope<Omit<PressAnomalyData, "chart" | "charts" | "alert" | "dateOptions"> & {
     dateOptions?: PressDateOption[]
     chart?: PressAnomalyChartPoint[]
+    charts?: {
+      riskScore?: PressRiskTrendChart | null
+    }
     alert?: PressAnomalyAlert | null
   }>
 
@@ -101,6 +124,14 @@ export async function fetchPressAnomalyAnalysis({
       ...result.data,
       dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
       chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      charts: {
+        riskScore: result.data.charts?.riskScore
+          ? {
+              ...result.data.charts.riskScore,
+              points: Array.isArray(result.data.charts.riskScore.points) ? result.data.charts.riskScore.points : [],
+            }
+          : null,
+      },
       alert: result.data.alert ?? null,
     }
   }

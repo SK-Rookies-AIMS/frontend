@@ -1,4 +1,4 @@
-import React from "react"
+﻿import React from "react"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -6,6 +6,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   Legend,
@@ -80,6 +81,13 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
     getDefectRiskTextClass,
     pressChartWindowSize: PRESS_CHART_WINDOW_SIZE,
   } = dashboard;
+
+  const renderPressSeverityDot = (props: any) => {
+    const { cx, cy, payload } = props
+    const severity = payload?.severity
+    if (severity !== "WARNING" && severity !== "CRITICAL") return null
+    return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
+  }
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -179,6 +187,18 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                             tickFormatter={formatChartTick}
                           />
                           <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                          <ReferenceLine
+                            y={latestPressDisplayData.target_cycle_time_sec}
+                            stroke="#22c55e"
+                            strokeDasharray="4 4"
+                            ifOverflow="extendDomain"
+                            label={{
+                              value: `기준 사이클 타임 ${latestPressDisplayData.target_cycle_time_sec.toFixed(1)} sec`,
+                              position: "insideTopRight",
+                              fill: "#22c55e",
+                              fontSize: 10,
+                            }}
+                          />
                           <Tooltip
                             labelFormatter={(label: string) => {
                               // label은 dateTime 필드 값 ("YYYY-MM-DD HH:mm:ss" 또는 "YYYY-MM-DD HH:mm")
@@ -198,7 +218,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                               pointerEvents: "none",
                             }}
                           />
-                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={renderPressSeverityDot} strokeWidth={2} />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
                         </LineChart>

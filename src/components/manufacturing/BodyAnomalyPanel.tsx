@@ -7,6 +7,7 @@ import {
   ComposedChart,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -161,7 +162,33 @@ function TrendChart({
   onHoverChange: (hovered: boolean) => void
 }) {
   const maxValue = getMaxFromTrend(data)
+  const yDomainMax = maxValue * 1.15
   const showSecondary = data.some((row) => row.secondaryValue !== undefined && row.secondaryValue !== null)
+  const warningLine = data.find((row) => row.warning_line !== undefined && row.warning_line !== null)?.warning_line
+  const dangerLine = data.find((row) => row.danger_line !== undefined && row.danger_line !== null)?.danger_line
+  const [showTrendDots, setShowTrendDots] = React.useState(false)
+  const trendDataSignature = React.useMemo(
+    () => data.map((row) => row.dateTime).join("|"),
+    [data],
+  )
+
+  React.useEffect(() => {
+    setShowTrendDots(false)
+    if (!data.length) return
+
+    const timer = window.setTimeout(() => {
+      setShowTrendDots(true)
+    }, 700)
+
+    return () => window.clearTimeout(timer)
+  }, [trendDataSignature])
+
+  const renderTrendDot = (props: any) => {
+    const { cx, cy, payload } = props
+    const severity = payload?.severity
+    if (severity !== "WARNING" && severity !== "CRITICAL") return null
+    return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
+  }
   const legendItems = [
     { label: "경고 기준", color: "#facc15", dashed: true },
     { label: "위험 기준", color: "#f97316", dashed: true },
@@ -183,15 +210,17 @@ function TrendChart({
 
       <div className="mb-2 flex flex-wrap items-center gap-4 text-xs">
         {legendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-1">
+          <div key={item.label} className="flex items-center gap-1.5">
             <div
               className={item.dashed ? "h-0.5 w-3 border-t bg-transparent" : "h-0.5 w-3"}
               style={{
-                height: 0,
+                height: 2,
+                width: 14,
                 borderWidth: item.dashed ? 1 : 0,
                 borderColor: item.color,
                 backgroundColor: item.color,
                 borderStyle: item.dashed ? "dashed" : "solid",
+                opacity: 1,
               }}
             />
             <span style={{ color: item.color }} className="font-medium">
@@ -221,7 +250,7 @@ function TrendChart({
             />
             <YAxis
               orientation="left"
-              domain={[0, maxValue]}
+              domain={[0, yDomainMax]}
               tick={{ fontSize: 10 }}
               stroke={valueColor}
               tickFormatter={(value) => Number(value).toFixed(3)}
@@ -241,38 +270,48 @@ function TrendChart({
                 pointerEvents: "none",
               }}
             />
+            {warningLine !== undefined && warningLine !== null ? (
+              <ReferenceLine
+                y={warningLine}
+                stroke="#facc15"
+                strokeDasharray="5 5"
+                ifOverflow="extendDomain"
+                label={{
+                  value: `경고선 ${Number(warningLine).toFixed(3)}`,
+                  position: "insideTopRight",
+                  fill: "#facc15",
+                  fontSize: 10,
+                }}
+              />
+            ) : null}
+            {dangerLine !== undefined && dangerLine !== null ? (
+              <ReferenceLine
+                y={dangerLine}
+                stroke="#f97316"
+                strokeDasharray="5 5"
+                ifOverflow="extendDomain"
+                label={{
+                  value: `위험선 ${Number(dangerLine).toFixed(3)}`,
+                  position: "insideTopRight",
+                  fill: "#f97316",
+                  fontSize: 10,
+                }}
+              />
+            ) : null}
             <Line
-              isAnimationActive={false}
-              type="monotone"
-              dataKey="warning_line"
-              stroke="#facc15"
-              strokeDasharray="5 5"
-              name="warning_line"
-              dot={false}
-              strokeWidth={1}
-            />
-            <Line
-              isAnimationActive={false}
-              type="monotone"
-              dataKey="danger_line"
-              stroke="#f97316"
-              strokeDasharray="5 5"
-              name="danger_line"
-              dot={false}
-              strokeWidth={1}
-            />
-            <Line
-              isAnimationActive={false}
+              isAnimationActive
+              animationDuration={700}
               type="monotone"
               dataKey="value"
               stroke={valueColor}
               name={valueLabel}
-              dot={false}
+              dot={showTrendDots ? renderTrendDot : false}
               strokeWidth={2}
             />
             {showSecondary && secondaryValueLabel ? (
               <Line
-                isAnimationActive={false}
+                isAnimationActive
+                animationDuration={700}
                 type="monotone"
                 dataKey="secondaryValue"
                 stroke={secondaryValueColor ?? "#94a3b8"}
@@ -338,6 +377,9 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
       : frequencyPeakValue >= peakWarningLine
         ? "text-warning"
         : "text-foreground"
+
+  const [isBodyRobotChartHovered, setIsBodyRobotChartHovered] = React.useState(false)
+  const [isBodyFrequencyChartHovered, setIsBodyFrequencyChartHovered] = React.useState(false)
 
   return (
     <div className="space-y-4">
@@ -431,10 +473,10 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           data={visibleBodyRobotData}
           valueLabel="로봇 진동 가속도"
           valueColor="#00d4ff"
-          hovered={isBodyChartHovered}
+          hovered={isBodyRobotChartHovered}
           dragging={isBodyChartDragging}
           onPointerDown={handleBodyChartPointerDown}
-          onHoverChange={setIsBodyChartHovered}
+          onHoverChange={setIsBodyRobotChartHovered}
         />
 
         <TrendChart
@@ -445,16 +487,15 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           secondaryValueLabel="피크 RMS"
           valueColor="#22c55e"
           secondaryValueColor="#38bdf8"
-          hovered={isBodyChartHovered}
+          hovered={isBodyFrequencyChartHovered}
           dragging={isBodyChartDragging}
           onPointerDown={handleBodyChartPointerDown}
-          onHoverChange={setIsBodyChartHovered}
+          onHoverChange={setIsBodyFrequencyChartHovered}
         />
 
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h4 className="text-sm font-medium">주파수 대역별 진동 분포</h4>
-            <p className="text-xs text-muted-foreground">주파수 구간별 실측값만 표시합니다.</p>
           </div>
           <div className="chart-line-reveal select-none">
             <ResponsiveContainer width="100%" height={240}>
@@ -468,7 +509,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   textAnchor="end"
                   dy={10}
                 />
-                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, maxFrequencySpectrumValue * 1.2]} />
+                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, maxFrequencySpectrumValue * 1.35]} />
                 <Tooltip
                   formatter={(value, name) => [
                     `${Number(value).toFixed(6)}`,

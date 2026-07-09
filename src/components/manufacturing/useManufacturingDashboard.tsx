@@ -518,6 +518,10 @@ function normalizeNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
+function isWarningSeverity(severity: string | null | undefined) {
+  return severity === "WARNING" || severity === "CRITICAL"
+}
+
 function severityToRiskSeverity(severity: string | null | undefined, riskScore: number) {
   if (severity === "CRITICAL") return { label: "심각", className: "text-destructive" }
   if (severity === "WARNING") return { label: "경고", className: "text-warning" }
@@ -544,7 +548,7 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
     timestamp_delay_sec: normalizeNumber(point.timestampDelaySec),
     risk_score: normalizeNumber(point.riskScore),
     overall_risk_score: normalizeNumber(point.riskScore),
-    isAbnormal: point.isAbnormal ?? false,
+    isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity),
     severity: point.severity ?? "NORMAL",
   }
 }
@@ -599,7 +603,7 @@ export function useManufacturingDashboard() {
     width: number
   } | null>(null)
   const [bodyChartStartIndex, setBodyChartStartIndex] = useState(
-    Math.max(0, bodyRobotData.length - BODY_CHART_WINDOW_SIZE),
+    0,
   )
   const [isBodyChartDragging, setIsBodyChartDragging] = useState(false)
   const [isBodyChartHovered, setIsBodyChartHovered] = useState(false)
@@ -628,6 +632,8 @@ export function useManufacturingDashboard() {
   const [assemblyDatesError, setAssemblyDatesError] = useState<string | null>(null)
   const [operationRateByProcess, setOperationRateByProcess] = useState<Record<string, EquipmentOperationRateItem>>({})
 
+  const getLatestChartStartIndex = (length: number, windowSize: number) => Math.max(0, length - windowSize)
+
   const [pressAnalysis, setPressAnalysis] = useState<PressAnomalyData | null>(null)
   const [selectedPressAnalysisDate, setSelectedPressAnalysisDate] = useState<string | null>(null)
   const [isPressAnalysisLoading, setIsPressAnalysisLoading] = useState(false)
@@ -637,6 +643,44 @@ export function useManufacturingDashboard() {
     .map(toPressDataPoint)
     .filter((point) => Number.isFinite(point.timestamp)) ?? []
   const rawPressDisplayData = pressAnalysis ? apiPressData : pressData
+
+  type PressRiskTrendRow = {
+    eventId?: string
+    analysisId?: string
+    time: string
+    dateTime: string
+    timestamp: number
+    value: number
+    markerLevel: number
+    severity: string
+    countNormalValue: number
+    countIncreaseYn: boolean
+    isAbnormal: boolean
+  }
+
+  const pressRiskTrendData = useMemo<PressRiskTrendRow[]>(() => {
+    const points = pressAnalysis?.chart ?? []
+    return points.map((point: any) => {
+      const dateTime = formatBackendTimestamp(point.timestamp)
+      const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+      const date = new Date(isoForParsing)
+      const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
+
+      return {
+        eventId: point.eventId,
+        analysisId: point.analysisId,
+        time: dateTime.slice(11, 19),
+        dateTime,
+        timestamp: epochMs,
+        value: 1,
+        markerLevel: isWarningSeverity(point.severity) ? 2 : 1,
+        severity: point.severity ?? "NORMAL",
+        countNormalValue: point.countIncreaseYn ? 100 : 0,
+        countIncreaseYn: Boolean(point.countIncreaseYn),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity) || !point.countIncreaseYn,
+      }
+    })
+  }, [pressAnalysis])
 
   const latestPressDisplayData = pressAnalysis?.metrics
     ? {
@@ -674,6 +718,10 @@ export function useManufacturingDashboard() {
     pressDisplayAvailableDates[0]
 
   const pressDisplayData = rawPressDisplayData
+  const visiblePressRiskData = pressRiskTrendData.slice(
+    pressChartStartIndex,
+    pressChartStartIndex + PRESS_CHART_WINDOW_SIZE,
+  )
 
   const visiblePressData = pressDisplayData.slice(
     pressChartStartIndex,
@@ -682,7 +730,7 @@ export function useManufacturingDashboard() {
 
   const handlePressDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedPressAnalysisDate(event.target.value)
-    setPressChartStartIndex(0)
+    setPressChartStartIndex(getLatestChartStartIndex(pressDisplayData.length, PRESS_CHART_WINDOW_SIZE))
   }
 
   const handlePressChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -709,7 +757,7 @@ export function useManufacturingDashboard() {
         date,
       })
       setPressAnalysis(result)
-      setPressChartStartIndex(0)
+      setPressChartStartIndex(getLatestChartStartIndex(result.chart?.length ?? 0, PRESS_CHART_WINDOW_SIZE))
     } catch (error) {
       setPressAnalysisError(error instanceof Error ? error.message : "프레스 이상 탐지 데이터를 불러오지 못했습니다.")
     } finally {
@@ -732,6 +780,8 @@ export function useManufacturingDashboard() {
     warning_line: number
     danger_line: number
     risk_score: number
+    isAbnormal: boolean
+    severity: string
   }
 
   const bodyRobotTrendData = useMemo<BodyTrendRow[]>(() => {
@@ -750,6 +800,8 @@ export function useManufacturingDashboard() {
         warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.vibrationWarningLine),
         danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.vibrationDangerLine),
         risk_score: normalizeNumber(point.riskScore),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity ?? bodyAnalysis?.metrics?.severity),
+        severity: point.severity ?? bodyAnalysis?.metrics?.severity ?? "NORMAL",
       }
     })
   }, [bodyAnalysis])
@@ -771,6 +823,8 @@ export function useManufacturingDashboard() {
         warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.peakWarningLine),
         danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.peakDangerLine),
         risk_score: normalizeNumber(point.riskScore),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity ?? bodyAnalysis?.metrics?.severity),
+        severity: point.severity ?? bodyAnalysis?.metrics?.severity ?? "NORMAL",
       }
     })
   }, [bodyAnalysis])
@@ -820,13 +874,21 @@ export function useManufacturingDashboard() {
   const handleBodyDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedDate = event.target.value
     setSelectedBodyAnalysisDate(selectedDate)
-    // reset chart window to start of selected date; fetch will be triggered by effect
-    setBodyChartStartIndex(0)
+    // show the latest window first; older data is revealed by dragging left
+    setBodyChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
   }
 
   useEffect(() => {
     void fetchBodyAnalysisData(selectedBodyAnalysisDate)
   }, [fetchBodyAnalysisData, selectedBodyAnalysisDate])
+
+  useEffect(() => {
+    setPressChartStartIndex(getLatestChartStartIndex(pressDisplayData.length, PRESS_CHART_WINDOW_SIZE))
+  }, [pressDisplayData.length])
+
+  useEffect(() => {
+    setBodyChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+  }, [sourceBodyData.length])
 
   const lastChartPoint = sourceBodyData.length > 0
     ? sourceBodyData[sourceBodyData.length - 1]
@@ -1507,6 +1569,8 @@ export function useManufacturingDashboard() {
     pressDisplayAvailableDates,
     handlePressDateChange,
     pressDisplayData,
+    pressRiskTrendData,
+    visiblePressRiskData,
     isPressAnalysisLoading,
     pressAnalysisError,
     isPressChartHovered,
