@@ -1,18 +1,23 @@
-import { ManualResponse } from "@/types/manual"
+export async function getCurrentManual() {
+    const token = sessionStorage.getItem("aims-auth-accessToken");
 
-const BASE_URL = "http://localhost:8000"
+    if (!token) {
+        throw new Error("로그인 토큰이 없습니다.");
+    }
 
-export async function getCurrentManual(
-  eventId: number
-): Promise<ManualResponse> {
+    const response = await fetch(
+        "http://localhost:8000/manual",
+        {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        }
+    );
 
-  const response = await fetch(
-    `${BASE_URL}/manual/current/${eventId}`
-  )
+    if (!response.ok) {
+        throw new Error("AI Manual 조회 실패");
+    }
 
-  if (!response.ok) {
-    throw new Error("AI Manual 조회 실패")
-  }
-
-  return response.json()
+    return response.json();
 }

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react"
 
-import { getCurrentManual } from "@/api/manualApi"
-
 import { ManualResponse } from "@/types/manual"
 
 export function useManual(eventId?: number) {
@@ -25,13 +23,6 @@ export function useManual(eventId?: number) {
       try {
 
         setLoading(true)
-
-        const result =
-          await getCurrentManual(eventId!)
-
-        if (!cancelled) {
-          setManual(result)
-        }
 
       } catch (e) {
 

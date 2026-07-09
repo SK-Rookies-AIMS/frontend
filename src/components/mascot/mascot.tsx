@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "@/components/theme-provider"
 import { useLocation, useNavigate } from "react-router-dom"
-import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
-import { useManual } from "@/hooks/use-manual"
 import type { ManualResponse } from "@/types/manual"
+import { getCurrentManual } from "@/api/manualApi"
+import { jwtDecode } from "jwt-decode";
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -20,58 +20,36 @@ export function Mascot() {
   const { resolvedTheme } = useTheme()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { topEvent } = useMascotAlert()
-  const {
-    loading,
-} = useManual(topEvent?.id)
   const [manual, setManual] = useState<ManualResponse | null>(null)
   const [loadingManual, setLoadingManual] = useState(false)
   const isAuthPage = pathname === "/login" || pathname === "/signup"
+  const [event, setEvent] = useState<any>(null)
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
 
-      if (!topEvent) {
-          setBubbleMode("none")
-          setManual(null)
-          return
-      }
+    setBubbleMode("alert")   // 먼저 말풍선 열기
 
-      setBubbleMode("alert")
+    const fetchManual = async () => {
 
-      const fetchManual = async () => {
+        try {
 
-          try {
+          setLoadingManual(true)
+          const data = await getCurrentManual();
 
-              setLoadingManual(true)
+          setEvent(data.event);
+          setManual(data.manual);
 
-              const response = await fetch(
-                  "http://localhost:8000/manual/current"
-              )
+        } finally {
 
-              if (!response.ok) {
-                  throw new Error("AI Manual 조회 실패")
-              }
+            setLoadingManual(false)
 
-              const data = await response.json()
+        }
+    }
 
-              setManual(data)
+    fetchManual()
 
-          } catch (e) {
-
-              console.error(e)
-
-          } finally {
-
-              setLoadingManual(false)
-
-          }
-
-      }
-
-      fetchManual()
-
-  }, [topEvent?.id])
+  }, [])
 
   // 테마에 따른 마스코트 이미지 선택
   const mascotImage = resolvedTheme === "dark" ? MASCOT_IMAGE_DARK : MASCOT_IMAGE_LIGHT
@@ -80,7 +58,7 @@ export function Mascot() {
 
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
   const handleMascotClick = () => {
-    if (topEvent) {
+    if (event) {
       setBubbleMode((prev) => (prev === "detail" ? "none" : "detail"))
     } else {
       setBubbleMode((prev) => (prev === "alert" ? "none" : "alert"))
@@ -92,8 +70,23 @@ export function Mascot() {
   }
 
   const renderBubbleContent = () => {
+    if (loadingManual) {
+        return (
+            <div className="flex flex-col gap-2">
+                <p className="text-sm text-white font-medium">
+                    🚧 현재 서비스를 준비 중입니다.
+                </p>
+
+                <p className="text-xs text-white/70 leading-relaxed">
+                    AI가 제조 이벤트를 분석하고 있습니다.
+                    <br />
+                    잠시만 기다려 주세요.
+                </p>
+            </div>
+        )
+    }
     // 이벤트가 없는 경우 기본 인사
-    if (!topEvent) {
+    if (!event) {
       return <p className="text-sm text-white leading-relaxed">안녕하세요! 무엇을 도와드릴까요?</p>
     }
 
@@ -104,12 +97,12 @@ export function Mascot() {
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
             <span className="text-xs font-semibold text-warning">
-              AI 지수 {topEvent.aiScore} · {topEvent.severity}
+              AI 지수 {event.riskScore} · {event.severity}
             </span>
           </div>
           <p className="text-sm text-white leading-relaxed">
-            <span className="font-medium">{topEvent.location}</span>에서{" "}
-            <span className="font-medium">{topEvent.title}</span> 이벤트가 발생했어요. 가장 먼저 확인이 필요해요!
+            <span className="font-medium">{event.process}</span>에서{" "}
+            <span className="font-medium">{event.title}</span> 이벤트가 발생했어요. 가장 먼저 확인이 필요해요!
           </p>
           <p className="text-xs text-white/70 leading-relaxed">
             저를 한 번 더 누르면 조치 방법을 자세히 알려드릴게요.
@@ -144,29 +137,37 @@ export function Mascot() {
       )}
 
       {/* 로딩 중 */}
-      {loading && (
-        <p className="text-xs text-white/70">
-          AI가 조치 매뉴얼을 생성하고 있습니다...
-        </p>
+      {loadingManual && (
+        <div className="speech-bubble">
+          {loadingManual ? (
+            <p>🤔 Watchy가 조치 매뉴얼을 분석 중입니다...</p>
+          ) : manual ? (
+            <p>{manual.summary}</p>
+          ) : (
+            <p>현재 분석할 이벤트가 없습니다.</p>
+          )}
+        </div>
       )}
 
       {/* AI 조치 순서 */}
-      {!loading && manual?.action_steps && (
+      {!loadingManual && manual?.steps && (
         <>
           <p className="text-sm text-white leading-relaxed">
             아래 순서대로 조치해 주세요.
           </p>
 
           <ol className="flex flex-col gap-1.5 text-xs text-white/90 leading-relaxed list-decimal pl-4">
-            {manual.action_steps.map((step, index) => (
-              <li key={index}>{step}</li>
+            {manual.steps.map((step, index) => (
+                <li key={index}>
+                    {step.action}
+                </li>
             ))}
           </ol>
         </>
       )}
 
       {/* AI 주의사항 */}
-      {!loading &&
+      {!loadingManual &&
         manual?.precautions &&
         manual.precautions.length > 0 && (
           <div className="mt-2">
@@ -210,7 +211,7 @@ export function Mascot() {
         onClick={handleMascotClick}
       >
         {/* AI 지수 높은 이벤트 발생 시 알림 배지 */}
-        {topEvent && bubbleMode !== "detail" && (
+        {event?.riskScore && bubbleMode !== "detail" && (
           <span className="absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75"></span>
             <span className="relative inline-flex h-3 w-3 rounded-full bg-destructive"></span>
