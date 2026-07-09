@@ -108,7 +108,6 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
 
 function getMaxFromTrend(data: TrendPoint[], fallback = 1) {
   if (!data.length) return fallback
-
   let max = 0
   data.forEach((row) => {
     max = Math.max(max, row.value ?? 0, row.secondaryValue ?? 0, row.warning_line ?? 0, row.danger_line ?? 0)
@@ -314,55 +313,72 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
     if (!frequencySpectrum.length) return 0.01
     return Math.max(...frequencySpectrum.map((row: any) => Number(row.value ?? 0)), 0.01)
   }, [frequencySpectrum])
+
   const latestBodyRiskScore = Number(latestBodyData.risk_score ?? 0)
+  const robotVibrationScore = Number(latestBodyData.robot_vibration_score ?? 0)
+  const frequencyPeakValue = Number(latestBodyData.frequency_peak_value ?? 0)
+  const peakWarningLine = Number(latestBodyData.peak_warning_line ?? 0.015)
+  const peakDangerLine = Number(latestBodyData.peak_danger_line ?? 0.03)
+
+  const motionClass =
+    latestBodyData.robot_motion_status === "NORMAL"
+      ? "text-primary"
+      : latestBodyData.robot_motion_status === "WARNING"
+        ? "text-warning"
+        : "text-destructive"
+  const riskClass =
+    latestBodySeverity.className === "text-destructive"
+      ? "text-destructive"
+      : latestBodySeverity.className === "text-warning"
+        ? "text-warning"
+        : "text-foreground"
+  const peakClass =
+    frequencyPeakValue >= peakDangerLine
+      ? "text-destructive"
+      : frequencyPeakValue >= peakWarningLine
+        ? "text-warning"
+        : "text-foreground"
 
   return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="col-span-2 space-y-4">
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">로봇 모션 상태</p>
-              <p
-                className={`whitespace-nowrap text-base font-bold ${
-                  latestBodyData.robot_motion_status === "NORMAL"
-                    ? "text-primary"
-                    : latestBodyData.robot_motion_status === "WARNING"
-                      ? "text-warning"
-                      : "text-destructive"
-                }`}
-              >
-                {latestBodyData.robot_motion_status}
-              </p>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">운전 모드</p>
-              <p className="whitespace-nowrap text-base font-bold text-sky-500">{latestBodyData.robot_operation_mode}</p>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">최대 로봇 진동 가속도</p>
-              <p className="whitespace-nowrap text-lg font-bold text-destructive">
-                {Number(latestBodyData.robot_vibration_score ?? 0).toFixed(3)} <span className="text-xs font-normal">g</span>
-              </p>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">최대 주파수 피크 대역</p>
-              <p className="whitespace-nowrap text-base font-bold text-warning">{latestBodyData.frequency_peak_band}</p>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">최대 주파수 피크값</p>
-              <p className="whitespace-nowrap text-lg font-bold text-warning">
-                {Number(latestBodyData.frequency_peak_value ?? 0).toFixed(6)} <span className="text-xs font-normal">mm/s</span>
-              </p>
-            </div>
-            <div className="min-w-0 space-y-1">
-              <p className="text-xs text-muted-foreground">전체 위험도</p>
-              <p className="whitespace-nowrap text-lg font-bold">
-                <span className="text-foreground">{latestBodyRiskScore.toFixed(2)}</span>
-                <span className={`ml-2 ${latestBodySeverity.className}`}>{latestBodySeverity.label}</span>
-              </p>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-3">
+            {[
+              { label: "로봇 모션 상태", value: latestBodyData.robot_motion_status, className: motionClass },
+              { label: "운전 모드", value: latestBodyData.robot_operation_mode, className: "text-sky-400" },
+              {
+                label: "평균 진동 가속도",
+                value: `${robotVibrationScore.toFixed(3)} g`,
+                className: robotVibrationScore >= 0.75 ? "text-destructive" : robotVibrationScore >= 0.5 ? "text-warning" : "text-foreground",
+              },
+              {
+                label: "피크 집중 주파수 대역",
+                value: latestBodyData.frequency_peak_band,
+                className: peakClass,
+              },
+              {
+                label: "평균 피크 진동값",
+                value: `${frequencyPeakValue.toFixed(6)} mm/s`,
+                className: peakClass,
+              },
+              {
+                label: "전체 위험도",
+                value: `${latestBodyRiskScore.toFixed(2)} ${latestBodySeverity.label}`,
+                className: riskClass,
+              },
+            ].map((item) => (
+              <div key={item.label} className="min-h-[84px] rounded-lg border border-border bg-background/30 p-3">
+                <p className="text-xs text-muted-foreground">{item.label}</p>
+                <p className={`mt-1 text-lg font-bold ${item.className}`}>{item.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {isBodyAnalysisLoading && <div className="text-xs text-muted-foreground">차체 분석 데이터를 불러오는 중입니다.</div>}
+            {bodyAnalysisError && <div className="text-xs text-destructive">오류: {bodyAnalysisError}</div>}
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
               날짜
               <select
                 aria-label="차체 이상 날짜 선택"
@@ -378,143 +394,139 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
               </select>
             </label>
           </div>
+        </div>
 
-          {isBodyAnalysisLoading && <div className="mb-2 text-xs text-muted-foreground">차체 분석 데이터를 불러오는 중입니다.</div>}
-          {bodyAnalysisError && <div className="mb-2 text-xs text-destructive">오류: {bodyAnalysisError}</div>}
-
-          <TrendChart
-            title="로봇 진동 가속도 추이"
-            unit="g"
-            data={visibleBodyRobotData}
-            valueLabel="로봇 진동 가속도"
-            valueColor="#00d4ff"
-            hovered={isBodyChartHovered}
-            dragging={isBodyChartDragging}
-            onPointerDown={handleBodyChartPointerDown}
-            onHoverChange={setIsBodyChartHovered}
-          />
-
-          <div className="mt-4">
-            <TrendChart
-              title="주파수 피크값 추이"
-              unit="mm/s"
-              data={visibleBodyFrequencyData}
-              valueLabel="피크 진동값"
-              secondaryValueLabel="피크 RMS"
-              valueColor="#22c55e"
-              secondaryValueColor="#38bdf8"
-              hovered={isBodyChartHovered}
-              dragging={isBodyChartDragging}
-              onPointerDown={handleBodyChartPointerDown}
-              onHoverChange={setIsBodyChartHovered}
-            />
+        <div
+          className={`rounded border p-4 ${
+            bodyAnalysis?.alert?.detected === false ? "border-success/30 bg-success/10" : "border-destructive/30 bg-destructive/10"
+          }`}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            {bodyAnalysis?.alert?.detected === false ? (
+              <CheckCircle className="h-4 w-4 text-success" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+            )}
+            <span className={`font-medium ${bodyAnalysis?.alert?.detected === false ? "text-success" : "text-destructive"}`}>
+              {bodyAnalysis?.alert?.title ?? (bodyAnalysis?.alert?.detected === false ? "차체 이상 미탐지" : "차체 이상이 감지되었습니다")}
+            </span>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)]">
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h4 className="text-sm font-medium">주파수 대역별 진동 분포</h4>
-              </div>
-              <div className="chart-line-reveal select-none">
-                <ResponsiveContainer width="100%" height={240}>
-                  <ComposedChart data={frequencySpectrum} margin={{ top: 5, right: 24, left: 4, bottom: 50 }}>
-                    <CartesianGrid vertical={false} stroke="#334155" />
-                    <XAxis
-                      dataKey="band"
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                      stroke="#64748b"
-                      angle={-45}
-                      textAnchor="end"
-                      dy={10}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, maxFrequencySpectrumValue * 1.2]} />
-                    <Tooltip
-                      formatter={(value, name) => [
-                        `${Number(value).toFixed(6)}`,
-                        name === "value" ? "실측값" : "목표/기준값",
-                      ]}
-                      contentStyle={{
-                        backgroundColor: "var(--popover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        color: "var(--popover-foreground)",
-                      }}
-                    />
-                    <Bar dataKey="value" name="실측값" radius={[2, 2, 0, 0]}>
-                      {frequencySpectrum.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={getZoneColorByBand(entry?.band)} />
-                      ))}
-                    </Bar>
-                    <Line
-                      isAnimationActive={false}
-                      type="step"
-                      dataKey="targetValue"
-                      stroke="#94a3b8"
-                      strokeDasharray="5 5"
-                      name="목표/기준값"
-                      dot={false}
-                      strokeWidth={2}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card p-4">
-              <p className="text-sm font-medium">주파수 대역별 상세 분석</p>
-              <div className="mt-3 space-y-2 text-xs">
-                {frequencyZones.map((zone) => {
-                  const percentage = Math.min(100, (zone.max / 0.005) * 100)
-                  return (
-                    <div key={zone.zone} className="mb-3 flex flex-col gap-1">
-                      <div className="flex items-center justify-between font-medium">
-                        <span className="flex items-center gap-1.5">
-                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: zone.color }} />
-                          {zone.zone} <span className="font-normal text-muted-foreground">({zone.range})</span>
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">{zone.description}</span>
-                      </div>
-                      <div className="mt-0.5 flex items-center justify-between text-muted-foreground">
-                        <span>최대: {zone.max.toFixed(6)}</span>
-                        <span>평균: {zone.avg.toFixed(6)}</span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded bg-secondary">
-                        <div className="h-full" style={{ width: `${percentage}%`, backgroundColor: zone.color }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {!bodyAnalysis ? (
+              <li>차체 이상 분석 결과가 아직 없습니다.</li>
+            ) : bodyAnalysis.alert?.reasons && bodyAnalysis.alert.reasons.length > 0 ? (
+              bodyAnalysis.alert.reasons.map((reason: string) => <li key={reason}>• {reason}</li>)
+            ) : (
+              <li>이상 사유가 존재하지 않습니다.</li>
+            )}
+          </ul>
         </div>
       </div>
 
-      <div
-        className={`rounded border p-4 ${
-          bodyAnalysis?.alert?.detected === false ? "border-success/30 bg-success/10" : "border-destructive/30 bg-destructive/10"
-        }`}
-      >
-        <div className="mb-3 flex items-center gap-2">
-          {bodyAnalysis?.alert?.detected === false ? (
-            <CheckCircle className="h-4 w-4 text-success" />
-          ) : (
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-          )}
-          <span className={`font-medium ${bodyAnalysis?.alert?.detected === false ? "text-success" : "text-destructive"}`}>
-            {bodyAnalysis?.alert?.title ?? (bodyAnalysis?.alert?.detected === false ? "차체 이상 미탐지" : "차체 이상 탐지")}
-          </span>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <TrendChart
+          title="로봇 진동 가속도 추이"
+          unit="g"
+          data={visibleBodyRobotData}
+          valueLabel="로봇 진동 가속도"
+          valueColor="#00d4ff"
+          hovered={isBodyChartHovered}
+          dragging={isBodyChartDragging}
+          onPointerDown={handleBodyChartPointerDown}
+          onHoverChange={setIsBodyChartHovered}
+        />
+
+        <TrendChart
+          title="주파수 피크값 추이"
+          unit="mm/s"
+          data={visibleBodyFrequencyData}
+          valueLabel="피크 진동값"
+          secondaryValueLabel="피크 RMS"
+          valueColor="#22c55e"
+          secondaryValueColor="#38bdf8"
+          hovered={isBodyChartHovered}
+          dragging={isBodyChartDragging}
+          onPointerDown={handleBodyChartPointerDown}
+          onHoverChange={setIsBodyChartHovered}
+        />
+
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h4 className="text-sm font-medium">주파수 대역별 진동 분포</h4>
+            <p className="text-xs text-muted-foreground">주파수 구간별 실측값만 표시합니다.</p>
+          </div>
+          <div className="chart-line-reveal select-none">
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={frequencySpectrum} margin={{ top: 5, right: 24, left: 4, bottom: 50 }}>
+                <CartesianGrid vertical={false} stroke="#334155" />
+                <XAxis
+                  dataKey="band"
+                  tick={{ fontSize: 10, fill: "#94a3b8" }}
+                  stroke="#64748b"
+                  angle={-45}
+                  textAnchor="end"
+                  dy={10}
+                />
+                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, maxFrequencySpectrumValue * 1.2]} />
+                <Tooltip
+                  formatter={(value, name) => [
+                    `${Number(value).toFixed(6)}`,
+                    name === "value" ? "실측값" : "목표/기준값",
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    color: "var(--popover-foreground)",
+                  }}
+                />
+                <Bar dataKey="value" name="실측값" radius={[2, 2, 0, 0]}>
+                  {frequencySpectrum.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={getZoneColorByBand(entry?.band)} />
+                  ))}
+                </Bar>
+                <Line
+                  isAnimationActive={false}
+                  type="step"
+                  dataKey="targetValue"
+                  stroke="#94a3b8"
+                  strokeDasharray="5 5"
+                  name="목표/기준값"
+                  dot={false}
+                  strokeWidth={2}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <ul className="space-y-1 text-sm text-muted-foreground">
-          {!bodyAnalysis ? (
-            <li>차체 이상 분석 결과가 아직 없습니다.</li>
-          ) : bodyAnalysis.alert?.reasons && bodyAnalysis.alert.reasons.length > 0 ? (
-            bodyAnalysis.alert.reasons.map((reason: string) => <li key={reason}>• {reason}</li>)
-          ) : (
-            <li>이상 사유가 존재하지 않습니다.</li>
-          )}
-        </ul>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-sm font-medium">주파수 대역별 상세 분석</p>
+          <div className="mt-3 space-y-2 text-xs">
+            {frequencyZones.map((zone) => {
+              const percentage = Math.min(100, (zone.max / 0.005) * 100)
+              return (
+                <div key={zone.zone} className="mb-3 flex flex-col gap-1">
+                  <div className="flex items-center justify-between font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <div className="h-2 w-2 rounded-full" style={{ backgroundColor: zone.color }} />
+                      {zone.zone} <span className="font-normal text-muted-foreground">({zone.range})</span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{zone.description}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between text-muted-foreground">
+                    <span>최대: {zone.max.toFixed(6)}</span>
+                    <span>평균: {zone.avg.toFixed(6)}</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded bg-secondary">
+                    <div className="h-full" style={{ width: `${percentage}%`, backgroundColor: zone.color }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )

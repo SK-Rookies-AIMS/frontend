@@ -1,9 +1,9 @@
 "use client"
 
+import { AuthGuard } from "@/components/auth-guard"
+import { Footer } from "@/components/dashboard/footer"
 import { Header } from "@/components/dashboard/header"
 import { Mascot } from "@/components/mascot/mascot"
-import { Footer } from "@/components/dashboard/footer"
-import { AuthGuard } from "@/components/auth-guard"
 import { AssemblyAnomalyPanel } from "@/components/manufacturing/AssemblyAnomalyPanel"
 import { BodyAnomalyPanel } from "@/components/manufacturing/BodyAnomalyPanel"
 import { BottleneckAnalysisPanel } from "@/components/manufacturing/BottleneckAnalysisPanel"
@@ -20,22 +20,18 @@ export default function ManufacturingPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="flex min-h-screen flex-col bg-background">
         <Header currentTime={dashboard.currentTime} />
-        <main className="flex-1 p-4 overflow-auto relative">
+        <main className="relative flex-1 overflow-auto p-4">
           <div className="mb-4">
             <h1 className="text-lg font-semibold">
-              전체 공정 흐름 요약 및 병목 탐지 <span className="text-muted-foreground font-normal">(실시간)</span>
+              ?꾩껜 怨듭젙 ?먮쫫 ?붿빟 諛?蹂묐ぉ ?먯? <span className="font-normal text-muted-foreground">(?ㅼ떆媛?</span>
             </h1>
           </div>
 
-          <ProcessFlowSummary
-            stages={dashboard.topProcessStages}
-            stageCount={dashboard.processStageCount}
-            StageIcon={StageIcon}
-          />
+          <ProcessFlowSummary stages={dashboard.topProcessStages} stageCount={dashboard.processStageCount} StageIcon={StageIcon} />
 
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-3 gap-4">
             <BottleneckAnalysisPanel
               rows={dashboard.bottleneckRows}
               isLoading={dashboard.isBottleneckLoading}
@@ -73,19 +69,21 @@ export default function ManufacturingPage() {
             />
           </div>
 
-          <div className="bg-card border border-border rounded-lg">
-            <div className="flex border-b border-border">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <div className="flex flex-wrap gap-2 border-b border-border bg-card/70 p-2">
               {[
-                { id: "press", label: "2.1 프레스 | 이상 정지 탐지" },
-                { id: "body", label: "2.2 차체 | 로봇 이상 동작 및 충돌 위험 탐지" },
-                { id: "paint", label: "2.3 도장 | 도장 품질 이상 탐지" },
-                { id: "assembly", label: "2.4 의장 조립 | 조립 순서 오류 탐지" },
+                { id: "press", label: "2.1 프레스 | 이상 탐지 분석" },
+                { id: "body", label: "2.2 차체 | 로봇 이상/진동 분석" },
+                { id: "paint", label: "2.3 도장 | 도장 품질 이상 분석" },
+                { id: "assembly", label: "2.4 조립 | 조립 순서 오류 분석" },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => dashboard.setActiveTab(tab.id)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 ${
-                    dashboard.activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"
+                  className={`min-h-9 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    dashboard.activeTab === tab.id
+                      ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-400/40"
+                      : "bg-background/40 text-muted-foreground hover:bg-background/60 hover:text-foreground"
                   }`}
                 >
                   {tab.label}
@@ -94,18 +92,10 @@ export default function ManufacturingPage() {
             </div>
 
             <div className="p-4">
-              {dashboard.activeTab === "press" && (
-                <PressAnomalyPanel dashboard={dashboard} />
-              )}
-              {dashboard.activeTab === "body" && (
-                <BodyAnomalyPanel dashboard={dashboard} />
-              )}
-              {dashboard.activeTab === "paint" && (
-                <PaintAnomalyPanel dashboard={dashboard} />
-              )}
-              {dashboard.activeTab === "assembly" && (
-                <AssemblyAnomalyPanel dashboard={dashboard} />
-              )}
+              {dashboard.activeTab === "press" && <PressAnomalyPanel dashboard={dashboard} />}
+              {dashboard.activeTab === "body" && <BodyAnomalyPanel dashboard={dashboard} />}
+              {dashboard.activeTab === "paint" && <PaintAnomalyPanel dashboard={dashboard} />}
+              {dashboard.activeTab === "assembly" && <AssemblyAnomalyPanel dashboard={dashboard} />}
             </div>
           </div>
 

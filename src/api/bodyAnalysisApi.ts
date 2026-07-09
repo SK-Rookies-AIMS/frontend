@@ -10,12 +10,16 @@ export type BodyFrequencyZone = {
 export type BodyAnalysisMetrics = {
   robotMotionStatus: string | null
   robotOperationMode: string | null
+  avgRobotVibrationScore?: number | null
   robotVibrationScore?: number | null
   targetVibrationScore: number | null
   vibrationScore: number | null
+  avgVibrationPeak?: number | null
   targetVibrationPeak: number | null
   vibrationPeak: number | null
+  avgVibrationRms?: number | null
   vibrationRms: number | null
+  avgFrequencyPeakValue?: number | null
   frequencyPeakValue: number | null
   frequencyPeakBand: string | null
   vibrationWarningLine?: number | null

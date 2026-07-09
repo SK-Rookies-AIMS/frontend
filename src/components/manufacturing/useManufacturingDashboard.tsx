@@ -848,11 +848,19 @@ export function useManufacturingDashboard() {
     ...lastChartPoint,
     robot_motion_status: bodyAnalysis.metrics.robotMotionStatus ?? lastChartPoint.robot_motion_status,
     robot_operation_mode: bodyAnalysis.metrics.robotOperationMode ?? lastChartPoint.robot_operation_mode,
-    robot_vibration_score: bodyAnalysis.metrics.robotVibrationScore ?? bodyAnalysis.metrics.vibrationScore ?? lastChartPoint.robot_vibration_score,
+    robot_vibration_score:
+      bodyAnalysis.metrics.avgRobotVibrationScore ??
+      bodyAnalysis.metrics.robotVibrationScore ??
+      bodyAnalysis.metrics.vibrationScore ??
+      lastChartPoint.robot_vibration_score,
     frequency_peak_band: bodyAnalysis.metrics.frequencyPeakBand ?? lastChartPoint.frequency_peak_band,
-    frequency_peak_value: bodyAnalysis.metrics.frequencyPeakValue ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.frequency_peak_value,
-    vibration_peak: bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
-    vibration_rms: bodyAnalysis.metrics.vibrationRms ?? lastChartPoint.vibration_rms,
+    frequency_peak_value:
+      bodyAnalysis.metrics.avgFrequencyPeakValue ??
+      bodyAnalysis.metrics.frequencyPeakValue ??
+      bodyAnalysis.metrics.vibrationPeak ??
+      lastChartPoint.frequency_peak_value,
+    vibration_peak: bodyAnalysis.metrics.avgVibrationPeak ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
+    vibration_rms: bodyAnalysis.metrics.avgVibrationRms ?? bodyAnalysis.metrics.vibrationRms ?? lastChartPoint.vibration_rms,
     risk_score: bodyAnalysis.metrics.riskScore ?? lastChartPoint.risk_score,
     vibration_warning_line: bodyAnalysis.metrics.vibrationWarningLine ?? 0.75,
     vibration_danger_line: bodyAnalysis.metrics.vibrationDangerLine ?? 1.25,
