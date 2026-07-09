@@ -70,7 +70,7 @@ export default function EventsPage() {
   const [pageSize, setPageSize] = useState(10)
   const [actionReason, setActionReason] = useState("")
   const [severityFilter, setSeverityFilter] = useState<"전체" | "DANGER" | "CAUTION">("전체")
-  const [statusFilter, setStatusFilter] = useState<"전체" | "PENDING" | "COMPLETED" | "INCOMPLETE" | "NOT_NEEDED">("전체")
+  const [statusFilter, setStatusFilter] = useState<"전체" |"COMPLETED" | "INCOMPLETE" | "NOT_NEEDED">("전체")
   const [areaFilter, setAreaFilter] = useState("전체") // DB enum values: PRESS, BODY, PAINT, ASSEMBLY, INSPECTION
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("전체")
   const [startDate, setStartDate] = useState<Date | undefined>(() => {
@@ -120,9 +120,7 @@ export default function EventsPage() {
                 ? "조치 미완료"
                 : item.actionStatus === "NOT_NEEDED"
                 ? "조치 불필요"
-                : item.actionStatus === "PENDING"
-                ? "조치 대기중"
-                : "조치 필요",
+                : "조치 미완료",
           equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
           eventCount: 0,
@@ -155,7 +153,7 @@ export default function EventsPage() {
                 ? "조치 미완료"
                 : item.actionStatus === "NOT_NEEDED"
                 ? "조치 불필요"
-                : "조치 필요",
+                : "조치 미완료",
           equipmentId: item.equipmentId || '000',
           eventDate: item.createdAt.substring(5, 10).replace('-', ''),
           eventCount: 0,
@@ -190,9 +188,6 @@ const getStatusStyle = (status: string) => {
 
     case "조치 완료":
       return "bg-green-100 text-green-700 border-green-300"
-
-    case "조치 필요":
-      return "bg-red-100 text-red-700 border-red-300"
 
     case "조치 불필요":
       return "bg-gray-100 text-gray-600 border-gray-300"
@@ -342,7 +337,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
   INSPECTION: "검사",
 };
   const severityMap: Record<string, string> = { DANGER: "위험", CAUTION: "경고" };
-  const statusMap: Record<string, string> = { PENDING: "조치 필요", COMPLETED: "조치 완료", INCOMPLETE: "조치 미완료", NOT_NEEDED: "조치 불필요" };
+  const statusMap: Record<string, string> = {COMPLETED: "조치 완료", INCOMPLETE: "조치 미완료", NOT_NEEDED: "조치 불필요" };
   const filteredEvents = allEventsData.filter(event => {
     // Severity filter (DB enum -> Korean)
     if (severityFilter !== "전체" && event.severity !== severityMap[severityFilter]) return false;
@@ -417,7 +412,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
   }, [todayEvents]);
   
   const totalEventsCount = allEvents.length
-  const actionNeededCount = allEvents.filter(e => e.status === "조치 필요").length
+  const actionNeededCount = allEvents.filter(e => e.status === "조치 미완료").length
   const dangerCount = allEvents.filter(e => e.severity === "위험").length
   const warningCount = allEvents.filter(e => e.severity === "경고").length
 
@@ -487,11 +482,10 @@ const AREA_KOREAN_MAP: Record<string, string> = {
               <div className="relative">
                 <select 
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as "전체" | "PENDING" | "COMPLETED" | "INCOMPLETE" | "NOT_NEEDED")}
+                  onChange={(e) => setStatusFilter(e.target.value as "전체" | "COMPLETED" | "INCOMPLETE" | "NOT_NEEDED")}
                   className="appearance-none flex items-center gap-2 px-3 py-2 bg-card border border-border rounded-lg text-sm pr-8"
                 >
                   <option value="전체">전체 상태</option>
-                  <option value="PENDING">조치 필요</option>
                   <option value="COMPLETED">조치 완료</option>
                   <option value="INCOMPLETE">조치 미완료</option>
                   <option value="NOT_NEEDED">조치 불필요</option>
@@ -616,7 +610,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        {event.status === "조치 필요" ? (
+                        {event.status === "조치 미완료" ? (
                           <button
                             onClick={() => handleStatusChange(event.id)}
                             className="px-3 py-1 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/80"
@@ -745,7 +739,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                 <span className="text-2xl font-bold">{totalEventsCount}건</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">조치 필요</span>
+                <span className="text-muted-foreground">조치 미완료</span>
                 <span className="text-2xl font-bold text-primary">{actionNeededCount}건</span>
               </div>
               <div className="flex items-center justify-between pt-3 border-t border-border">
@@ -1082,8 +1076,8 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                   </div>
                 )}
 
-                {/* AI Analysis (조치 필요시) */}
-                {selectedEvent.status === "조치 필요" && selectedEvent.aiAnalysis && (
+                {/* AI Analysis (조치 미완료시) */}
+                {selectedEvent.status === "조치 미완료" && selectedEvent.aiAnalysis && (
                   <div className="border-t border-border pt-4">
                     <div className="flex items-center gap-2 mb-3">
                       <h3 className="text-sm font-medium">AI 판단</h3>
@@ -1115,8 +1109,8 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                   </div>
                 )}
 
-                {/* AI Recommended Action (조치 필요시 - 시니어 조치 기록 기반) */}
-                {selectedEvent.status === "조치 필요" && selectedEvent.aiRecommendation && (
+                {/* AI Recommended Action (조치 미완료시 - 시니어 조치 기록 기반) */}
+                {selectedEvent.status === "조치 미완료" && selectedEvent.aiRecommendation && (
                   <div className="border-t border-border pt-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Lightbulb className="w-4 h-4 text-warning" />
@@ -1211,7 +1205,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                 )}
 
                 {/* 조치 사유 입력 (조치 필요시) */}
-                {selectedEvent.status === "조치 필요" && (
+                {selectedEvent.status === "조치 미완료" && (
                   <div className="border-t border-border pt-4">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-sm font-medium text-foreground">조치 사유 / 내역</span>
@@ -1229,7 +1223,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                 {/* Action Buttons - 모달 최하단 */}
                 <div className="flex justify-between items-center gap-3 pt-4 border-t border-border">
                   <div className="text-xs text-muted-foreground">
-                  {selectedEvent.status === "조치 필요" && (
+                  {selectedEvent.status === "조치 미완료" && (
                     <span>버튼 클릭 시 AI 신뢰도 점수가 조정됩니다</span>
                   )}
                   </div>
@@ -1241,7 +1235,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                       <X className="w-4 h-4" />
                       닫기
                     </button>
-                    {selectedEvent.status === "조치 필요" && (
+                    {selectedEvent.status === "조치 미완료" && (
                       <>
                         <button 
                           onClick={() => handleActionUnnecessary(selectedEvent.id)}
