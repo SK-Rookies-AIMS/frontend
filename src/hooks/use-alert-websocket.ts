@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { Client } from "@stomp/stompjs"
+import SockJS from "sockjs-client"
 
 import { AlertRealtimeMessage } from "@/types/alert"
 
 // 알람 전용 WebSocket 환경변수 우선 참조 후 fallback 처리
 const WS_URL =
     import.meta.env.VITE_ALERT_WS_URL ??
-    "ws://localhost:8081/ws"
+    "http://localhost:8081/ws"
 
 const ALERT_TOPIC = "/topic/alerts"
 
@@ -39,7 +40,7 @@ export function useAlertWebSocket(): UseAlertWebSocketResult {
 
         const client = new Client({
 
-            brokerURL: WS_URL,
+            webSocketFactory: () => new SockJS(WS_URL),
 
             reconnectDelay: 5000,
 
@@ -54,6 +55,8 @@ export function useAlertWebSocket(): UseAlertWebSocketResult {
 
                         const message: AlertRealtimeMessage =
                             JSON.parse(frame.body)
+
+                        console.log("[Alert WS] 알람 메시지 수신:", message)
 
                         setAlerts((prev) => {
                             const filtered = prev.filter((a) => a.eventId !== message.eventId)
