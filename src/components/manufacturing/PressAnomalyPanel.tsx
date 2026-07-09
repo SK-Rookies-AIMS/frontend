@@ -106,10 +106,6 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                       <p className="text-2xl font-bold text-destructive">{latestPressDisplayData.cycle_time_gap_sec >= 0 ? "+" : ""}{latestPressDisplayData.cycle_time_gap_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Timestamp 지연</p>
-                      <p className="text-2xl font-bold text-destructive">{latestPressDisplayData.timestamp_delay_sec.toFixed(1)} <span className="text-sm font-normal">sec</span></p>
-                    </div>
-                    <div>
                       <p className="text-xs text-muted-foreground">위험도</p>
                       <p className="text-2xl font-bold text-warning">{latestPressDisplayData.risk_score.toFixed(1)} <span className="text-sm font-normal">/ 100</span></p>
                     </div>
@@ -147,7 +143,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-warning" />
-                      <span>Timestamp 지연</span>
+                      <span>사이클 지연</span>
                     </div>
                   </div>
                   {pressDisplayData.length === 0 ? (
@@ -220,7 +216,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                           />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={renderPressSeverityDot} strokeWidth={2} />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
-                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="timestamp_delay_sec" stroke="#f59e0b" name="Timestamp 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="cycle_time_gap_sec" stroke="#f59e0b" name="사이클 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>

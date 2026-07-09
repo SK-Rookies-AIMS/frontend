@@ -45,6 +45,13 @@ export type PressRiskTrendChart = {
   points: PressRiskTrendPoint[]
 }
 
+export type PressCycleTimeChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: PressAnomalyChartPoint[]
+}
+
 export type PressAnomalyAlert = {
   detected: boolean
   title: string | null
@@ -63,8 +70,9 @@ export type PressAnomalyData = {
   previousEndAt: string | null
   dateOptions: PressDateOption[]
   metrics: PressAnomalyMetrics | null
-  chart: PressAnomalyChartPoint[]
+  chart?: PressAnomalyChartPoint[]
   charts?: {
+    cycleTime?: PressCycleTimeChart | null
     riskScore?: PressRiskTrendChart | null
   }
   alert: PressAnomalyAlert | null
@@ -107,6 +115,7 @@ export async function fetchPressAnomalyAnalysis({
     dateOptions?: PressDateOption[]
     chart?: PressAnomalyChartPoint[]
     charts?: {
+      cycleTime?: PressCycleTimeChart | null
       riskScore?: PressRiskTrendChart | null
     }
     alert?: PressAnomalyAlert | null
@@ -125,6 +134,12 @@ export async function fetchPressAnomalyAnalysis({
       dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
       chart: Array.isArray(result.data.chart) ? result.data.chart : [],
       charts: {
+        cycleTime: result.data.charts?.cycleTime
+          ? {
+              ...result.data.charts.cycleTime,
+              points: Array.isArray(result.data.charts.cycleTime.points) ? result.data.charts.cycleTime.points : [],
+            }
+          : null,
         riskScore: result.data.charts?.riskScore
           ? {
               ...result.data.charts.riskScore,

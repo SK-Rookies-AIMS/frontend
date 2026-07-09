@@ -544,10 +544,14 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
     timestamp: epochMs,
     target_cycle_time_sec: normalizeNumber(point.targetCycleTimeSec),
     actual_cycle_time_sec: normalizeNumber(point.actualCycleTimeSec),
-    cycle_time_gap_sec: normalizeNumber(point.cycleTimeGapSec),
-    timestamp_delay_sec: normalizeNumber(point.timestampDelaySec),
-    risk_score: normalizeNumber(point.riskScore),
-    overall_risk_score: normalizeNumber(point.riskScore),
+    cycle_time_gap_sec: normalizeNumber(
+      point.cycleTimeGapSec ?? (point.actualCycleTimeSec !== undefined && point.targetCycleTimeSec !== undefined
+        ? Number(point.actualCycleTimeSec ?? 0) - Number(point.targetCycleTimeSec ?? 0)
+        : 0),
+    ),
+    timestamp_delay_sec: normalizeNumber(point.timestampDelaySec ?? point.cycleTimeGapSec ?? 0),
+    risk_score: normalizeNumber(point.riskScore ?? 0),
+    overall_risk_score: normalizeNumber(point.riskScore ?? 0),
     isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity),
     severity: point.severity ?? "NORMAL",
   }
@@ -639,7 +643,7 @@ export function useManufacturingDashboard() {
   const [isPressAnalysisLoading, setIsPressAnalysisLoading] = useState(false)
   const [pressAnalysisError, setPressAnalysisError] = useState<string | null>(null)
 
-  const apiPressData = pressAnalysis?.chart
+  const apiPressData = (pressAnalysis?.charts?.cycleTime?.points ?? pressAnalysis?.chart ?? [])
     .map(toPressDataPoint)
     .filter((point) => Number.isFinite(point.timestamp)) ?? []
   const rawPressDisplayData = pressAnalysis ? apiPressData : pressData
@@ -659,7 +663,7 @@ export function useManufacturingDashboard() {
   }
 
   const pressRiskTrendData = useMemo<PressRiskTrendRow[]>(() => {
-    const points = pressAnalysis?.chart ?? []
+    const points = pressAnalysis?.charts?.cycleTime?.points ?? pressAnalysis?.chart ?? []
     return points.map((point: any) => {
       const dateTime = formatBackendTimestamp(point.timestamp)
       const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
