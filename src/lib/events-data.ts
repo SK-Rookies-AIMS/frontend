@@ -13,7 +13,7 @@ export const SEVERITY_CODES: Record<string, string> = {
   "경고": "W",
 }
 
-export type EventStatus = "조치 필요" | "조치 완료" | "조치 불필요" | "조치 대기중"
+export type EventStatus = "조치 완료" | "조치 미완료" | "조치 불필요"
 export type Severity = "위험" | "경고"
 
 export interface EventItem {
@@ -92,7 +92,7 @@ export function calculatePriorityScore(event: EventItem): number {
 
 // 마스코트가 안내해야 하는(미조치) 상태인지 여부
 export function isActionableStatus(status: EventStatus): boolean {
-  return status === "조치 필요"
+  return status === "조치 미완료"
 }
 
 
@@ -160,7 +160,7 @@ function generateSampleEvents(): EventItem[] {
     },
   ]
 
-  const statuses: EventStatus[] = ["조치 필요", "조치 완료", "조치 불필요", "조치 대기중"]
+  const statuses: EventStatus[] = ["조치 완료", "조치 미완료", "조치 불필요"]
   const impactLevels: ("높음" | "중간" | "낮음")[] = ["높음", "중간", "낮음"]
   const allProcessNames = ["차체", "도장", "의장", "프레스"]
 
@@ -235,7 +235,7 @@ export const eventsData: EventItem[] = [
     subArea: "프레스 #1",
     title: "프레스 실린 과부하 이상",
     content: "프레스 실린더의 압력이 정상 범위를 초과하여 과부하가 발생하였습니다. 즉시 점검이 필요합니다.",
-    status: "조치 필요",
+    status: "조치 미완료",
     trustScore: 92,
     equipmentNo: "001",
     eventDate: "0520",
