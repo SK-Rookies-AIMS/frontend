@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "@/components/theme-provider"
 import { useLocation, useNavigate } from "react-router-dom"
-import { useMascotAlert } from "@/components/dashboard/event-notification"
 import { AlertTriangle, ArrowRight } from "lucide-react"
 import type { ManualResponse } from "@/types/manual"
 import { getCurrentManual } from "@/api/manualApi"
+import { jwtDecode } from "jwt-decode";
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -20,7 +20,6 @@ export function Mascot() {
   const { resolvedTheme } = useTheme()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { topEvent } = useMascotAlert()
   const [manual, setManual] = useState<ManualResponse | null>(null)
   const [loadingManual, setLoadingManual] = useState(false)
   const isAuthPage = pathname === "/login" || pathname === "/signup"
@@ -35,14 +34,11 @@ export function Mascot() {
 
         try {
 
-            setLoadingManual(true)
+          setLoadingManual(true)
+          const data = await getCurrentManual();
 
-            const USER_ID = 3
-
-            const data = await getCurrentManual(USER_ID)
-
-            setEvent(data.event)
-            setManual(data.manual)
+          setEvent(data.event);
+          setManual(data.manual);
 
         } finally {
 
