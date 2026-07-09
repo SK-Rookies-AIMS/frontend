@@ -10,6 +10,7 @@ export type BodyFrequencyZone = {
 export type BodyAnalysisMetrics = {
   robotMotionStatus: string | null
   robotOperationMode: string | null
+  robotVibrationScore?: number | null
   targetVibrationScore: number | null
   vibrationScore: number | null
   targetVibrationPeak: number | null
@@ -17,6 +18,10 @@ export type BodyAnalysisMetrics = {
   vibrationRms: number | null
   frequencyPeakValue: number | null
   frequencyPeakBand: string | null
+  vibrationWarningLine?: number | null
+  vibrationDangerLine?: number | null
+  peakWarningLine?: number | null
+  peakDangerLine?: number | null
   riskScore: number | null
   riskScoreScale: string | null
   severity: string | null
@@ -42,6 +47,39 @@ export type BodyFrequencyChartPoint = {
   band: string
   value: number
   targetValue: number
+  warningValue?: number | null
+  dangerValue?: number | null
+}
+
+export type BodySeriesPoint = {
+  eventId: string
+  analysisId: string
+  timestamp: string
+  value: number | null
+  secondaryValue?: number | null
+  warningLine?: number | null
+  dangerLine?: number | null
+  riskScore?: number | null
+  isAbnormal?: boolean
+  severity?: string | null
+}
+
+export type BodySeriesChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: BodySeriesPoint[]
+}
+
+export type BodyFrequencyZoneChartPoint = {
+  zone: string
+  range: string
+  description?: string | null
+  avg: number
+  max: number
+  targetValue?: number | null
+  warningValue?: number | null
+  dangerValue?: number | null
 }
 
 export type BodyAnalysisAlert = {
@@ -83,9 +121,14 @@ export type BodyAnomalyData = {
   dateOptions: BodyDateOption[]
   metrics: BodyAnalysisMetrics | null
   chart?: BodyAnalysisChartPoint[]
+  charts?: {
+    robotVibration?: BodySeriesChart | null
+    frequencyPeak?: BodySeriesChart | null
+  }
   riskScoreChart?: BodyRiskScoreChartPoint[]
   vibrationChart?: BodyVibrationChartPoint[]
   frequencyChart?: BodyFrequencyChartPoint[]
+  frequencyZoneChart?: BodyFrequencyZoneChartPoint[]
   frequencyZoneAnalysis?: Record<string, BodyFrequencyZone>
   alert: BodyAnalysisAlert | null
 }
@@ -131,13 +174,29 @@ export async function fetchBodyAnalysis({
   }
 
   if (result && result.success && result.data) {
+    const charts = result.data.charts ?? {}
     return {
       ...result.data,
       dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
       chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      charts: {
+        robotVibration: charts.robotVibration
+          ? {
+              ...charts.robotVibration,
+              points: Array.isArray(charts.robotVibration.points) ? charts.robotVibration.points : [],
+            }
+          : null,
+        frequencyPeak: charts.frequencyPeak
+          ? {
+              ...charts.frequencyPeak,
+              points: Array.isArray(charts.frequencyPeak.points) ? charts.frequencyPeak.points : [],
+            }
+          : null,
+      },
       riskScoreChart: Array.isArray(result.data.riskScoreChart) ? result.data.riskScoreChart : [],
       vibrationChart: Array.isArray(result.data.vibrationChart) ? result.data.vibrationChart : [],
       frequencyChart: Array.isArray(result.data.frequencyChart) ? result.data.frequencyChart : [],
+      frequencyZoneChart: Array.isArray(result.data.frequencyZoneChart) ? result.data.frequencyZoneChart : [],
       alert: result.data.alert ?? null,
     } as BodyAnomalyData
   }

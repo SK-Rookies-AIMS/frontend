@@ -723,50 +723,57 @@ export function useManufacturingDashboard() {
   const [isBodyAnalysisLoading, setIsBodyAnalysisLoading] = useState(false)
   const [bodyAnalysisError, setBodyAnalysisError] = useState<string | null>(null)
 
-  const apiBodyData = useMemo(() => {
-    return (bodyAnalysis?.chart ?? []).map((point: any) => {
+  type BodyTrendRow = {
+    time: string
+    dateTime: string
+    timestamp: number
+    value: number
+    secondaryValue: number
+    warning_line: number
+    danger_line: number
+    risk_score: number
+  }
+
+  const bodyRobotTrendData = useMemo<BodyTrendRow[]>(() => {
+    const points = bodyAnalysis?.charts?.robotVibration?.points ?? bodyAnalysis?.chart ?? []
+    return points.map((point: any) => {
       const dateTime = formatBackendTimestamp(point.timestamp)
       const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
       const date = new Date(isoForParsing)
       const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
-      const vibrationPeak = normalizeNumber(point.vibrationPeak)
-      const rawVibe = normalizeNumber(point.vibrationScore)
-      const robotVibrationScore = rawVibe
-      const riskScore = normalizeNumber(point.riskScore)
+      return {
+        time: dateTime.slice(11, 19),
+        dateTime,
+        timestamp: epochMs,
+        value: normalizeNumber(point.value ?? point.robotVibrationScore ?? bodyAnalysis?.metrics?.robotVibrationScore ?? point.vibrationScore),
+        warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.vibrationWarningLine),
+        danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.vibrationDangerLine),
+        risk_score: normalizeNumber(point.riskScore),
+      }
+    })
+  }, [bodyAnalysis])
 
-      const frequencyPeakBand = bodyAnalysis?.metrics?.frequencyPeakBand ?? "LOW"
-
-      const rawTargetVibe = normalizeNumber(point.targetVibrationScore)
-      const targetVibrationScore = rawTargetVibe
-      const targetVibrationPeak = normalizeNumber(point.targetVibrationPeak ?? bodyAnalysis?.metrics?.targetVibrationPeak)
+  const bodyPeakTrendData = useMemo<BodyTrendRow[]>(() => {
+    const points = bodyAnalysis?.charts?.frequencyPeak?.points ?? bodyAnalysis?.chart ?? []
+    return points.map((point: any) => {
+      const dateTime = formatBackendTimestamp(point.timestamp)
+      const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+      const date = new Date(isoForParsing)
+      const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
       return {
         time: dateTime.slice(11, 19),
         dateTime,
         timestamp: epochMs,
-        target_cycle_time_sec: 0,
-        actual_cycle_time_sec: 0,
-        cycle_time_gap_sec: 0,
-        timestamp_delay_sec: 0,
-        risk_score: riskScore,
-        overall_risk_score: riskScore,
-        robot_motion_status: bodyAnalysis?.metrics?.robotMotionStatus ?? (point.isAbnormal ? "WARNING" : "NORMAL"),
-        robot_operation_mode: bodyAnalysis?.metrics?.robotOperationMode ?? "AUTO",
-        robot_vibration_score: robotVibrationScore,
-        target_vibration_score: targetVibrationScore,
-        target_frequency_peak_value: targetVibrationPeak,
-        frequency_peak_band: frequencyPeakBand,
-        frequency_peak_value: vibrationPeak,
-        vibration_peak: vibrationPeak,
-        target_vibration_peak: targetVibrationPeak,
-        vibration_rms: normalizeNumber(point.vibrationRms),
-        band_low: 0,
-        band_mid: 0,
-        band_high: 0,
+        value: normalizeNumber(point.value ?? point.vibrationPeak ?? point.frequencyPeakValue),
+        secondaryValue: normalizeNumber(point.secondaryValue ?? point.vibrationRms ?? bodyAnalysis?.metrics?.vibrationRms),
+        warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.peakWarningLine),
+        danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.peakDangerLine),
+        risk_score: normalizeNumber(point.riskScore),
       }
     })
-  }, [bodyAnalysis]);
+  }, [bodyAnalysis])
 
   const fetchBodyAnalysisData = useCallback(async (date?: string | null) => {
     setIsBodyAnalysisLoading(true)
@@ -783,9 +790,15 @@ export function useManufacturingDashboard() {
     }
   }, [])
 
-  const sourceBodyData = bodyAnalysis ? apiBodyData : bodyRobotData
+  const sourceBodyData = bodyAnalysis ? bodyRobotTrendData : bodyRobotData
+  const sourceBodyFrequencyData = bodyAnalysis ? bodyPeakTrendData : bodyRobotData
 
   const visibleBodyData = sourceBodyData.slice(
+    bodyChartStartIndex,
+    bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+  )
+  const visibleBodyRobotData = visibleBodyData
+  const visibleBodyFrequencyData = sourceBodyFrequencyData.slice(
     bodyChartStartIndex,
     bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
   )
@@ -801,7 +814,8 @@ export function useManufacturingDashboard() {
     selectedBodyAnalysisDate ??
     bodyAnalysis?.date ??
     sourceBodyData[Math.floor(sourceBodyData.length / 2)]?.dateTime.slice(0, 10) ??
-    bodyDateOptions[0]
+    bodyDateOptions[0] ??
+    ""
 
   const handleBodyDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedDate = event.target.value
@@ -823,25 +837,27 @@ export function useManufacturingDashboard() {
           robot_motion_status: "NORMAL",
           robot_operation_mode: "AUTO",
           robot_vibration_score: 0,
-          target_vibration_score: 0.75,
-          target_frequency_peak_value: 30,
           frequency_peak_band: "LOW",
           frequency_peak_value: 0,
-          band_low: 0,
-          band_mid: 0,
-          band_high: 0,
           risk_score: 0,
+          vibration_peak: 0,
+          vibration_rms: 0,
         }
 
   const latestBodyData = bodyAnalysis?.metrics ? {
     ...lastChartPoint,
     robot_motion_status: bodyAnalysis.metrics.robotMotionStatus ?? lastChartPoint.robot_motion_status,
     robot_operation_mode: bodyAnalysis.metrics.robotOperationMode ?? lastChartPoint.robot_operation_mode,
-    robot_vibration_score: bodyAnalysis.metrics.vibrationScore ?? lastChartPoint.robot_vibration_score,
+    robot_vibration_score: bodyAnalysis.metrics.robotVibrationScore ?? bodyAnalysis.metrics.vibrationScore ?? lastChartPoint.robot_vibration_score,
     frequency_peak_band: bodyAnalysis.metrics.frequencyPeakBand ?? lastChartPoint.frequency_peak_band,
     frequency_peak_value: bodyAnalysis.metrics.frequencyPeakValue ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.frequency_peak_value,
     vibration_peak: bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
+    vibration_rms: bodyAnalysis.metrics.vibrationRms ?? lastChartPoint.vibration_rms,
     risk_score: bodyAnalysis.metrics.riskScore ?? lastChartPoint.risk_score,
+    vibration_warning_line: bodyAnalysis.metrics.vibrationWarningLine ?? 0.75,
+    vibration_danger_line: bodyAnalysis.metrics.vibrationDangerLine ?? 1.25,
+    peak_warning_line: bodyAnalysis.metrics.peakWarningLine ?? 0.015,
+    peak_danger_line: bodyAnalysis.metrics.peakDangerLine ?? 0.03,
   } : lastChartPoint;
 
   const latestBodySeverity = severityToRiskSeverity(
@@ -927,7 +943,7 @@ export function useManufacturingDashboard() {
       stage.processCode === "PRESS"
         ? (pressAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
         : stage.processCode === "BODY"
-          ? (bodyAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
+          ? ((bodyAnalysis?.charts?.robotVibration?.points ?? bodyAnalysis?.chart ?? []).filter((p: any) => p.isAbnormal).length ?? 0)
           : stage.processCode === "PAINT"
             ? paintAbnormalEventCount
             : stage.processCode === "ASSEMBLY"
@@ -1503,6 +1519,8 @@ export function useManufacturingDashboard() {
     handleBodyChartPointerDown,
     setIsBodyChartHovered,
     visibleBodyData,
+    visibleBodyRobotData,
+    visibleBodyFrequencyData,
     bodyAnalysis,
     paintKpis,
     selectedPaintDate,
