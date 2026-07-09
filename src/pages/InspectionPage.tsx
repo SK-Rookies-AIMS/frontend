@@ -4,6 +4,7 @@ import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
 import { Mascot } from "@/components/mascot/mascot"
 import { AuthGuard } from "@/components/auth-guard"
+import { AlertTriangle, TriangleAlert } from "lucide-react";
 
 import {
   Car,
@@ -22,7 +23,6 @@ import {
 } from "lucide-react"
 
 import {
-  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
@@ -30,7 +30,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-} from "recharts"
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
 
 import {
   fetchInspectionProcess,
@@ -168,7 +170,7 @@ async function loadDashboard(refresh = false) {
     // 3. 해당 날짜 데이터만 필터링
     return processData
       .filter(item => getDate(item.createdAt) === latestDate)
-      .slice(0, 4)
+      .slice(-4)
     }, [processData])
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
@@ -187,7 +189,6 @@ async function loadDashboard(refresh = false) {
         abnormalCount: latest.abnormalCount ?? 0,
         standbyCount:
           latest.standbyCount ??
-          latest.stanbyCount ??
           0,
       }
     }
@@ -222,10 +223,25 @@ async function loadDashboard(refresh = false) {
   }, [riskHistoryData])
 
   // 위험도 분포 계산
+  const latestDate = useMemo(() => {
+    if (!riskTrendData.length) return "";
+
+    return riskTrendData
+      .map((item: any) => item.createdAt.substring(0, 10)) // YYYY-MM-DD
+      .sort()
+      .at(-1) ?? "";
+  }, [riskTrendData]);
+
+  const filteredRisk = useMemo(() => {
+    return riskTrendData.filter(
+      (item: any) => item.createdAt.startsWith(latestDate)
+    );
+  }, [riskTrendData, latestDate]);
+
   const riskDistribution = useMemo(() => {
-    const high = riskTrendData.find((r: any) => r.riskLevel === "HIGH")
-    const medium = riskTrendData.find((r: any) => r.riskLevel === "MEDIUM")
-    const low = riskTrendData.find((r: any) => r.riskLevel === "LOW")
+    const high = filteredRisk.find((r: any) => r.riskLevel === "HIGH");
+    const medium = filteredRisk.find((r: any) => r.riskLevel === "MEDIUM");
+    const low = filteredRisk.find((r: any) => r.riskLevel === "LOW");
 
     return {
       high: high?.riskCount ?? 0,
@@ -234,8 +250,8 @@ async function loadDashboard(refresh = false) {
       highPct: high?.riskRatio ?? 0,
       mediumPct: medium?.riskRatio ?? 0,
       lowPct: low?.riskRatio ?? 0,
-    }
-  }, [riskTrendData])
+    };
+  }, [filteredRisk]);
 
   // 집계 테이블 데이터
   const statusRows = useMemo(
@@ -293,6 +309,21 @@ async function loadDashboard(refresh = false) {
       default:        return status
     }
   }
+  const issueMessageMap: Record<string, string> = {
+    "over speed": "과속 감지",
+    "rpm error": "RPM 이상",
+    "crash warning": "충돌 위험",
+    "parking": "주차 상태",
+  };
+
+  const issueMessage =
+    selectedDetail?.issueMessage
+      ?.split(",")
+      .map((msg: string) => {
+        const key = msg.trim().toLowerCase();
+        return issueMessageMap[key] ?? msg.trim();
+      })
+      .join(", ") ?? "이상 메시지 없음";
 
   return (
     <AuthGuard>
@@ -431,6 +462,33 @@ async function loadDashboard(refresh = false) {
               </div>
               <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
+                  {/* 위험 기준선 (25점) */}
+                  <ReferenceLine
+                    y={25}
+                    stroke="#ef4444"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
+                    label={{
+                      value: "위험 (25점)",
+                      position: "insideTopRight",
+                      fill: "#ef4444",
+                      fontSize: 11,
+                    }}
+                  />
+
+                  {/* 주의 기준선 (50점) */}
+                  <ReferenceLine
+                    y={50}
+                    stroke="#f97316"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
+                    label={{
+                      value: "주의 (50점)",
+                      position: "insideTopRight",
+                      fill: "#f97316",
+                      fontSize: 11,
+                    }}
+                  />
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="time" tick={{ fontSize: 10 }} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
@@ -441,8 +499,8 @@ async function loadDashboard(refresh = false) {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="DYNAMICS" name="외관 검사" stroke="#22c55e" dot={false} strokeWidth={1.5} />
                   <Line type="monotone" dataKey="STATUS"   name="기능 검사" stroke="#00d4ff" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="CONTROL"  name="주행 검사" stroke="#f59e0b" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="DRIVE"    name="최종 검사" stroke="#ef4444" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="CONTROL"  name="주행 검사" stroke="#fff200" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="DRIVE"    name="최종 검사" stroke="#2f00ff" dot={false} strokeWidth={1.5} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -462,7 +520,7 @@ async function loadDashboard(refresh = false) {
                 <SummaryBox
                   label="검사 진행"
                   value={(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}
-                  sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.inspectingCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
+                  sub={`대 (${(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}%)`}
                 />
                 <SummaryBox
                   label="정상"
@@ -482,9 +540,9 @@ async function loadDashboard(refresh = false) {
               <div className="bg-slate-800/60 rounded-lg p-3 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">대기 중</span>
                 <div className="text-right">
-                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.stanbyCount ?? 0}</span>
+                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.standbyCount ?? 0}</span>
                   <span className="text-xs text-muted-foreground ml-1">
-                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.stanbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
+                    대 (${(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}%)
                   </span>
                 </div>
               </div>
@@ -616,28 +674,61 @@ async function loadDashboard(refresh = false) {
                   </div>
                 )}
 
-                <div className="mt-6 p-4 rounded-xl bg-slate-900">
-                  <p className="text-sm text-muted-foreground mb-2">검사 결과</p>
-
-                  <p
-                    className={`text-lg font-bold ${
+                <div className="mt-6 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
+                  {/* 검사 결과 */}
+                  <div
+                    className={`flex items-center justify-between px-4 py-3 ${
                       selectedDetail.inspectionResult === "NORMAL"
-                        ? "text-green-400"
+                        ? "bg-green-900/20"
                         : selectedDetail.inspectionResult === "WARNING"
-                        ? "text-yellow-400"
-                        : "text-red-400"
+                        ? "bg-yellow-900/20"
+                        : "bg-red-900/20"
                     }`}
                   >
-                    {selectedDetail.inspectionResult === "NORMAL"
-                      ? "정상"
-                      : selectedDetail.inspectionResult === "WARNING"
-                      ? "주의"
-                      : "이상"}
-                  </p>
+                    <span className="text-sm text-slate-300">검사 결과</span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-bold ${
+                        selectedDetail.inspectionResult === "NORMAL"
+                          ? "bg-green-500/20 text-green-400"
+                          : selectedDetail.inspectionResult === "WARNING"
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {selectedDetail.inspectionResult === "NORMAL"
+                        ? "✅ 정상"
+                        : selectedDetail.inspectionResult === "WARNING"
+                        ? "⚠️ 주의"
+                        : "🚨 이상"}
+                    </span>
+                  </div>
+                  {/* 이상 메시지 */}
+                  <div className="p-4">
 
-                  <p className="mt-4 text-sm text-slate-300">
-                    {selectedDetail.issueMessage || "이상 메시지 없음"}
+                  <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">
+                    이상 메시지
                   </p>
+                  <div
+                      className={`rounded-lg border p-4 ${
+                        selectedDetail.inspectionResult === "NORMAL"
+                          ? "border-green-500/30 bg-green-500/10"
+                          : selectedDetail.inspectionResult === "WARNING"
+                          ? "border-yellow-500/30 bg-yellow-500/10"
+                          : "border-red-500/30 bg-red-500/10"
+                      }`}
+                    >
+                      <p
+                        className={`text-base font-medium leading-7 ${
+                          selectedDetail.inspectionResult === "NORMAL"
+                            ? "text-green-200"
+                            : selectedDetail.inspectionResult === "WARNING"
+                            ? "text-yellow-200"
+                            : "text-red-200"
+                        }`}
+                      ></p>
+                      {issueMessage}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
