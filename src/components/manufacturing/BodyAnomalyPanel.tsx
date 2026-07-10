@@ -174,13 +174,13 @@ function formatFrequencySpectrumTooltip(
           </div>
         )}
         <div className="flex items-center justify-between gap-4">
-          <span className="font-medium" style={{ color: "#facc15" }}>경고선</span>
+          <span className="font-medium" style={{ color: "#facc15" }}>경고 기준</span>
           <span className="font-semibold" style={{ color: "#fde68a" }}>
             {warningValue.toFixed(6)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="font-medium" style={{ color: "#f97316" }}>위험선</span>
+          <span className="font-medium" style={{ color: "#f97316" }}>위험 기준</span>
           <span className="font-semibold" style={{ color: "#fdba74" }}>
             {dangerValue.toFixed(6)}
           </span>
@@ -613,7 +613,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   strokeDasharray="5 5"
                   ifOverflow="extendDomain"
                   label={{
-                    value: "경고선 0.015000",
+                    value: "경고 기준 0.015000",
                     position: "insideTopRight",
                     fill: "#facc15",
                     fontSize: 10,
@@ -626,7 +626,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   strokeDasharray="5 5"
                   ifOverflow="extendDomain"
                   label={{
-                    value: "위험선 0.030000",
+                    value: "위험 기준 0.030000",
                     position: "insideTopRight",
                     fill: "#f97316",
                     fontSize: 10,
