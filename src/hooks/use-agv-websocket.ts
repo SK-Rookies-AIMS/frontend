@@ -18,6 +18,7 @@ export function useAgvWebsocket() {
     const clientRef = useRef<Client | null>(null);
 
     async function loadInitialAgvs() {
+
         try {
             const response = await fetch("/api/main/process-flow", {
                 credentials: "include",
@@ -33,6 +34,7 @@ export function useAgvWebsocket() {
         } catch (e) {
             console.error("[AGV] initial fetch failed", e);
         }
+
     }
 
     useEffect(() => {
