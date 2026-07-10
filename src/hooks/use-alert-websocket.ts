@@ -6,7 +6,7 @@ import { AlertRealtimeMessage } from "@/types/alert"
 // 알람 전용 WebSocket 환경변수 우선 참조 후 fallback 처리
 const WS_URL =
     import.meta.env.VITE_ALERT_WS_URL ??
-    "https://aims-factory.com/ws"
+    `${window.location.origin}/ws`;
 
 const ALERT_TOPIC = "/topic/alerts"
 
