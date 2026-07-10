@@ -24,6 +24,13 @@ env:
   INFRA_REPOSITORY: SK-Rookies-AIMS/infra
   INFRA_MANIFEST_PATH: k8s/frontend/kustomization.yaml
 
+  VITE_API_BASE_URL: /api
+  VITE_AI_API_BASE_URL: /api/ai
+  VITE_QUALITY_API_BASE_URL: /api/quality/inspection
+  VITE_PROCESS_API_BASE_URL: /api/process
+  VITE_WS_BASE_URL: wss://aims-factory.com
+  VITE_SOCKJS_URL: /ws
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -57,7 +64,17 @@ jobs:
           IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${IMAGE_TAG}"
           BRANCH_IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_REF_NAME}"
 
-          docker build -t "$IMAGE_URI" -t "$BRANCH_IMAGE_URI" "$FRONTEND_CONTEXT"
+          docker build \
+            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+            --build-arg VITE_AI_API_BASE_URL="$VITE_AI_API_BASE_URL" \
+            --build-arg VITE_QUALITY_API_BASE_URL="$VITE_QUALITY_API_BASE_URL" \
+            --build-arg VITE_PROCESS_API_BASE_URL="$VITE_PROCESS_API_BASE_URL" \
+            --build-arg VITE_WS_BASE_URL="$VITE_WS_BASE_URL" \
+            --build-arg VITE_SOCKJS_URL="$VITE_SOCKJS_URL" \
+            -t "$IMAGE_URI" \
+            -t "$BRANCH_IMAGE_URI" \
+            "$FRONTEND_CONTEXT"
+
           docker push "$IMAGE_URI"
           docker push "$BRANCH_IMAGE_URI"
 

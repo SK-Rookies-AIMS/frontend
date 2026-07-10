@@ -57,9 +57,5 @@ export function getStoredAccessToken() {
     return "";
   }
 
-  return (
-    readStorageToken(window.sessionStorage) ||
-    readStorageToken(window.localStorage) ||
-    ""
-  );
+  return readStorageToken(window.sessionStorage);
 }

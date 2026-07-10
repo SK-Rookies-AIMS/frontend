@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   BOTTLENECK_INITIAL_CURSOR,
   BOTTLENECK_PAGE_SIZE,
@@ -33,30 +33,30 @@ import {
 "use client"
 
 const processStages = [
-  { id: "01", processCode: "PRESS", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
-  { id: "02", processCode: "BODY", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
-  { id: "03", processCode: "PAINT", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
-  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
+  { id: "01", processCode: "PRESS", name: "프레스", rate: null, events: 22, status: "normal", color: "#22c55e" },
+  { id: "02", processCode: "BODY", name: "차체", rate: null, events: 22, status: "warning", color: "#f59e0b" },
+  { id: "03", processCode: "PAINT", name: "도장", rate: null, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
+  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: null, events: 22, status: "normal", color: "#22c55e" },
   { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
 ]
 
 const defectPredictionData = [
   { vinId: "VIN-001245", currentProcess: "차체", predictedProcess: "도장 (L3)", probability: 78, stepsAhead: "3단계 후" },
   { vinId: "VIN-001248", currentProcess: "프레스", predictedProcess: "차체 (S12)", probability: 72, stepsAhead: "2단계 후" },
-  { vinId: "VIN-001250", currentProcess: "도장", predictedProcess: "의장 (A1)", probability: 69, stepsAhead: "3단계 후" },
+  { vinId: "VIN-001250", currentProcess: "도장", predictedProcess: "조립 (A1)", probability: 69, stepsAhead: "3단계 후" },
   { vinId: "VIN-001253", currentProcess: "차체", predictedProcess: "도장 (L3)", probability: 61, stepsAhead: "3단계 후" },
   { vinId: "VIN-001255", currentProcess: "프레스", predictedProcess: "차체 (S12)", probability: 58, stepsAhead: "2단계 후" },
 ]
 
 const aiAnalysisFactors = [
-  { name: "S2 Station 통과 지연 +12초", impact: 0.38 },
-  { name: "L3 온도 편차 +7°C", impact: 0.24 },
+  { name: "S2 Station 압력 지연 +12초", impact: 0.38 },
+  { name: "L3 온도 상승 +7°C", impact: 0.24 },
   { name: "프레스 공정 Cycle Time 증가", impact: 0.19 },
-  { name: "과거 유사 불량 사례 34건 존재", impact: 0.11 },
-  { name: "센서 통신 지연 (3ms)", impact: 0.08 },
+  { name: "고객 불량 신고 34건 존재", impact: 0.11 },
+  { name: "로봇 통신 지연(3ms)", impact: 0.08 },
 ]
 
-// 백엔드 연동 전 press_analysis_result 형태를 반영한 최신 5분 기준 목 데이터
+// 諛깆뿏???곕룞 ??press_analysis_result ?뺥깭瑜?諛섏쁺??理쒖떊 5遺?湲곗? 紐??곗씠??
 const latestPressAnchorData = [
   { time: "12:30", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 11.9, cycle_time_gap_sec: -0.1, timestamp_delay_sec: 0.2, risk_score: 16, overall_risk_score: 20 },
   { time: "12:35", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.0, cycle_time_gap_sec: 0.0, timestamp_delay_sec: 0.3, risk_score: 18, overall_risk_score: 22 },
@@ -97,24 +97,24 @@ const formatBackendTimestamp = (timestamp: string) => {
   const normalized = timestamp.replace("T", " ")
   const matched = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/)
   if (matched) return `${matched[1]} ${matched[2]}`
-  // 초가 없는 경우 HH:mm까지만 추출
+  // 珥덇? ?녿뒗 寃쎌슦 HH:mm源뚯?留?異붿텧
   const matchedShort = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
   return matchedShort ? `${matchedShort[1]} ${matchedShort[2]}` : normalized
 }
 
 const formatDelayTime = (seconds: number): string => {
   if (seconds >= 3600) {
-    const hours = seconds / 3600;
-    return `${Number(hours.toFixed(1))}시간`;
+    const hours = seconds / 3600
+    return `${Number(hours.toFixed(1))}시간`
   }
   if (seconds >= 60) {
-    const minutes = seconds / 60;
-    return `${Number(minutes.toFixed(1))}분`;
+    const minutes = seconds / 60
+    return `${Number(minutes.toFixed(1))}분`
   }
-  return `${Number(seconds.toFixed(1))}초`;
+  return `${Number(seconds.toFixed(1))}초`
 }
 
-// 드래그 시 전날 데이터까지 조회할 수 있도록 이전 24시간의 5분 기준값을 만든다.
+// ?쒕옒洹????꾨궇 ?곗씠?곌퉴吏 議고쉶?????덈룄濡??댁쟾 24?쒓컙??5遺?湲곗?媛믪쓣 留뚮뱺??
 const historicalPressAnchorData: PressAnchor[] = Array.from({ length: 288 }, (_, index) => {
   const date = new Date(2026, 5, 17, 12, 30 + index * 5)
   const wave = Math.sin(index / 12)
@@ -151,6 +151,7 @@ const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchor
 type PressDataPoint = PressAnchor & {
   isAbnormal?: boolean
   severity?: string
+  countIncreaseYn?: boolean
 }
 
 // Press mock data removed; rely on backend `pressAnalysis` when available
@@ -172,7 +173,7 @@ const latestPressData: PressDataPoint =
       }
 
 const getRiskSeverity = (score: number) => {
-  if (score >= 70) return { label: "심각", className: "text-destructive" }
+  if (score >= 70) return { label: "위험", className: "text-destructive" }
   if (score >= 50) return { label: "경고", className: "text-warning" }
   if (score >= 30) return { label: "주의", className: "text-warning" }
   return { label: "정상", className: "text-success" }
@@ -377,6 +378,8 @@ type EquipmentOperationRateData = {
   items?: EquipmentOperationRateItem[]
 }
 
+type EquipmentOperationRateStatus = "idle" | "loading" | "success" | "error"
+
 const emptyPaintDashboard: PaintDashboardData = {
   selectedDate: null,
   summary: {
@@ -414,6 +417,15 @@ const formatApiTime = (value: string) => {
   return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
+const getBottleneckRowKey = (row: BottleneckRow) =>
+  [
+    row.rankNo,
+    row.processCode,
+    row.delayTime,
+    row.affectedVehicleCount,
+    row.riskScore,
+  ].join("|")
+
 export function PaintTooltip({
   active,
   payload,
@@ -432,10 +444,10 @@ export function PaintTooltip({
       <p className="mb-2 font-medium">{label}</p>
       <div className="space-y-1 text-muted-foreground">
         <p>event_time: {row.eventTime}</p>
-        <p>불량 점수: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (표시 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
-        <p>표면 품질 점수: {row.surfaceQualityScore.toFixed(1)}</p>
-        <p>도장 두께: {row.thicknessValue.toFixed(1)}</p>
-        <p>위험도: {row.riskScore.toFixed(1)}</p>
+        <p>遺덈웾 ?먯닔: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (?쒖떆 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
+        <p>?쒕㈃ ?덉쭏 ?먯닔: {row.surfaceQualityScore.toFixed(1)}</p>
+        <p>?꾩옣 ?먭퍡: {row.thicknessValue.toFixed(1)}</p>
+        <p>?꾪뿕?? {row.riskScore.toFixed(1)}</p>
         {row.visionLabel && <p>vision_label: {row.visionLabel}</p>}
         {row.imagePosition && <p>image_position: {row.imagePosition}</p>}
         {row.thermalStdTemp !== undefined && <p>thermal_std_temp: {row.thermalStdTemp.toFixed(1)}</p>}
@@ -459,15 +471,15 @@ function formatSequence(sequence?: string | null) {
 
 function getAssemblyStatus(severity: string, isAbnormal: boolean, status?: string) {
   if (status) return status
-  if (!isAbnormal) return "정상"
-  if (severity === "CRITICAL") return "위험"
-  if (severity === "WARNING") return "경고"
-  return "이상"
+  if (!isAbnormal) return "?뺤긽"
+  if (severity === "CRITICAL") return "?꾪뿕"
+  if (severity === "WARNING") return "寃쎄퀬"
+  return "?댁긽"
 }
 
 function getStatusBadgeClass(severity: string, isAbnormal: boolean, status?: string, riskScore = 0) {
-  if (status === "위험" || severity === "CRITICAL" || riskScore >= 80) return "bg-destructive/20 text-destructive"
-  if (status === "경고" || severity === "WARNING" || riskScore >= 50) return "bg-warning/20 text-warning"
+  if (status === "?꾪뿕" || severity === "CRITICAL" || riskScore >= 80) return "bg-destructive/20 text-destructive"
+  if (status === "寃쎄퀬" || severity === "WARNING" || riskScore >= 50) return "bg-warning/20 text-warning"
   if (!isAbnormal) return "bg-success/20 text-success"
   return "bg-destructive/20 text-destructive"
 }
@@ -487,8 +499,8 @@ function getAssemblyVehicleKey(row: AssemblyVehicleRow, index = 0) {
 
 function getAssemblySeverityRank(row: AssemblyVehicleRow) {
   const status = `${row.severity ?? ""} ${row.status ?? ""}`.toUpperCase()
-  if (status.includes("DANGER") || status.includes("CRITICAL") || status.includes("위험")) return 2
-  if (status.includes("WARNING") || status.includes("주의") || status.includes("경고")) return 1
+  if (status.includes("DANGER") || status.includes("CRITICAL") || status.includes("?꾪뿕")) return 2
+  if (status.includes("WARNING") || status.includes("二쇱쓽") || status.includes("寃쎄퀬")) return 1
   return 0
 }
 
@@ -518,34 +530,43 @@ function normalizeNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
+function isWarningSeverity(severity: string | null | undefined) {
+  return severity === "WARNING" || severity === "CRITICAL"
+}
+
 function severityToRiskSeverity(severity: string | null | undefined, riskScore: number) {
-  if (severity === "CRITICAL") return { label: "심각", className: "text-destructive" }
+  if (severity === "CRITICAL") return { label: "위험", className: "text-destructive" }
   if (severity === "WARNING") return { label: "경고", className: "text-warning" }
   if (severity === "NORMAL") return { label: "정상", className: "text-success" }
   return getRiskSeverity(riskScore)
 }
 
 function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number]): PressDataPoint {
-  // timestamp를 로컬 Date로 파싱하지 않고 백엔드 문자열을 그대로 사용해 시간대 차이를 방지
+  // timestamp瑜?濡쒖뺄 Date濡??뚯떛?섏? ?딄퀬 諛깆뿏??臾몄옄?댁쓣 洹몃?濡??ъ슜???쒓컙? 李⑥씠瑜?諛⑹?
   const dateTime = formatBackendTimestamp(point.timestamp)
-  // dateTime이 "YYYY-MM-DD HH:mm:ss" 형식이므로 getTime을 위한 Date 파싱은 ISO 형식 유지
+  // dateTime??"YYYY-MM-DD HH:mm:ss" ?뺤떇?대?濡?getTime???꾪븳 Date ?뚯떛? ISO ?뺤떇 ?좎?
   const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
   const date = new Date(isoForParsing)
   const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
   return {
-    // time 필드: HH:mm:ss까지 표시해 백엔드 timestamp와 일치
+    // time ?꾨뱶: HH:mm:ss源뚯? ?쒖떆??諛깆뿏??timestamp? ?쇱튂
     time: dateTime.slice(11, 19),
     dateTime,
     timestamp: epochMs,
     target_cycle_time_sec: normalizeNumber(point.targetCycleTimeSec),
     actual_cycle_time_sec: normalizeNumber(point.actualCycleTimeSec),
-    cycle_time_gap_sec: normalizeNumber(point.cycleTimeGapSec),
-    timestamp_delay_sec: normalizeNumber(point.timestampDelaySec),
-    risk_score: normalizeNumber(point.riskScore),
-    overall_risk_score: normalizeNumber(point.riskScore),
-    isAbnormal: point.isAbnormal ?? false,
+    cycle_time_gap_sec: normalizeNumber(
+      point.cycleTimeGapSec ?? (point.actualCycleTimeSec !== undefined && point.targetCycleTimeSec !== undefined
+        ? Number(point.actualCycleTimeSec ?? 0) - Number(point.targetCycleTimeSec ?? 0)
+        : 0),
+    ),
+    timestamp_delay_sec: normalizeNumber(point.timestampDelaySec ?? point.cycleTimeGapSec ?? 0),
+    risk_score: normalizeNumber(point.riskScore ?? 0),
+    overall_risk_score: normalizeNumber(point.riskScore ?? 0),
+    isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity),
     severity: point.severity ?? "NORMAL",
+    countIncreaseYn: point.countIncreaseYn,
   }
 }
 
@@ -598,12 +619,18 @@ export function useManufacturingDashboard() {
     startIndex: number
     width: number
   } | null>(null)
-  const [bodyChartStartIndex, setBodyChartStartIndex] = useState(
-    Math.max(0, bodyRobotData.length - BODY_CHART_WINDOW_SIZE),
-  )
-  const [isBodyChartDragging, setIsBodyChartDragging] = useState(false)
+  const [bodyRobotChartStartIndex, setBodyRobotChartStartIndex] = useState(0)
+  const [bodyFrequencyChartStartIndex, setBodyFrequencyChartStartIndex] = useState(0)
+  const [isBodyRobotChartDragging, setIsBodyRobotChartDragging] = useState(false)
+  const [isBodyFrequencyChartDragging, setIsBodyFrequencyChartDragging] = useState(false)
   const [isBodyChartHovered, setIsBodyChartHovered] = useState(false)
-  const bodyChartDragRef = useRef<{
+  const bodyRobotChartDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startIndex: number
+    width: number
+  } | null>(null)
+  const bodyFrequencyChartDragRef = useRef<{
     pointerId: number
     startX: number
     startIndex: number
@@ -627,16 +654,57 @@ export function useManufacturingDashboard() {
   const [paintDatesError, setPaintDatesError] = useState<string | null>(null)
   const [assemblyDatesError, setAssemblyDatesError] = useState<string | null>(null)
   const [operationRateByProcess, setOperationRateByProcess] = useState<Record<string, EquipmentOperationRateItem>>({})
+  const [operationRateStatus, setOperationRateStatus] = useState<EquipmentOperationRateStatus>("idle")
+
+  const getLatestChartStartIndex = (length: number, windowSize: number) => Math.max(0, length - windowSize)
 
   const [pressAnalysis, setPressAnalysis] = useState<PressAnomalyData | null>(null)
   const [selectedPressAnalysisDate, setSelectedPressAnalysisDate] = useState<string | null>(null)
   const [isPressAnalysisLoading, setIsPressAnalysisLoading] = useState(false)
   const [pressAnalysisError, setPressAnalysisError] = useState<string | null>(null)
 
-  const apiPressData = pressAnalysis?.chart
+  const apiPressData = (pressAnalysis?.charts?.cycleTime?.points ?? pressAnalysis?.chart ?? [])
     .map(toPressDataPoint)
     .filter((point) => Number.isFinite(point.timestamp)) ?? []
   const rawPressDisplayData = pressAnalysis ? apiPressData : pressData
+
+  type PressRiskTrendRow = {
+    eventId?: string
+    analysisId?: string
+    time: string
+    dateTime: string
+    timestamp: number
+    value: number
+    markerLevel: number
+    severity: string
+    countNormalValue: number
+    countIncreaseYn: boolean
+    isAbnormal: boolean
+  }
+
+  const pressRiskTrendData = useMemo<PressRiskTrendRow[]>(() => {
+    const points = pressAnalysis?.charts?.cycleTime?.points ?? pressAnalysis?.chart ?? []
+    return points.map((point: any) => {
+      const dateTime = formatBackendTimestamp(point.timestamp)
+      const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+      const date = new Date(isoForParsing)
+      const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
+
+      return {
+        eventId: point.eventId,
+        analysisId: point.analysisId,
+        time: dateTime.slice(11, 19),
+        dateTime,
+        timestamp: epochMs,
+        value: 1,
+        markerLevel: isWarningSeverity(point.severity) ? 2 : 1,
+        severity: point.severity ?? "NORMAL",
+        countNormalValue: point.countIncreaseYn ? 100 : 0,
+        countIncreaseYn: Boolean(point.countIncreaseYn),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity) || !point.countIncreaseYn,
+      }
+    })
+  }, [pressAnalysis])
 
   const latestPressDisplayData = pressAnalysis?.metrics
     ? {
@@ -674,6 +742,10 @@ export function useManufacturingDashboard() {
     pressDisplayAvailableDates[0]
 
   const pressDisplayData = rawPressDisplayData
+  const visiblePressRiskData = pressRiskTrendData.slice(
+    pressChartStartIndex,
+    pressChartStartIndex + PRESS_CHART_WINDOW_SIZE,
+  )
 
   const visiblePressData = pressDisplayData.slice(
     pressChartStartIndex,
@@ -682,7 +754,7 @@ export function useManufacturingDashboard() {
 
   const handlePressDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedPressAnalysisDate(event.target.value)
-    setPressChartStartIndex(0)
+    setPressChartStartIndex(getLatestChartStartIndex(pressDisplayData.length, PRESS_CHART_WINDOW_SIZE))
   }
 
   const handlePressChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -709,9 +781,9 @@ export function useManufacturingDashboard() {
         date,
       })
       setPressAnalysis(result)
-      setPressChartStartIndex(0)
+      setPressChartStartIndex(getLatestChartStartIndex(result.chart?.length ?? 0, PRESS_CHART_WINDOW_SIZE))
     } catch (error) {
-      setPressAnalysisError(error instanceof Error ? error.message : "프레스 이상 탐지 데이터를 불러오지 못했습니다.")
+      setPressAnalysisError(error instanceof Error ? error.message : "?꾨젅???댁긽 ?먯? ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsPressAnalysisLoading(false)
       isFetchingRef.current = false
@@ -723,50 +795,63 @@ export function useManufacturingDashboard() {
   const [isBodyAnalysisLoading, setIsBodyAnalysisLoading] = useState(false)
   const [bodyAnalysisError, setBodyAnalysisError] = useState<string | null>(null)
 
-  const apiBodyData = useMemo(() => {
-    return (bodyAnalysis?.chart ?? []).map((point: any) => {
+  type BodyTrendRow = {
+    time: string
+    dateTime: string
+    timestamp: number
+    value: number
+    secondaryValue: number
+    warning_line: number
+    danger_line: number
+    risk_score: number
+    isAbnormal: boolean
+    severity: string
+  }
+
+  const bodyRobotTrendData = useMemo<BodyTrendRow[]>(() => {
+    const points = bodyAnalysis?.charts?.robotVibration?.points ?? bodyAnalysis?.chart ?? []
+    return points.map((point: any) => {
       const dateTime = formatBackendTimestamp(point.timestamp)
       const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
       const date = new Date(isoForParsing)
       const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
-      const vibrationPeak = normalizeNumber(point.vibrationPeak)
-      const rawVibe = normalizeNumber(point.vibrationScore)
-      const robotVibrationScore = rawVibe
-      const riskScore = normalizeNumber(point.riskScore)
+      return {
+        time: dateTime.slice(11, 19),
+        dateTime,
+        timestamp: epochMs,
+        value: normalizeNumber(point.value ?? point.robotVibrationScore ?? bodyAnalysis?.metrics?.robotVibrationScore ?? point.vibrationScore),
+        warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.vibrationWarningLine),
+        danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.vibrationDangerLine),
+        risk_score: normalizeNumber(point.riskScore),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity ?? bodyAnalysis?.metrics?.severity),
+        severity: point.severity ?? bodyAnalysis?.metrics?.severity ?? "NORMAL",
+      }
+    })
+  }, [bodyAnalysis])
 
-      const frequencyPeakBand = bodyAnalysis?.metrics?.frequencyPeakBand ?? "LOW"
-
-      const rawTargetVibe = normalizeNumber(point.targetVibrationScore)
-      const targetVibrationScore = rawTargetVibe
-      const targetVibrationPeak = normalizeNumber(point.targetVibrationPeak ?? bodyAnalysis?.metrics?.targetVibrationPeak)
+  const bodyPeakTrendData = useMemo<BodyTrendRow[]>(() => {
+    const points = bodyAnalysis?.charts?.frequencyPeak?.points ?? bodyAnalysis?.chart ?? []
+    return points.map((point: any) => {
+      const dateTime = formatBackendTimestamp(point.timestamp)
+      const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
+      const date = new Date(isoForParsing)
+      const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
       return {
         time: dateTime.slice(11, 19),
         dateTime,
         timestamp: epochMs,
-        target_cycle_time_sec: 0,
-        actual_cycle_time_sec: 0,
-        cycle_time_gap_sec: 0,
-        timestamp_delay_sec: 0,
-        risk_score: riskScore,
-        overall_risk_score: riskScore,
-        robot_motion_status: bodyAnalysis?.metrics?.robotMotionStatus ?? (point.isAbnormal ? "WARNING" : "NORMAL"),
-        robot_operation_mode: bodyAnalysis?.metrics?.robotOperationMode ?? "AUTO",
-        robot_vibration_score: robotVibrationScore,
-        target_vibration_score: targetVibrationScore,
-        target_frequency_peak_value: targetVibrationPeak,
-        frequency_peak_band: frequencyPeakBand,
-        frequency_peak_value: vibrationPeak,
-        vibration_peak: vibrationPeak,
-        target_vibration_peak: targetVibrationPeak,
-        vibration_rms: normalizeNumber(point.vibrationRms),
-        band_low: 0,
-        band_mid: 0,
-        band_high: 0,
+        value: normalizeNumber(point.value ?? point.vibrationPeak ?? point.frequencyPeakValue),
+        secondaryValue: normalizeNumber(point.secondaryValue ?? point.vibrationRms ?? bodyAnalysis?.metrics?.vibrationRms),
+        warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.peakWarningLine),
+        danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.peakDangerLine),
+        risk_score: normalizeNumber(point.riskScore),
+        isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity ?? bodyAnalysis?.metrics?.severity),
+        severity: point.severity ?? bodyAnalysis?.metrics?.severity ?? "NORMAL",
       }
     })
-  }, [bodyAnalysis]);
+  }, [bodyAnalysis])
 
   const fetchBodyAnalysisData = useCallback(async (date?: string | null) => {
     setIsBodyAnalysisLoading(true)
@@ -777,17 +862,31 @@ export function useManufacturingDashboard() {
       setBodyAnalysis(result)
     } catch (error) {
       console.error("fetchBodyAnalysis error:", error)
-      setBodyAnalysisError(error instanceof Error ? error.message : "차체 이상 탐지 데이터를 불러오지 못했습니다.")
+      setBodyAnalysisError(error instanceof Error ? error.message : "李⑥껜 ?댁긽 ?먯? ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsBodyAnalysisLoading(false)
     }
   }, [])
 
-  const sourceBodyData = bodyAnalysis ? apiBodyData : bodyRobotData
+  const sourceBodyData = bodyAnalysis ? bodyRobotTrendData : bodyRobotData
+  const sourceBodyFrequencyData = bodyAnalysis ? bodyPeakTrendData : bodyRobotData
 
-  const visibleBodyData = sourceBodyData.slice(
-    bodyChartStartIndex,
-    bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+  const bodyRobotTrendDomainMax = 1.5
+  const bodyFrequencyTrendDomainMax = 0.035
+
+  const visibleBodyRobotData = useMemo(
+    () => sourceBodyData.slice(
+      bodyRobotChartStartIndex,
+      bodyRobotChartStartIndex + BODY_CHART_WINDOW_SIZE,
+    ),
+    [sourceBodyData, bodyRobotChartStartIndex],
+  )
+  const visibleBodyFrequencyData = useMemo(
+    () => sourceBodyFrequencyData.slice(
+      bodyFrequencyChartStartIndex,
+      bodyFrequencyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+    ),
+    [sourceBodyFrequencyData, bodyFrequencyChartStartIndex],
   )
 
   const bodyAvailableDatesLocal = Array.from(new Set(sourceBodyData.map((item) => item.dateTime.slice(0, 10)))).reverse()
@@ -801,18 +900,32 @@ export function useManufacturingDashboard() {
     selectedBodyAnalysisDate ??
     bodyAnalysis?.date ??
     sourceBodyData[Math.floor(sourceBodyData.length / 2)]?.dateTime.slice(0, 10) ??
-    bodyDateOptions[0]
+    bodyDateOptions[0] ??
+    ""
 
   const handleBodyDateChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedDate = event.target.value
     setSelectedBodyAnalysisDate(selectedDate)
-    // reset chart window to start of selected date; fetch will be triggered by effect
-    setBodyChartStartIndex(0)
+    // show the latest window first; older data is revealed by dragging left
+    setBodyRobotChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+    setBodyFrequencyChartStartIndex(getLatestChartStartIndex(sourceBodyFrequencyData.length, BODY_CHART_WINDOW_SIZE))
   }
 
   useEffect(() => {
     void fetchBodyAnalysisData(selectedBodyAnalysisDate)
   }, [fetchBodyAnalysisData, selectedBodyAnalysisDate])
+
+  useEffect(() => {
+    setPressChartStartIndex(getLatestChartStartIndex(pressDisplayData.length, PRESS_CHART_WINDOW_SIZE))
+  }, [pressDisplayData.length])
+
+  useEffect(() => {
+    setBodyRobotChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+  }, [sourceBodyData.length])
+
+  useEffect(() => {
+    setBodyFrequencyChartStartIndex(getLatestChartStartIndex(sourceBodyFrequencyData.length, BODY_CHART_WINDOW_SIZE))
+  }, [sourceBodyFrequencyData.length])
 
   const lastChartPoint = sourceBodyData.length > 0
     ? sourceBodyData[sourceBodyData.length - 1]
@@ -823,25 +936,35 @@ export function useManufacturingDashboard() {
           robot_motion_status: "NORMAL",
           robot_operation_mode: "AUTO",
           robot_vibration_score: 0,
-          target_vibration_score: 0.75,
-          target_frequency_peak_value: 30,
           frequency_peak_band: "LOW",
           frequency_peak_value: 0,
-          band_low: 0,
-          band_mid: 0,
-          band_high: 0,
           risk_score: 0,
+          vibration_peak: 0,
+          vibration_rms: 0,
         }
 
   const latestBodyData = bodyAnalysis?.metrics ? {
     ...lastChartPoint,
     robot_motion_status: bodyAnalysis.metrics.robotMotionStatus ?? lastChartPoint.robot_motion_status,
     robot_operation_mode: bodyAnalysis.metrics.robotOperationMode ?? lastChartPoint.robot_operation_mode,
-    robot_vibration_score: bodyAnalysis.metrics.vibrationScore ?? lastChartPoint.robot_vibration_score,
+    robot_vibration_score:
+      bodyAnalysis.metrics.avgRobotVibrationScore ??
+      bodyAnalysis.metrics.robotVibrationScore ??
+      bodyAnalysis.metrics.vibrationScore ??
+      lastChartPoint.robot_vibration_score,
     frequency_peak_band: bodyAnalysis.metrics.frequencyPeakBand ?? lastChartPoint.frequency_peak_band,
-    frequency_peak_value: bodyAnalysis.metrics.frequencyPeakValue ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.frequency_peak_value,
-    vibration_peak: bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
+    frequency_peak_value:
+      bodyAnalysis.metrics.avgFrequencyPeakValue ??
+      bodyAnalysis.metrics.frequencyPeakValue ??
+      bodyAnalysis.metrics.vibrationPeak ??
+      lastChartPoint.frequency_peak_value,
+    vibration_peak: bodyAnalysis.metrics.avgVibrationPeak ?? bodyAnalysis.metrics.vibrationPeak ?? lastChartPoint.vibration_peak,
+    vibration_rms: bodyAnalysis.metrics.avgVibrationRms ?? bodyAnalysis.metrics.vibrationRms ?? lastChartPoint.vibration_rms,
     risk_score: bodyAnalysis.metrics.riskScore ?? lastChartPoint.risk_score,
+    vibration_warning_line: bodyAnalysis.metrics.vibrationWarningLine ?? 0.75,
+    vibration_danger_line: bodyAnalysis.metrics.vibrationDangerLine ?? 1.25,
+    peak_warning_line: bodyAnalysis.metrics.peakWarningLine ?? 0.015,
+    peak_danger_line: bodyAnalysis.metrics.peakDangerLine ?? 0.03,
   } : lastChartPoint;
 
   const latestBodySeverity = severityToRiskSeverity(
@@ -850,15 +973,36 @@ export function useManufacturingDashboard() {
   )
 
 
-  const handleBodyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleBodyRobotChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
-    bodyChartDragRef.current = {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Some browsers can reject pointer capture for synthetic / already-captured pointers.
+    }
+    bodyRobotChartDragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startIndex: bodyChartStartIndex,
+      startIndex: bodyRobotChartStartIndex,
       width: event.currentTarget.getBoundingClientRect().width,
     }
-    setIsBodyChartDragging(true)
+    setIsBodyRobotChartDragging(true)
+  }
+
+  const handleBodyFrequencyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Some browsers can reject pointer capture for synthetic / already-captured pointers.
+    }
+    bodyFrequencyChartDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startIndex: bodyFrequencyChartStartIndex,
+      width: event.currentTarget.getBoundingClientRect().width,
+    }
+    setIsBodyFrequencyChartDragging(true)
   }
 
   const paintKpis = {
@@ -918,16 +1062,15 @@ export function useManufacturingDashboard() {
       }
     }
 
-    if (stage.rate === null) return stage
-
     const operationRate = stage.processCode
       ? operationRateByProcess[stage.processCode]?.operationRate
       : undefined
+    const hasOperationRate = Number.isFinite(operationRate)
     const events =
       stage.processCode === "PRESS"
         ? (pressAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
         : stage.processCode === "BODY"
-          ? (bodyAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
+          ? ((bodyAnalysis?.charts?.robotVibration?.points ?? bodyAnalysis?.chart ?? []).filter((p: any) => p.isAbnormal).length ?? 0)
           : stage.processCode === "PAINT"
             ? paintAbnormalEventCount
             : stage.processCode === "ASSEMBLY"
@@ -936,10 +1079,15 @@ export function useManufacturingDashboard() {
 
     return {
       ...stage,
-      rate: Number.isFinite(operationRate) ? Math.round(operationRate as number) : stage.rate,
+      rate: hasOperationRate ? Math.round(operationRate as number) : null,
+      rateLabel: hasOperationRate
+        ? undefined
+        : operationRateStatus === "error"
+          ? "조회 실패"
+          : "-",
       events,
       isBottleneck: mostBottleneckProcess ? stage.name === mostBottleneckProcess : stage.isBottleneck,
-      bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "위험",
+      bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "?꾪뿕",
     }
   })
   const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_TABLE_PAGE_SIZE
@@ -978,7 +1126,17 @@ export function useManufacturingDashboard() {
         cursor,
       })
 
-      setBottleneckRows((prevRows) => [...prevRows, ...result.content])
+      setBottleneckRows((prevRows) => {
+        const seenKeys = new Set(prevRows.map(getBottleneckRowKey))
+        const nextRows = result.content.filter((row) => {
+          const key = getBottleneckRowKey(row)
+          if (seenKeys.has(key)) return false
+          seenKeys.add(key)
+          return true
+        })
+
+        return [...prevRows, ...nextRows]
+      })
       if (cursor === BOTTLENECK_INITIAL_CURSOR) {
         setMostBottleneckProcess(result.mostBottleneckProcess)
         setMostBottleneckRiskLevel(result.mostBottleneckRiskLevel)
@@ -988,7 +1146,7 @@ export function useManufacturingDashboard() {
       setBottleneckCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
       requestedBottleneckCursorsRef.current.delete(cursor)
-      setBottleneckError(error instanceof Error ? error.message : "병목 분석 데이터를 불러오지 못했습니다.")
+      setBottleneckError(error instanceof Error ? error.message : "蹂묐ぉ 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       isBottleneckLoadingRef.current = false
       setIsBottleneckLoading(false)
@@ -1030,7 +1188,7 @@ export function useManufacturingDashboard() {
       setDefectPredictionCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
       requestedDefectPredictionCursorsRef.current.delete(cursor)
-      setDefectPredictionError(error instanceof Error ? error.message : "불량 전이 예측 데이터를 불러오지 못했습니다.")
+      setDefectPredictionError(error instanceof Error ? error.message : "遺덈웾 ?꾩씠 ?덉륫 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       isDefectPredictionLoadingRef.current = false
       setIsDefectPredictionLoading(false)
@@ -1093,7 +1251,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       if (initializedDefectCauseVehicleRef.current !== requestKey) return
       requestedDefectCauseCursorsRef.current.delete(cursor)
-      setDefectCauseError(error instanceof Error ? error.message : "SHAP 원인 분석 데이터를 불러오지 못했습니다.")
+      setDefectCauseError(error instanceof Error ? error.message : "SHAP ?먯씤 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       if (initializedDefectCauseVehicleRef.current === requestKey) {
         isDefectCauseLoadingRef.current = false
@@ -1127,14 +1285,7 @@ export function useManufacturingDashboard() {
     let ignore = false
 
     const fetchEquipmentOperationRate = async () => {
-      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
-      if (!accessToken) {
-        if (!ignore) {
-          setOperationRateByProcess({})
-        }
-        return
-      }
-
+      setOperationRateStatus("loading")
       try {
         const result: EquipmentOperationRateData = await getEquipmentOperationRate()
         const items = Array.isArray(result?.items) ? result.items : []
@@ -1150,12 +1301,14 @@ export function useManufacturingDashboard() {
 
         if (!ignore) {
           setOperationRateByProcess(nextOperationRateByProcess)
+          setOperationRateStatus("success")
         }
       } catch (error) {
         console.error("Failed to load equipment operation rate", error)
 
         if (!ignore) {
           setOperationRateByProcess({})
+          setOperationRateStatus("error")
         }
       }
     }
@@ -1234,7 +1387,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       console.error("Failed to load paint dashboard", error)
       setPaintDashboard(emptyPaintDashboard)
-      setPaintDashboardError("도장 대시보드 데이터를 불러오지 못했습니다.")
+      setPaintDashboardError("?꾩옣 ??쒕낫???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsPaintDashboardLoading(false)
     }
@@ -1252,7 +1405,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       console.error("Failed to load assembly dashboard", error)
       setAssemblyDashboard(emptyAssemblyDashboard)
-      setAssemblyDashboardError("조립 대시보드 데이터를 불러오지 못했습니다.")
+      setAssemblyDashboardError("議곕┰ ??쒕낫???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsAssemblyDashboardLoading(false)
     }
@@ -1277,7 +1430,7 @@ export function useManufacturingDashboard() {
         console.error("Failed to load paint available dates", error)
         if (!ignore) {
           setPaintAvailableDates([])
-          setPaintDatesError("도장 데이터 날짜 목록을 불러오지 못했습니다.")
+          setPaintDatesError("?꾩옣 ?곗씠???좎쭨 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??")
         }
       } finally {
         if (!ignore) {
@@ -1313,7 +1466,7 @@ export function useManufacturingDashboard() {
         console.error("Failed to load assembly available dates", error)
         if (!ignore) {
           setAssemblyAvailableDates([])
-          setAssemblyDatesError("조립 데이터 날짜 목록을 불러오지 못했습니다.")
+          setAssemblyDatesError("議곕┰ ?곗씠???좎쭨 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??")
         }
       } finally {
         if (!ignore) {
@@ -1385,7 +1538,7 @@ export function useManufacturingDashboard() {
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      const drag = bodyChartDragRef.current
+      const drag = bodyRobotChartDragRef.current
       if (!drag || event.pointerId !== drag.pointerId) return
 
       event.preventDefault()
@@ -1393,15 +1546,15 @@ export function useManufacturingDashboard() {
       const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
       const maxStartIndex = Math.max(0, sourceBodyData.length - BODY_CHART_WINDOW_SIZE)
 
-      setBodyChartStartIndex(
+      setBodyRobotChartStartIndex(
         Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
       )
     }
 
     const handlePointerEnd = (event: PointerEvent) => {
-      if (bodyChartDragRef.current?.pointerId !== event.pointerId) return
-      bodyChartDragRef.current = null
-      setIsBodyChartDragging(false)
+      if (bodyRobotChartDragRef.current?.pointerId !== event.pointerId) return
+      bodyRobotChartDragRef.current = null
+      setIsBodyRobotChartDragging(false)
     }
 
     window.addEventListener("pointermove", handlePointerMove, { passive: false })
@@ -1414,6 +1567,38 @@ export function useManufacturingDashboard() {
       window.removeEventListener("pointercancel", handlePointerEnd)
     }
   }, [sourceBodyData.length])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = bodyFrequencyChartDragRef.current
+      if (!drag || event.pointerId !== drag.pointerId) return
+
+      event.preventDefault()
+      const pixelsPerPoint = Math.max(5, drag.width / (BODY_CHART_WINDOW_SIZE - 1))
+      const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
+      const maxStartIndex = Math.max(0, sourceBodyFrequencyData.length - BODY_CHART_WINDOW_SIZE)
+
+      setBodyFrequencyChartStartIndex(
+        Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
+      )
+    }
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (bodyFrequencyChartDragRef.current?.pointerId !== event.pointerId) return
+      bodyFrequencyChartDragRef.current = null
+      setIsBodyFrequencyChartDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
+    window.addEventListener("pointerup", handlePointerEnd)
+    window.addEventListener("pointercancel", handlePointerEnd)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerEnd)
+      window.removeEventListener("pointercancel", handlePointerEnd)
+    }
+  }, [sourceBodyFrequencyData.length])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1483,6 +1668,8 @@ export function useManufacturingDashboard() {
     pressDisplayAvailableDates,
     handlePressDateChange,
     pressDisplayData,
+    pressRiskTrendData,
+    visiblePressRiskData,
     isPressAnalysisLoading,
     pressAnalysisError,
     isPressChartHovered,
@@ -1499,10 +1686,13 @@ export function useManufacturingDashboard() {
     isBodyAnalysisLoading,
     bodyAnalysisError,
     isBodyChartHovered,
-    isBodyChartDragging,
-    handleBodyChartPointerDown,
+    isBodyRobotChartDragging,
+    isBodyFrequencyChartDragging,
+    handleBodyRobotChartPointerDown,
+    handleBodyFrequencyChartPointerDown,
     setIsBodyChartHovered,
-    visibleBodyData,
+    visibleBodyRobotData,
+    visibleBodyFrequencyData,
     bodyAnalysis,
     paintKpis,
     selectedPaintDate,
@@ -1548,3 +1738,4 @@ export function useManufacturingDashboard() {
     pressChartWindowSize: PRESS_CHART_WINDOW_SIZE,
   }
 }
+

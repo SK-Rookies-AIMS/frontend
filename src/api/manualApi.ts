@@ -1,25 +1,32 @@
+import { getStoredAccessToken } from "./authStorage"
+import type { ManualApiResponse } from "@/types/manual"
+
 const BASE_URL = "/api/ai"
 
-export async function getCurrentManual() {
-    const token = sessionStorage.getItem("aims-auth-accessToken");
+export async function getCurrentManual(eventId?: string | number): Promise<ManualApiResponse> {
+  const token = getStoredAccessToken()
 
-    if (!token) {
-        throw new Error("로그인 토큰이 없습니다.");
-    }
+  if (!token) {
+    throw new Error("Login token is missing.")
+  }
 
-    const response = await fetch(
-        `${BASE_URL}/manual`,
-        {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        }
-    );
+  const url = new URL(`${BASE_URL}/manual`, window.location.origin)
+  if (eventId !== undefined && eventId !== null && String(eventId).trim() !== "") {
+    url.searchParams.set("eventId", String(eventId))
+  }
 
-    if (!response.ok) {
-        throw new Error("AI Manual 조회 실패");
-    }
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
 
-    return response.json();
+  const text = await response.text()
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch AI manual (${response.status}): ${text}`)
+  }
+
+  return text ? (JSON.parse(text) as ManualApiResponse) : ({} as ManualApiResponse)
 }
