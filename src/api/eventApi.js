@@ -8,7 +8,7 @@ export const eventApi = {
         size: String(size),
         ...filters,
       }).toString();
-      const response = await axiosInstance.get(`/api/event?${params}`);
+      const response = await axiosInstance.get(`/event?${params}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -16,7 +16,7 @@ export const eventApi = {
     }
   },getEventsBySeverity: async (severity, page = 0, size = 5) => {
     try {
-      const response = await axiosInstance.get(`/api/event?severity=${severity}&page=${page}&size=${size}`);
+      const response = await axiosInstance.get(`/event?severity=${severity}&page=${page}&size=${size}`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching events by severity (${severity}):`, error);
@@ -25,7 +25,7 @@ export const eventApi = {
   },
   getEventByLogNo: async (logNo) => {
     try {
-      const response = await axiosInstance.get(`/api/event/${logNo}`);
+      const response = await axiosInstance.get(`/event/${logNo}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching event by logNo:', error);
@@ -34,7 +34,7 @@ export const eventApi = {
   },
   getEventByEventId: async (eventId) => {
     try {
-      const response = await axiosInstance.get(`/api/event/by-event-id/${eventId}`);
+      const response = await axiosInstance.get(`/event/by-event-id/${eventId}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching event by eventId:', error);
@@ -49,7 +49,7 @@ export const eventApi = {
    */
   updateEventAction: async (logNo, actionStatus, actionBy = null, reason = null) => {
     try {
-      const response = await axiosInstance.patch(`/api/event/${logNo}/action`, {
+      const response = await axiosInstance.patch(`/event/${logNo}/action`, {
         actionStatus,
         actionBy,
         reason,
