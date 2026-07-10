@@ -85,8 +85,43 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
   const renderPressSeverityDot = (props: any) => {
     const { cx, cy, payload } = props
     const severity = payload?.severity
+    if (payload?.countIncreaseYn === false) {
+      return <circle cx={cx} cy={cy} r={4.5} fill="#0f172a" stroke="#ef4444" strokeWidth={2.2} />
+    }
     if (severity !== "WARNING" && severity !== "CRITICAL") return null
     return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
+  }
+
+  const renderPressTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+
+    const row = payload[0]?.payload ?? {}
+    const isCountIncreaseMissing = row.countIncreaseYn === false
+
+    return (
+      <div
+        className="rounded-lg border border-border bg-popover px-4 py-3 text-sm shadow-xl"
+        style={{
+          color: "var(--popover-foreground)",
+          backgroundColor: "var(--popover)",
+        }}
+      >
+        <p className="mb-2 font-semibold text-base">이벤트 시각 {label}</p>
+        {isCountIncreaseMissing && (
+          <p className="mb-2 text-base font-extrabold text-destructive">생산량 미증가</p>
+        )}
+        <div className="space-y-1.5">
+          {payload.map((item: any) => (
+            <div key={item.dataKey} className="flex items-center justify-between gap-6 text-sm">
+              <span className="font-medium" style={{ color: item.color ?? "var(--popover-foreground)" }}>{item.name}</span>
+              <span className="font-semibold">
+                {Number(item.value).toFixed(1)} sec
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -143,7 +178,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-0.5 bg-warning" />
-                      <span>사이클 지연</span>
+                      <span>최대 Cycle Time 지연</span>
                     </div>
                   </div>
                   {pressDisplayData.length === 0 ? (
@@ -196,19 +231,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                             }}
                           />
                           <Tooltip
-                            labelFormatter={(label: string) => {
-                              // label은 dateTime 필드 값 ("YYYY-MM-DD HH:mm:ss" 또는 "YYYY-MM-DD HH:mm")
-                              // 백엔드 eventTime과 일치하는 형식으로 표시
-                              return `이벤트 시각 ${label}`
-                            }}
-                            formatter={(value, name) => [`${Number(value).toFixed(1)} sec`, name]}
-                            contentStyle={{
-                              backgroundColor: "var(--popover)",
-                              border: "1px solid var(--border)",
-                              borderRadius: 8,
-                              color: "var(--popover-foreground)",
-                            }}
-                            labelStyle={{ color: "var(--popover-foreground)" }}
+                            content={renderPressTooltip}
                             wrapperStyle={{
                               visibility: isPressChartHovered && !isPressChartDragging ? "visible" : "hidden",
                               pointerEvents: "none",
