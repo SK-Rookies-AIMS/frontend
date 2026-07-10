@@ -1,188 +1,92 @@
-import { useEffect, useRef, useState } from "react";
-import { Client } from "@stomp/stompjs";
+import { useEffect, useRef, useState } from "react"
+import { Client } from "@stomp/stompjs"
 
-import { AgvOperationResponse } from "@/types/agv";
+import { AgvOperationResponse } from "@/types/agv"
 
 import {
     ProcessFlowAgv,
     toProcessFlowAgvs,
-} from "@/lib/agv-mapper";
+} from "@/lib/agv-mapper"
 
-const WS_URL =
-    import.meta.env.VITE_WS_URL ??
-    "ws://localhost:8081/ws";
+const WS_BASE_URL =
+    import.meta.env.VITE_WS_BASE_URL ??
+    `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
+
+const WS_URL = `${WS_BASE_URL}/ws`
 
 export function useAgvWebsocket() {
-
-    const [agvs, setAgvs] =
-        useState<ProcessFlowAgv[]>([]);
-
-    const latestDtos =
-        useRef<AgvOperationResponse[]>([]);
-
-    const clientRef =
-        useRef<Client | null>(null);
+    const [agvs, setAgvs] = useState<ProcessFlowAgv[]>([])
+    const latestDtos = useRef<AgvOperationResponse[]>([])
+    const clientRef = useRef<Client | null>(null)
 
     async function loadInitialAgvs() {
-
         try {
-
-            const response =
-                await fetch(
-                    "/api/main/process-flow",
-                    {
-                        credentials: "include",
-                    }
-                );
+            const response = await fetch("/api/main/process-flow", {
+                credentials: "include",
+            })
 
             if (!response.ok) {
-
-                console.error(
-                    "[AGV] 초기 조회 실패",
-                    response.status
-                );
-
-                return;
+                console.error("[AGV] initial fetch failed", response.status)
+                return
             }
 
-            const body =
-                await response.json();
-
-            latestDtos.current =
-                body.data?.agvs ?? [];
-
+            const body = await response.json()
+            latestDtos.current = body.data?.agvs ?? []
         } catch (e) {
-
-            console.error(
-                "[AGV] 초기 조회 실패",
-                e
-            );
-
+            console.error("[AGV] initial fetch failed", e)
         }
-
     }
 
     useEffect(() => {
-
-        let animationId = 0;
+        let animationId = 0
 
         const connect = async () => {
+            await loadInitialAgvs()
 
-            await loadInitialAgvs();
+            const client = new Client({
+                brokerURL: WS_URL,
+                reconnectDelay: 3000,
+                onConnect: () => {
+                    console.log("[WS] connected")
 
-            const client =
-                new Client({
+                    client.subscribe("/topic/agv", (message) => {
+                        try {
+                            const body = JSON.parse(message.body)
+                            latestDtos.current = body as AgvOperationResponse[]
+                        } catch (e) {
+                            console.error(e)
+                        }
+                    })
+                },
+                onDisconnect: () => {
+                    console.log("[WS] disconnected")
+                },
+                onStompError: (frame) => {
+                    console.error(frame)
+                },
+                onWebSocketError: (e) => {
+                    console.error(e)
+                },
+            })
 
-                    brokerURL: WS_URL,
+            client.activate()
+            clientRef.current = client
+        }
 
-                    reconnectDelay: 3000,
-
-                    onConnect: () => {
-
-                        console.log(
-                            "[WS] connected"
-                        );
-
-                        client.subscribe(
-                            "/topic/agv",
-                            message => {
-
-                                try {
-
-                                    const body =
-                                        JSON.parse(
-                                            message.body
-                                        );
-
-                                    latestDtos.current =
-                                        body as AgvOperationResponse[];
-
-                                } catch (e) {
-
-                                    console.error(
-                                        e
-                                    );
-
-                                }
-
-                            }
-                        );
-
-                    },
-
-                    onDisconnect: () => {
-
-                        console.log(
-                            "[WS] disconnected"
-                        );
-
-                    },
-
-                    onStompError: frame => {
-
-                        console.error(
-                            frame
-                        );
-
-                    },
-
-                    onWebSocketError: e => {
-
-                        console.error(
-                            e
-                        );
-
-                    }
-
-                });
-
-            client.activate();
-
-            clientRef.current =
-                client;
-
-        };
-
-        connect();
+        connect()
 
         const animate = () => {
+            setAgvs(toProcessFlowAgvs(latestDtos.current, Date.now()))
+            animationId = requestAnimationFrame(animate)
+        }
 
-            setAgvs(
-
-                toProcessFlowAgvs(
-
-                    latestDtos.current,
-
-                    Date.now()
-
-                )
-
-            );
-
-            animationId =
-                requestAnimationFrame(
-                    animate
-                );
-
-        };
-
-        animationId =
-            requestAnimationFrame(
-                animate
-            );
+        animationId = requestAnimationFrame(animate)
 
         return () => {
+            cancelAnimationFrame(animationId)
+            clientRef.current?.deactivate()
+        }
+    }, [])
 
-            cancelAnimationFrame(
-                animationId
-            );
-
-            clientRef.current?.deactivate();
-
-        };
-
-    }, []);
-
-    return agvs;
-
+    return agvs
 }
