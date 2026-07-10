@@ -1,4 +1,4 @@
-﻿import React from "react"
+﻿import React, { useMemo } from "react"
 import { ChevronDown, AlertTriangle, CheckCircle } from "lucide-react"
 import {
   LineChart,
@@ -124,6 +124,23 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
     )
   }
 
+  const pressYAxisDomain = useMemo<[number, number]>(() => {
+    if (pressDisplayData.length === 0) return [0, 1]
+
+    const values = pressDisplayData.flatMap((item: any) => [
+      Number(item.actual_cycle_time_sec),
+      Number(item.target_cycle_time_sec),
+      Number(item.cycle_time_gap_sec),
+    ])
+
+    const minValue = Math.min(...values)
+    const maxValue = Math.max(...values)
+    const spread = maxValue - minValue
+    const padding = spread > 0 ? Math.max(spread * 0.15, 0.5) : 1
+
+    return [Math.floor(minValue - padding), Math.ceil(maxValue + padding)]
+  }, [pressDisplayData])
+
   return (
     <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
@@ -217,7 +234,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                             stroke="#64748b"
                             tickFormatter={formatChartTick}
                           />
-                          <YAxis tick={{ fontSize: 10 }} stroke="#64748b" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={pressYAxisDomain} />
                           <ReferenceLine
                             y={latestPressDisplayData.target_cycle_time_sec}
                             stroke="#22c55e"
@@ -283,3 +300,4 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
               </div>
   );
 }
+

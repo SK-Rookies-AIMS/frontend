@@ -1,4 +1,4 @@
-﻿import React from "react"
+﻿import React, { useMemo } from "react"
 import { AlertTriangle, CheckCircle } from "lucide-react"
 import {
   Bar,
@@ -54,6 +54,20 @@ function getZoneColorByBand(band: string) {
 }
 
 function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
+  const chart = Array.isArray(bodyAnalysis?.frequencyZoneChart) ? bodyAnalysis.frequencyZoneChart : null
+  if (chart && chart.length > 0) {
+    return chart
+      .map((entry: any, index: number) => ({
+        zone: entry.zone ?? `Zone ${index + 1}`,
+        range: entry.range ?? "",
+        description: entry.description ?? null,
+        avg: Number(entry.avg ?? 0),
+        max: Number(entry.max ?? 0),
+        color: ZONE_PALETTE[Math.min(index, ZONE_PALETTE.length - 1)].color,
+      }))
+      .filter((entry) => entry.zone)
+  }
+
   const analysis = bodyAnalysis?.frequencyZoneAnalysis
   if (!analysis) return []
 
@@ -96,7 +110,7 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
   ] as const
 
   return zones
-    .filter((entry) => entry.source)
+    .filter((entry) => entry.source !== undefined && entry.source !== null)
     .map((entry) => ({
       zone: entry.zone,
       range: entry.range,
@@ -134,11 +148,54 @@ function formatTrendTooltip(
   return [`${Number(value).toFixed(6)} ${labels.unit}`, labels.valueLabel]
 }
 
+function formatFrequencySpectrumTooltip(
+  payload: Array<{ dataKey?: string; value?: number; color?: string; name?: string }>,
+) {
+  const current = payload.find((item) => item.dataKey === "value")
+  const row = payload[0]?.payload as any
+  const warningValue = Number(row?.warningValue ?? 0.015)
+  const dangerValue = Number(row?.dangerValue ?? 0.03)
+
+  return (
+    <div
+      className="rounded-lg border border-border bg-popover px-3 py-2 shadow-xl"
+      style={{
+        color: "var(--popover-foreground)",
+        backgroundColor: "var(--popover)",
+      }}
+    >
+      <div className="space-y-1 text-xs">
+        {current && (
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium" style={{ color: "#22c55e" }}>실측값</span>
+            <span className="font-semibold" style={{ color: "#86efac" }}>
+              {Number(current.value ?? 0).toFixed(6)}
+            </span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-medium" style={{ color: "#facc15" }}>경고선</span>
+          <span className="font-semibold" style={{ color: "#fde68a" }}>
+            {warningValue.toFixed(6)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-medium" style={{ color: "#f97316" }}>위험선</span>
+          <span className="font-semibold" style={{ color: "#fdba74" }}>
+            {dangerValue.toFixed(6)}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TrendChart({
   title,
   subtitle,
   unit,
   data,
+  yDomainMax,
   valueLabel,
   secondaryValueLabel,
   valueColor,
@@ -152,6 +209,7 @@ function TrendChart({
   subtitle?: string
   unit: string
   data: TrendPoint[]
+  yDomainMax?: number
   valueLabel: string
   secondaryValueLabel?: string
   valueColor: string
@@ -162,7 +220,7 @@ function TrendChart({
   onHoverChange: (hovered: boolean) => void
 }) {
   const maxValue = getMaxFromTrend(data)
-  const yDomainMax = maxValue * 1.15
+  const resolvedYDomainMax = yDomainMax ?? maxValue * 1.15
   const showSecondary = data.some((row) => row.secondaryValue !== undefined && row.secondaryValue !== null)
   const warningLine = data.find((row) => row.warning_line !== undefined && row.warning_line !== null)?.warning_line
   const dangerLine = data.find((row) => row.danger_line !== undefined && row.danger_line !== null)?.danger_line
@@ -234,6 +292,7 @@ function TrendChart({
         className={`select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
         style={{ touchAction: "none" }}
         onPointerDownCapture={onPointerDown}
+        onPointerDown={onPointerDown}
         onMouseEnter={() => onHoverChange(true)}
         onMouseLeave={() => onHoverChange(false)}
       >
@@ -250,7 +309,7 @@ function TrendChart({
             />
             <YAxis
               orientation="left"
-              domain={[0, yDomainMax]}
+              domain={[0, resolvedYDomainMax]}
               tick={{ fontSize: 10 }}
               stroke={valueColor}
               tickFormatter={(value) => Number(value).toFixed(3)}
@@ -337,20 +396,37 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
     isBodyAnalysisLoading,
     bodyAnalysisError,
     isBodyChartHovered,
-    isBodyChartDragging,
-    handleBodyChartPointerDown,
+    isBodyRobotChartDragging,
+    isBodyFrequencyChartDragging,
+    handleBodyRobotChartPointerDown,
+    handleBodyFrequencyChartPointerDown,
     setIsBodyChartHovered,
     visibleBodyRobotData,
     visibleBodyFrequencyData,
+    bodyRobotTrendDomainMax,
+    bodyFrequencyTrendDomainMax,
     bodyAnalysis,
   } = dashboard
 
   const frequencyZones = React.useMemo(() => normalizeFrequencyZones(bodyAnalysis), [bodyAnalysis])
   const frequencySpectrum = bodyAnalysis?.frequencyChart ?? []
-
-  const maxFrequencySpectrumValue = React.useMemo(() => {
-    if (!frequencySpectrum.length) return 0.01
-    return Math.max(...frequencySpectrum.map((row: any) => Number(row.value ?? 0)), 0.01)
+  const frequencySpectrumBarDomainMax = React.useMemo(() => {
+    const values = frequencySpectrum.flatMap((row: any) => [
+      Number(row.value ?? 0),
+      Number(row.avg ?? 0),
+      Number(row.max ?? 0),
+    ])
+    const maxValue = Math.max(...values, 0.005)
+    return Math.max(0.0055, maxValue * 1.25)
+  }, [frequencySpectrum])
+  const frequencySpectrumThresholdDomainMax = React.useMemo(() => {
+    const values = frequencySpectrum.flatMap((row: any) => [
+      Number(row.warningValue ?? 0.015),
+      Number(row.dangerValue ?? 0.03),
+      Number(row.value ?? 0),
+      Number(row.max ?? 0),
+    ])
+    return Math.max(0.0315, ...values)
   }, [frequencySpectrum])
 
   const latestBodyRiskScore = Number(latestBodyData.risk_score ?? 0)
@@ -471,11 +547,12 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           title="로봇 진동 가속도 추이"
           unit="g"
           data={visibleBodyRobotData}
+          yDomainMax={bodyRobotTrendDomainMax}
           valueLabel="로봇 진동 가속도"
           valueColor="#00d4ff"
           hovered={isBodyRobotChartHovered}
-          dragging={isBodyChartDragging}
-          onPointerDown={handleBodyChartPointerDown}
+          dragging={isBodyRobotChartDragging}
+          onPointerDown={handleBodyRobotChartPointerDown}
           onHoverChange={setIsBodyRobotChartHovered}
         />
 
@@ -483,13 +560,14 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           title="주파수 피크값 추이"
           unit="mm/s"
           data={visibleBodyFrequencyData}
+          yDomainMax={bodyFrequencyTrendDomainMax}
           valueLabel="피크 진동값"
           secondaryValueLabel="피크 RMS"
           valueColor="#22c55e"
           secondaryValueColor="#38bdf8"
           hovered={isBodyFrequencyChartHovered}
-          dragging={isBodyChartDragging}
-          onPointerDown={handleBodyChartPointerDown}
+          dragging={isBodyFrequencyChartDragging}
+          onPointerDown={handleBodyFrequencyChartPointerDown}
           onHoverChange={setIsBodyFrequencyChartHovered}
         />
 
@@ -509,33 +587,50 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   textAnchor="end"
                   dy={10}
                 />
-                <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={[0, maxFrequencySpectrumValue * 1.35]} />
-                <Tooltip
-                  formatter={(value, name) => [
-                    `${Number(value).toFixed(6)}`,
-                    name === "value" ? "실측값" : "목표/기준값",
-                  ]}
-                  contentStyle={{
-                    backgroundColor: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    color: "var(--popover-foreground)",
-                  }}
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10 }}
+                  stroke="#64748b"
+                  domain={[0, frequencySpectrumBarDomainMax]}
+                  tickFormatter={(value) => Number(value).toFixed(6)}
                 />
-                <Bar dataKey="value" name="실측값" radius={[2, 2, 0, 0]}>
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  hide
+                  domain={[0, frequencySpectrumThresholdDomainMax]}
+                />
+                <Tooltip content={({ payload }) => formatFrequencySpectrumTooltip((payload ?? []) as any)} />
+                <Bar yAxisId="left" dataKey="value" name="실측값" radius={[2, 2, 0, 0]}>
                   {frequencySpectrum.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={getZoneColorByBand(entry?.band)} />
                   ))}
                 </Bar>
-                <Line
-                  isAnimationActive={false}
-                  type="step"
-                  dataKey="targetValue"
-                  stroke="#94a3b8"
+                <ReferenceLine
+                  yAxisId="right"
+                  y={0.015}
+                  stroke="#facc15"
                   strokeDasharray="5 5"
-                  name="목표/기준값"
-                  dot={false}
-                  strokeWidth={2}
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: "경고선 0.015000",
+                    position: "insideTopRight",
+                    fill: "#facc15",
+                    fontSize: 10,
+                  }}
+                />
+                <ReferenceLine
+                  yAxisId="right"
+                  y={0.03}
+                  stroke="#f97316"
+                  strokeDasharray="5 5"
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: "위험선 0.030000",
+                    position: "insideTopRight",
+                    fill: "#f97316",
+                    fontSize: 10,
+                  }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -572,3 +667,4 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
     </div>
   )
 }
+
