@@ -175,6 +175,23 @@ export default function EventsPage() {
 
   useEffect(() => {
     fetchEvents(currentPage, pageSize)
+
+  const handler = () => {
+    fetchEvents(currentPage, pageSize)
+  }
+
+      window.addEventListener(
+    "page-refresh",
+    handler
+  )
+
+
+  return ()=> {
+    window.removeEventListener(
+      "page-refresh",
+      handler
+    )
+  }
   }, [fetchEvents, currentPage, pageSize])
 
   useEffect(() => {
