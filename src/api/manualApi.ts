@@ -1,23 +1,20 @@
 export async function getCurrentManual() {
-    const token = sessionStorage.getItem("aims-auth-accessToken");
+    const token = sessionStorage.getItem("aims-auth-accessToken")
 
     if (!token) {
-        throw new Error("로그인 토큰이 없습니다.");
+        throw new Error("Login token is missing.")
     }
 
-    const response = await fetch(
-        "http://localhost:8000/manual",
-        {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        }
-    );
+    const response = await fetch("/api/ai/manual", {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+    })
 
     if (!response.ok) {
-        throw new Error("AI Manual 조회 실패");
+        throw new Error("Failed to fetch AI manual")
     }
 
-    return response.json();
+    return response.json()
 }
