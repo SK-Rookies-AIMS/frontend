@@ -1,92 +1,100 @@
-import { useEffect, useRef, useState } from "react"
-import { Client } from "@stomp/stompjs"
+import { useEffect, useRef, useState } from "react";
+import SockJS from "sockjs-client";
+import { Client } from "@stomp/stompjs";
 
-import { AgvOperationResponse } from "@/types/agv"
-
+import { AgvOperationResponse } from "@/types/agv";
 import {
     ProcessFlowAgv,
     toProcessFlowAgvs,
-} from "@/lib/agv-mapper"
+} from "@/lib/agv-mapper";
 
-const WS_BASE_URL =
-    import.meta.env.VITE_WS_BASE_URL ??
-    `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`
-
-const WS_URL = `${WS_BASE_URL}/ws`
+const WS_URL =
+    import.meta.env.VITE_SOCKJS_URL ??
+    `${window.location.origin}/ws`;
 
 export function useAgvWebsocket() {
-    const [agvs, setAgvs] = useState<ProcessFlowAgv[]>([])
-    const latestDtos = useRef<AgvOperationResponse[]>([])
-    const clientRef = useRef<Client | null>(null)
+    const [agvs, setAgvs] = useState<ProcessFlowAgv[]>([]);
+    const latestDtos = useRef<AgvOperationResponse[]>([]);
+    const clientRef = useRef<Client | null>(null);
 
     async function loadInitialAgvs() {
         try {
             const response = await fetch("/api/main/process-flow", {
                 credentials: "include",
-            })
+            });
 
             if (!response.ok) {
-                console.error("[AGV] initial fetch failed", response.status)
-                return
+                console.error("[AGV] initial fetch failed", response.status);
+                return;
             }
 
-            const body = await response.json()
-            latestDtos.current = body.data?.agvs ?? []
+            const body = await response.json();
+            latestDtos.current = body.data?.agvs ?? [];
         } catch (e) {
-            console.error("[AGV] initial fetch failed", e)
+            console.error("[AGV] initial fetch failed", e);
         }
     }
 
     useEffect(() => {
-        let animationId = 0
+        let animationId = 0;
 
         const connect = async () => {
-            await loadInitialAgvs()
+            await loadInitialAgvs();
 
             const client = new Client({
-                brokerURL: WS_URL,
+                webSocketFactory: () => new SockJS(WS_URL),
+
                 reconnectDelay: 3000,
+
+                debug: (str) => {
+                    console.log("[STOMP]", str);
+                },
+
                 onConnect: () => {
-                    console.log("[WS] connected")
+                    console.log("[WS] connected");
 
                     client.subscribe("/topic/agv", (message) => {
                         try {
-                            const body = JSON.parse(message.body)
-                            latestDtos.current = body as AgvOperationResponse[]
+                            latestDtos.current = JSON.parse(
+                                message.body
+                            ) as AgvOperationResponse[];
                         } catch (e) {
-                            console.error(e)
+                            console.error(e);
                         }
-                    })
+                    });
                 },
+
                 onDisconnect: () => {
-                    console.log("[WS] disconnected")
+                    console.log("[WS] disconnected");
                 },
+
                 onStompError: (frame) => {
-                    console.error(frame)
+                    console.error(frame);
                 },
+
                 onWebSocketError: (e) => {
-                    console.error(e)
+                    console.error(e);
                 },
-            })
+            });
 
-            client.activate()
-            clientRef.current = client
-        }
+            client.activate();
+            clientRef.current = client;
+        };
 
-        connect()
+        connect();
 
         const animate = () => {
-            setAgvs(toProcessFlowAgvs(latestDtos.current, Date.now()))
-            animationId = requestAnimationFrame(animate)
-        }
+            setAgvs(toProcessFlowAgvs(latestDtos.current, Date.now()));
+            animationId = requestAnimationFrame(animate);
+        };
 
-        animationId = requestAnimationFrame(animate)
+        animationId = requestAnimationFrame(animate);
 
         return () => {
-            cancelAnimationFrame(animationId)
-            clientRef.current?.deactivate()
-        }
-    }, [])
+            cancelAnimationFrame(animationId);
+            clientRef.current?.deactivate();
+        };
+    }, []);
 
-    return agvs
+    return agvs;
 }
