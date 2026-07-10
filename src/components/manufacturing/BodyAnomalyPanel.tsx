@@ -460,7 +460,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
             ) : bodyAnalysis.alert?.reasons && bodyAnalysis.alert.reasons.length > 0 ? (
               bodyAnalysis.alert.reasons.map((reason: string) => <li key={reason}>• {reason}</li>)
             ) : (
-              <li>이상 사유가 존재하지 않습니다.</li>
+              <li>이상 징후가 감지되지 않았습니다</li>
             )}
           </ul>
         </div>
