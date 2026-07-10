@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   BOTTLENECK_INITIAL_CURSOR,
   BOTTLENECK_PAGE_SIZE,
@@ -43,20 +43,20 @@ const processStages = [
 const defectPredictionData = [
   { vinId: "VIN-001245", currentProcess: "차체", predictedProcess: "도장 (L3)", probability: 78, stepsAhead: "3단계 후" },
   { vinId: "VIN-001248", currentProcess: "프레스", predictedProcess: "차체 (S12)", probability: 72, stepsAhead: "2단계 후" },
-  { vinId: "VIN-001250", currentProcess: "도장", predictedProcess: "의장 (A1)", probability: 69, stepsAhead: "3단계 후" },
+  { vinId: "VIN-001250", currentProcess: "도장", predictedProcess: "조립 (A1)", probability: 69, stepsAhead: "3단계 후" },
   { vinId: "VIN-001253", currentProcess: "차체", predictedProcess: "도장 (L3)", probability: 61, stepsAhead: "3단계 후" },
   { vinId: "VIN-001255", currentProcess: "프레스", predictedProcess: "차체 (S12)", probability: 58, stepsAhead: "2단계 후" },
 ]
 
 const aiAnalysisFactors = [
-  { name: "S2 Station 통과 지연 +12초", impact: 0.38 },
-  { name: "L3 온도 편차 +7°C", impact: 0.24 },
+  { name: "S2 Station 압력 지연 +12초", impact: 0.38 },
+  { name: "L3 온도 상승 +7°C", impact: 0.24 },
   { name: "프레스 공정 Cycle Time 증가", impact: 0.19 },
-  { name: "과거 유사 불량 사례 34건 존재", impact: 0.11 },
-  { name: "센서 통신 지연 (3ms)", impact: 0.08 },
+  { name: "고객 불량 신고 34건 존재", impact: 0.11 },
+  { name: "로봇 통신 지연(3ms)", impact: 0.08 },
 ]
 
-// 백엔드 연동 전 press_analysis_result 형태를 반영한 최신 5분 기준 목 데이터
+// 諛깆뿏???곕룞 ??press_analysis_result ?뺥깭瑜?諛섏쁺??理쒖떊 5遺?湲곗? 紐??곗씠??
 const latestPressAnchorData = [
   { time: "12:30", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 11.9, cycle_time_gap_sec: -0.1, timestamp_delay_sec: 0.2, risk_score: 16, overall_risk_score: 20 },
   { time: "12:35", target_cycle_time_sec: 12.0, actual_cycle_time_sec: 12.0, cycle_time_gap_sec: 0.0, timestamp_delay_sec: 0.3, risk_score: 18, overall_risk_score: 22 },
@@ -97,24 +97,24 @@ const formatBackendTimestamp = (timestamp: string) => {
   const normalized = timestamp.replace("T", " ")
   const matched = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/)
   if (matched) return `${matched[1]} ${matched[2]}`
-  // 초가 없는 경우 HH:mm까지만 추출
+  // 珥덇? ?녿뒗 寃쎌슦 HH:mm源뚯?留?異붿텧
   const matchedShort = normalized.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
   return matchedShort ? `${matchedShort[1]} ${matchedShort[2]}` : normalized
 }
 
 const formatDelayTime = (seconds: number): string => {
   if (seconds >= 3600) {
-    const hours = seconds / 3600;
-    return `${Number(hours.toFixed(1))}시간`;
+    const hours = seconds / 3600
+    return `${Number(hours.toFixed(1))}시간`
   }
   if (seconds >= 60) {
-    const minutes = seconds / 60;
-    return `${Number(minutes.toFixed(1))}분`;
+    const minutes = seconds / 60
+    return `${Number(minutes.toFixed(1))}분`
   }
-  return `${Number(seconds.toFixed(1))}초`;
+  return `${Number(seconds.toFixed(1))}초`
 }
 
-// 드래그 시 전날 데이터까지 조회할 수 있도록 이전 24시간의 5분 기준값을 만든다.
+// ?쒕옒洹????꾨궇 ?곗씠?곌퉴吏 議고쉶?????덈룄濡??댁쟾 24?쒓컙??5遺?湲곗?媛믪쓣 留뚮뱺??
 const historicalPressAnchorData: PressAnchor[] = Array.from({ length: 288 }, (_, index) => {
   const date = new Date(2026, 5, 17, 12, 30 + index * 5)
   const wave = Math.sin(index / 12)
@@ -173,7 +173,7 @@ const latestPressData: PressDataPoint =
       }
 
 const getRiskSeverity = (score: number) => {
-  if (score >= 70) return { label: "심각", className: "text-destructive" }
+  if (score >= 70) return { label: "위험", className: "text-destructive" }
   if (score >= 50) return { label: "경고", className: "text-warning" }
   if (score >= 30) return { label: "주의", className: "text-warning" }
   return { label: "정상", className: "text-success" }
@@ -444,10 +444,10 @@ export function PaintTooltip({
       <p className="mb-2 font-medium">{label}</p>
       <div className="space-y-1 text-muted-foreground">
         <p>event_time: {row.eventTime}</p>
-        <p>불량 점수: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (표시 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
-        <p>표면 품질 점수: {row.surfaceQualityScore.toFixed(1)}</p>
-        <p>도장 두께: {row.thicknessValue.toFixed(1)}</p>
-        <p>위험도: {row.riskScore.toFixed(1)}</p>
+        <p>遺덈웾 ?먯닔: {row.defectScore.toFixed(2)}{row.defectScore <= 1 ? ` (?쒖떆 ${row.defectScoreScaled.toFixed(1)})` : ""}</p>
+        <p>?쒕㈃ ?덉쭏 ?먯닔: {row.surfaceQualityScore.toFixed(1)}</p>
+        <p>?꾩옣 ?먭퍡: {row.thicknessValue.toFixed(1)}</p>
+        <p>?꾪뿕?? {row.riskScore.toFixed(1)}</p>
         {row.visionLabel && <p>vision_label: {row.visionLabel}</p>}
         {row.imagePosition && <p>image_position: {row.imagePosition}</p>}
         {row.thermalStdTemp !== undefined && <p>thermal_std_temp: {row.thermalStdTemp.toFixed(1)}</p>}
@@ -471,15 +471,15 @@ function formatSequence(sequence?: string | null) {
 
 function getAssemblyStatus(severity: string, isAbnormal: boolean, status?: string) {
   if (status) return status
-  if (!isAbnormal) return "정상"
-  if (severity === "CRITICAL") return "위험"
-  if (severity === "WARNING") return "경고"
-  return "이상"
+  if (!isAbnormal) return "?뺤긽"
+  if (severity === "CRITICAL") return "?꾪뿕"
+  if (severity === "WARNING") return "寃쎄퀬"
+  return "?댁긽"
 }
 
 function getStatusBadgeClass(severity: string, isAbnormal: boolean, status?: string, riskScore = 0) {
-  if (status === "위험" || severity === "CRITICAL" || riskScore >= 80) return "bg-destructive/20 text-destructive"
-  if (status === "경고" || severity === "WARNING" || riskScore >= 50) return "bg-warning/20 text-warning"
+  if (status === "?꾪뿕" || severity === "CRITICAL" || riskScore >= 80) return "bg-destructive/20 text-destructive"
+  if (status === "寃쎄퀬" || severity === "WARNING" || riskScore >= 50) return "bg-warning/20 text-warning"
   if (!isAbnormal) return "bg-success/20 text-success"
   return "bg-destructive/20 text-destructive"
 }
@@ -499,8 +499,8 @@ function getAssemblyVehicleKey(row: AssemblyVehicleRow, index = 0) {
 
 function getAssemblySeverityRank(row: AssemblyVehicleRow) {
   const status = `${row.severity ?? ""} ${row.status ?? ""}`.toUpperCase()
-  if (status.includes("DANGER") || status.includes("CRITICAL") || status.includes("위험")) return 2
-  if (status.includes("WARNING") || status.includes("주의") || status.includes("경고")) return 1
+  if (status.includes("DANGER") || status.includes("CRITICAL") || status.includes("?꾪뿕")) return 2
+  if (status.includes("WARNING") || status.includes("二쇱쓽") || status.includes("寃쎄퀬")) return 1
   return 0
 }
 
@@ -535,22 +535,22 @@ function isWarningSeverity(severity: string | null | undefined) {
 }
 
 function severityToRiskSeverity(severity: string | null | undefined, riskScore: number) {
-  if (severity === "CRITICAL") return { label: "심각", className: "text-destructive" }
+  if (severity === "CRITICAL") return { label: "위험", className: "text-destructive" }
   if (severity === "WARNING") return { label: "경고", className: "text-warning" }
   if (severity === "NORMAL") return { label: "정상", className: "text-success" }
   return getRiskSeverity(riskScore)
 }
 
 function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number]): PressDataPoint {
-  // timestamp를 로컬 Date로 파싱하지 않고 백엔드 문자열을 그대로 사용해 시간대 차이를 방지
+  // timestamp瑜?濡쒖뺄 Date濡??뚯떛?섏? ?딄퀬 諛깆뿏??臾몄옄?댁쓣 洹몃?濡??ъ슜???쒓컙? 李⑥씠瑜?諛⑹?
   const dateTime = formatBackendTimestamp(point.timestamp)
-  // dateTime이 "YYYY-MM-DD HH:mm:ss" 형식이므로 getTime을 위한 Date 파싱은 ISO 형식 유지
+  // dateTime??"YYYY-MM-DD HH:mm:ss" ?뺤떇?대?濡?getTime???꾪븳 Date ?뚯떛? ISO ?뺤떇 ?좎?
   const isoForParsing = point.timestamp.includes("T") ? point.timestamp : point.timestamp.replace(" ", "T")
   const date = new Date(isoForParsing)
   const epochMs = Number.isFinite(date.getTime()) ? date.getTime() : NaN
 
   return {
-    // time 필드: HH:mm:ss까지 표시해 백엔드 timestamp와 일치
+    // time ?꾨뱶: HH:mm:ss源뚯? ?쒖떆??諛깆뿏??timestamp? ?쇱튂
     time: dateTime.slice(11, 19),
     dateTime,
     timestamp: epochMs,
@@ -619,12 +619,18 @@ export function useManufacturingDashboard() {
     startIndex: number
     width: number
   } | null>(null)
-  const [bodyChartStartIndex, setBodyChartStartIndex] = useState(
-    0,
-  )
-  const [isBodyChartDragging, setIsBodyChartDragging] = useState(false)
+  const [bodyRobotChartStartIndex, setBodyRobotChartStartIndex] = useState(0)
+  const [bodyFrequencyChartStartIndex, setBodyFrequencyChartStartIndex] = useState(0)
+  const [isBodyRobotChartDragging, setIsBodyRobotChartDragging] = useState(false)
+  const [isBodyFrequencyChartDragging, setIsBodyFrequencyChartDragging] = useState(false)
   const [isBodyChartHovered, setIsBodyChartHovered] = useState(false)
-  const bodyChartDragRef = useRef<{
+  const bodyRobotChartDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startIndex: number
+    width: number
+  } | null>(null)
+  const bodyFrequencyChartDragRef = useRef<{
     pointerId: number
     startX: number
     startIndex: number
@@ -777,7 +783,7 @@ export function useManufacturingDashboard() {
       setPressAnalysis(result)
       setPressChartStartIndex(getLatestChartStartIndex(result.chart?.length ?? 0, PRESS_CHART_WINDOW_SIZE))
     } catch (error) {
-      setPressAnalysisError(error instanceof Error ? error.message : "프레스 이상 탐지 데이터를 불러오지 못했습니다.")
+      setPressAnalysisError(error instanceof Error ? error.message : "?꾨젅???댁긽 ?먯? ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsPressAnalysisLoading(false)
       isFetchingRef.current = false
@@ -856,7 +862,7 @@ export function useManufacturingDashboard() {
       setBodyAnalysis(result)
     } catch (error) {
       console.error("fetchBodyAnalysis error:", error)
-      setBodyAnalysisError(error instanceof Error ? error.message : "차체 이상 탐지 데이터를 불러오지 못했습니다.")
+      setBodyAnalysisError(error instanceof Error ? error.message : "李⑥껜 ?댁긽 ?먯? ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsBodyAnalysisLoading(false)
     }
@@ -865,14 +871,22 @@ export function useManufacturingDashboard() {
   const sourceBodyData = bodyAnalysis ? bodyRobotTrendData : bodyRobotData
   const sourceBodyFrequencyData = bodyAnalysis ? bodyPeakTrendData : bodyRobotData
 
-  const visibleBodyData = sourceBodyData.slice(
-    bodyChartStartIndex,
-    bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+  const bodyRobotTrendDomainMax = 1.5
+  const bodyFrequencyTrendDomainMax = 0.035
+
+  const visibleBodyRobotData = useMemo(
+    () => sourceBodyData.slice(
+      bodyRobotChartStartIndex,
+      bodyRobotChartStartIndex + BODY_CHART_WINDOW_SIZE,
+    ),
+    [sourceBodyData, bodyRobotChartStartIndex],
   )
-  const visibleBodyRobotData = visibleBodyData
-  const visibleBodyFrequencyData = sourceBodyFrequencyData.slice(
-    bodyChartStartIndex,
-    bodyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+  const visibleBodyFrequencyData = useMemo(
+    () => sourceBodyFrequencyData.slice(
+      bodyFrequencyChartStartIndex,
+      bodyFrequencyChartStartIndex + BODY_CHART_WINDOW_SIZE,
+    ),
+    [sourceBodyFrequencyData, bodyFrequencyChartStartIndex],
   )
 
   const bodyAvailableDatesLocal = Array.from(new Set(sourceBodyData.map((item) => item.dateTime.slice(0, 10)))).reverse()
@@ -893,7 +907,8 @@ export function useManufacturingDashboard() {
     const selectedDate = event.target.value
     setSelectedBodyAnalysisDate(selectedDate)
     // show the latest window first; older data is revealed by dragging left
-    setBodyChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+    setBodyRobotChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+    setBodyFrequencyChartStartIndex(getLatestChartStartIndex(sourceBodyFrequencyData.length, BODY_CHART_WINDOW_SIZE))
   }
 
   useEffect(() => {
@@ -905,8 +920,12 @@ export function useManufacturingDashboard() {
   }, [pressDisplayData.length])
 
   useEffect(() => {
-    setBodyChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
+    setBodyRobotChartStartIndex(getLatestChartStartIndex(sourceBodyData.length, BODY_CHART_WINDOW_SIZE))
   }, [sourceBodyData.length])
+
+  useEffect(() => {
+    setBodyFrequencyChartStartIndex(getLatestChartStartIndex(sourceBodyFrequencyData.length, BODY_CHART_WINDOW_SIZE))
+  }, [sourceBodyFrequencyData.length])
 
   const lastChartPoint = sourceBodyData.length > 0
     ? sourceBodyData[sourceBodyData.length - 1]
@@ -954,15 +973,36 @@ export function useManufacturingDashboard() {
   )
 
 
-  const handleBodyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleBodyRobotChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
-    bodyChartDragRef.current = {
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Some browsers can reject pointer capture for synthetic / already-captured pointers.
+    }
+    bodyRobotChartDragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startIndex: bodyChartStartIndex,
+      startIndex: bodyRobotChartStartIndex,
       width: event.currentTarget.getBoundingClientRect().width,
     }
-    setIsBodyChartDragging(true)
+    setIsBodyRobotChartDragging(true)
+  }
+
+  const handleBodyFrequencyChartPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Some browsers can reject pointer capture for synthetic / already-captured pointers.
+    }
+    bodyFrequencyChartDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startIndex: bodyFrequencyChartStartIndex,
+      width: event.currentTarget.getBoundingClientRect().width,
+    }
+    setIsBodyFrequencyChartDragging(true)
   }
 
   const paintKpis = {
@@ -1047,7 +1087,7 @@ export function useManufacturingDashboard() {
           : "-",
       events,
       isBottleneck: mostBottleneckProcess ? stage.name === mostBottleneckProcess : stage.isBottleneck,
-      bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "위험",
+      bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "?꾪뿕",
     }
   })
   const assemblyStartIndex = (assemblyPage - 1) * ASSEMBLY_TABLE_PAGE_SIZE
@@ -1106,7 +1146,7 @@ export function useManufacturingDashboard() {
       setBottleneckCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
       requestedBottleneckCursorsRef.current.delete(cursor)
-      setBottleneckError(error instanceof Error ? error.message : "병목 분석 데이터를 불러오지 못했습니다.")
+      setBottleneckError(error instanceof Error ? error.message : "蹂묐ぉ 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       isBottleneckLoadingRef.current = false
       setIsBottleneckLoading(false)
@@ -1148,7 +1188,7 @@ export function useManufacturingDashboard() {
       setDefectPredictionCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
       requestedDefectPredictionCursorsRef.current.delete(cursor)
-      setDefectPredictionError(error instanceof Error ? error.message : "불량 전이 예측 데이터를 불러오지 못했습니다.")
+      setDefectPredictionError(error instanceof Error ? error.message : "遺덈웾 ?꾩씠 ?덉륫 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       isDefectPredictionLoadingRef.current = false
       setIsDefectPredictionLoading(false)
@@ -1211,7 +1251,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       if (initializedDefectCauseVehicleRef.current !== requestKey) return
       requestedDefectCauseCursorsRef.current.delete(cursor)
-      setDefectCauseError(error instanceof Error ? error.message : "SHAP 원인 분석 데이터를 불러오지 못했습니다.")
+      setDefectCauseError(error instanceof Error ? error.message : "SHAP ?먯씤 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       if (initializedDefectCauseVehicleRef.current === requestKey) {
         isDefectCauseLoadingRef.current = false
@@ -1347,7 +1387,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       console.error("Failed to load paint dashboard", error)
       setPaintDashboard(emptyPaintDashboard)
-      setPaintDashboardError("도장 대시보드 데이터를 불러오지 못했습니다.")
+      setPaintDashboardError("?꾩옣 ??쒕낫???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsPaintDashboardLoading(false)
     }
@@ -1365,7 +1405,7 @@ export function useManufacturingDashboard() {
     } catch (error) {
       console.error("Failed to load assembly dashboard", error)
       setAssemblyDashboard(emptyAssemblyDashboard)
-      setAssemblyDashboardError("조립 대시보드 데이터를 불러오지 못했습니다.")
+      setAssemblyDashboardError("議곕┰ ??쒕낫???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
       setIsAssemblyDashboardLoading(false)
     }
@@ -1390,7 +1430,7 @@ export function useManufacturingDashboard() {
         console.error("Failed to load paint available dates", error)
         if (!ignore) {
           setPaintAvailableDates([])
-          setPaintDatesError("도장 데이터 날짜 목록을 불러오지 못했습니다.")
+          setPaintDatesError("?꾩옣 ?곗씠???좎쭨 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??")
         }
       } finally {
         if (!ignore) {
@@ -1426,7 +1466,7 @@ export function useManufacturingDashboard() {
         console.error("Failed to load assembly available dates", error)
         if (!ignore) {
           setAssemblyAvailableDates([])
-          setAssemblyDatesError("조립 데이터 날짜 목록을 불러오지 못했습니다.")
+          setAssemblyDatesError("議곕┰ ?곗씠???좎쭨 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??")
         }
       } finally {
         if (!ignore) {
@@ -1498,7 +1538,7 @@ export function useManufacturingDashboard() {
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      const drag = bodyChartDragRef.current
+      const drag = bodyRobotChartDragRef.current
       if (!drag || event.pointerId !== drag.pointerId) return
 
       event.preventDefault()
@@ -1506,15 +1546,15 @@ export function useManufacturingDashboard() {
       const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
       const maxStartIndex = Math.max(0, sourceBodyData.length - BODY_CHART_WINDOW_SIZE)
 
-      setBodyChartStartIndex(
+      setBodyRobotChartStartIndex(
         Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
       )
     }
 
     const handlePointerEnd = (event: PointerEvent) => {
-      if (bodyChartDragRef.current?.pointerId !== event.pointerId) return
-      bodyChartDragRef.current = null
-      setIsBodyChartDragging(false)
+      if (bodyRobotChartDragRef.current?.pointerId !== event.pointerId) return
+      bodyRobotChartDragRef.current = null
+      setIsBodyRobotChartDragging(false)
     }
 
     window.addEventListener("pointermove", handlePointerMove, { passive: false })
@@ -1527,6 +1567,38 @@ export function useManufacturingDashboard() {
       window.removeEventListener("pointercancel", handlePointerEnd)
     }
   }, [sourceBodyData.length])
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = bodyFrequencyChartDragRef.current
+      if (!drag || event.pointerId !== drag.pointerId) return
+
+      event.preventDefault()
+      const pixelsPerPoint = Math.max(5, drag.width / (BODY_CHART_WINDOW_SIZE - 1))
+      const movedPoints = Math.round((event.clientX - drag.startX) / pixelsPerPoint)
+      const maxStartIndex = Math.max(0, sourceBodyFrequencyData.length - BODY_CHART_WINDOW_SIZE)
+
+      setBodyFrequencyChartStartIndex(
+        Math.min(maxStartIndex, Math.max(0, drag.startIndex - movedPoints)),
+      )
+    }
+
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (bodyFrequencyChartDragRef.current?.pointerId !== event.pointerId) return
+      bodyFrequencyChartDragRef.current = null
+      setIsBodyFrequencyChartDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
+    window.addEventListener("pointerup", handlePointerEnd)
+    window.addEventListener("pointercancel", handlePointerEnd)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerEnd)
+      window.removeEventListener("pointercancel", handlePointerEnd)
+    }
+  }, [sourceBodyFrequencyData.length])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1614,10 +1686,11 @@ export function useManufacturingDashboard() {
     isBodyAnalysisLoading,
     bodyAnalysisError,
     isBodyChartHovered,
-    isBodyChartDragging,
-    handleBodyChartPointerDown,
+    isBodyRobotChartDragging,
+    isBodyFrequencyChartDragging,
+    handleBodyRobotChartPointerDown,
+    handleBodyFrequencyChartPointerDown,
     setIsBodyChartHovered,
-    visibleBodyData,
     visibleBodyRobotData,
     visibleBodyFrequencyData,
     bodyAnalysis,
@@ -1665,3 +1738,4 @@ export function useManufacturingDashboard() {
     pressChartWindowSize: PRESS_CHART_WINDOW_SIZE,
   }
 }
+
