@@ -151,6 +151,7 @@ const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchor
 type PressDataPoint = PressAnchor & {
   isAbnormal?: boolean
   severity?: string
+  countIncreaseYn?: boolean
 }
 
 // Press mock data removed; rely on backend `pressAnalysis` when available
@@ -416,6 +417,15 @@ const formatApiTime = (value: string) => {
   return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
+const getBottleneckRowKey = (row: BottleneckRow) =>
+  [
+    row.rankNo,
+    row.processCode,
+    row.delayTime,
+    row.affectedVehicleCount,
+    row.riskScore,
+  ].join("|")
+
 export function PaintTooltip({
   active,
   payload,
@@ -556,6 +566,7 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
     overall_risk_score: normalizeNumber(point.riskScore ?? 0),
     isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity),
     severity: point.severity ?? "NORMAL",
+    countIncreaseYn: point.countIncreaseYn,
   }
 }
 
@@ -1075,7 +1086,17 @@ export function useManufacturingDashboard() {
         cursor,
       })
 
-      setBottleneckRows((prevRows) => [...prevRows, ...result.content])
+      setBottleneckRows((prevRows) => {
+        const seenKeys = new Set(prevRows.map(getBottleneckRowKey))
+        const nextRows = result.content.filter((row) => {
+          const key = getBottleneckRowKey(row)
+          if (seenKeys.has(key)) return false
+          seenKeys.add(key)
+          return true
+        })
+
+        return [...prevRows, ...nextRows]
+      })
       if (cursor === BOTTLENECK_INITIAL_CURSOR) {
         setMostBottleneckProcess(result.mostBottleneckProcess)
         setMostBottleneckRiskLevel(result.mostBottleneckRiskLevel)
