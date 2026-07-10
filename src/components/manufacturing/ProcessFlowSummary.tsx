@@ -4,6 +4,7 @@ type ProcessStage = {
   id: string
   name: string
   rate: number | null
+  rateLabel?: string
   events?: number
   status: string
   defectRate?: number
@@ -172,15 +173,21 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
 
                     {/* ── Body section ── */}
                     <div className="flex-1 px-3.5 py-2.5 flex flex-col gap-2">
-                      {stage.rate !== null ? (
+                      {stage.status !== "analysis" ? (
                         <>
                           {/* Utilization rate */}
                           <div className="flex flex-col gap-1">
                             <div className="flex items-baseline justify-between">
                               <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase">가동률</span>
                               <span className={`text-xl font-black tabular-nums ${meta.rateClass}`}>
-                                {stage.rate}
-                                <span className="text-xs font-bold ml-0.5 opacity-70">%</span>
+                                {stage.rate !== null ? (
+                                  <>
+                                    {stage.rate}
+                                    <span className="text-xs font-bold ml-0.5 opacity-70">%</span>
+                                  </>
+                                ) : (
+                                  <span className="text-sm">{stage.rateLabel ?? "-"}</span>
+                                )}
                               </span>
                             </div>
                             {/* Rate bar */}

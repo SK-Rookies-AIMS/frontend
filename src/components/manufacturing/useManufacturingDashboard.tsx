@@ -33,10 +33,10 @@ import {
 "use client"
 
 const processStages = [
-  { id: "01", processCode: "PRESS", name: "프레스", rate: 92, events: 22, status: "normal", color: "#22c55e" },
-  { id: "02", processCode: "BODY", name: "차체", rate: 89, events: 22, status: "warning", color: "#f59e0b" },
-  { id: "03", processCode: "PAINT", name: "도장", rate: 87, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
-  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: 91, events: 22, status: "normal", color: "#22c55e" },
+  { id: "01", processCode: "PRESS", name: "프레스", rate: null, events: 22, status: "normal", color: "#22c55e" },
+  { id: "02", processCode: "BODY", name: "차체", rate: null, events: 22, status: "warning", color: "#f59e0b" },
+  { id: "03", processCode: "PAINT", name: "도장", rate: null, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
+  { id: "04", processCode: "ASSEMBLY", name: "의장", rate: null, events: 22, status: "normal", color: "#22c55e" },
   { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
 ]
 
@@ -377,6 +377,8 @@ type EquipmentOperationRateData = {
   items?: EquipmentOperationRateItem[]
 }
 
+type EquipmentOperationRateStatus = "idle" | "loading" | "success" | "error"
+
 const emptyPaintDashboard: PaintDashboardData = {
   selectedDate: null,
   summary: {
@@ -635,6 +637,7 @@ export function useManufacturingDashboard() {
   const [paintDatesError, setPaintDatesError] = useState<string | null>(null)
   const [assemblyDatesError, setAssemblyDatesError] = useState<string | null>(null)
   const [operationRateByProcess, setOperationRateByProcess] = useState<Record<string, EquipmentOperationRateItem>>({})
+  const [operationRateStatus, setOperationRateStatus] = useState<EquipmentOperationRateStatus>("idle")
 
   const getLatestChartStartIndex = (length: number, windowSize: number) => Math.max(0, length - windowSize)
 
@@ -1008,11 +1011,10 @@ export function useManufacturingDashboard() {
       }
     }
 
-    if (stage.rate === null) return stage
-
     const operationRate = stage.processCode
       ? operationRateByProcess[stage.processCode]?.operationRate
       : undefined
+    const hasOperationRate = Number.isFinite(operationRate)
     const events =
       stage.processCode === "PRESS"
         ? (pressAnalysis?.chart?.filter(p => p.isAbnormal).length ?? 0)
@@ -1026,7 +1028,12 @@ export function useManufacturingDashboard() {
 
     return {
       ...stage,
-      rate: Number.isFinite(operationRate) ? Math.round(operationRate as number) : stage.rate,
+      rate: hasOperationRate ? Math.round(operationRate as number) : null,
+      rateLabel: hasOperationRate
+        ? undefined
+        : operationRateStatus === "error"
+          ? "조회 실패"
+          : "-",
       events,
       isBottleneck: mostBottleneckProcess ? stage.name === mostBottleneckProcess : stage.isBottleneck,
       bottleneckRiskLevel: mostBottleneckProcess ? mostBottleneckRiskLevel : "위험",
@@ -1217,14 +1224,7 @@ export function useManufacturingDashboard() {
     let ignore = false
 
     const fetchEquipmentOperationRate = async () => {
-      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
-      if (!accessToken) {
-        if (!ignore) {
-          setOperationRateByProcess({})
-        }
-        return
-      }
-
+      setOperationRateStatus("loading")
       try {
         const result: EquipmentOperationRateData = await getEquipmentOperationRate()
         const items = Array.isArray(result?.items) ? result.items : []
@@ -1240,12 +1240,14 @@ export function useManufacturingDashboard() {
 
         if (!ignore) {
           setOperationRateByProcess(nextOperationRateByProcess)
+          setOperationRateStatus("success")
         }
       } catch (error) {
         console.error("Failed to load equipment operation rate", error)
 
         if (!ignore) {
           setOperationRateByProcess({})
+          setOperationRateStatus("error")
         }
       }
     }
