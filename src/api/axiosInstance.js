@@ -63,10 +63,10 @@ import axios from 'axios';
 //   - VITE_ 접두사가 없으면 브라우저 코드에서 접근할 수 없습니다. (보안)
 //
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL ?? "https://aims-factory.com/api", // 환경변수가 없으면 현재 개발 서버 주소를 사용합니다.
+    baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://25.2.109.64:8081/api", // 환경변수가 없으면 현재 개발 서버 주소를 사용합니다.
     headers: { 'Content-Type': 'application/json' },     // POST/PUT 시 본문이 JSON임을 서버에 알림
 });
- 
+
 // ── 요청 인터셉터 등록 ────────────────────────────────────────────────
 //
 // 모든 요청이 서버로 떠나기 직전에 실행됩니다.
