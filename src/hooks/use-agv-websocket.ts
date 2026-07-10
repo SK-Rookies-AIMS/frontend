@@ -9,8 +9,7 @@ import {
 } from "@/lib/agv-mapper";
 
 const WS_URL =
-    import.meta.env.VITE_WS_URL ??
-    "ws://localhost:8081/ws";
+    import.meta.env.VITE_ALERT_WS_URL || "wss://aims-factory.com/ws";
 
 export function useAgvWebsocket() {
 
