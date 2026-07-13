@@ -9,9 +9,9 @@ import type {
 } from "@/types/event"
 
 const PERIOD_OPTIONS = [
+  { days: 1, label: "최근 1일" },
+  { days: 3, label: "최근 3일" },
   { days: 7, label: "최근 7일" },
-  { days: 30, label: "최근 30일" },
-  { days: 90, label: "최근 90일" },
 ] as const
 
 const EMPTY_SUMMARY: EventPrioritySummary = {
@@ -103,8 +103,8 @@ export function EventPrioritySummaryCard() {
     <section className="bg-card border border-border rounded-lg">
       <div className="flex items-start justify-between gap-3 p-4 border-b border-border">
         <div className="flex min-w-0 items-start gap-1.5">
-          <h3 className="text-sm font-medium leading-5">
-            현장 대응형 이벤트 우선순위 평가
+          <h3 className="text-[13px] font-medium leading-4">
+            현장 대응형 이벤트 우선순위
           </h3>
           <div className="relative group shrink-0">
             <button
@@ -199,25 +199,25 @@ export function EventPrioritySummaryCard() {
             </p>
           </div>
 
-          <dl className="grid grid-cols-3 gap-2 mt-4">
-            <div className="min-w-0 rounded border border-border bg-secondary/30 px-2 py-3 text-center">
-              <dt className="text-[11px] leading-4 text-muted-foreground break-words">
+          <dl className="grid grid-cols-3 gap-1.5 mt-4">
+            <div className="min-w-0 rounded border border-border bg-secondary/30 px-1 py-3 text-center">
+              <dt className="text-[10px] leading-4 text-muted-foreground whitespace-nowrap break-keep">
                 평균 기준 위험도
               </dt>
               <dd className="mt-1 text-lg font-bold tabular-nums">
                 {formatScore(data.averageRiskScore)}
               </dd>
             </div>
-            <div className="min-w-0 rounded border border-border bg-secondary/30 px-2 py-3 text-center">
-              <dt className="text-[11px] leading-4 text-muted-foreground break-words">
+            <div className="min-w-0 rounded border border-border bg-secondary/30 px-1 py-3 text-center">
+              <dt className="text-[10px] leading-4 text-muted-foreground whitespace-nowrap break-keep">
                 평균 반복 발생도
               </dt>
               <dd className="mt-1 text-lg font-bold tabular-nums">
                 {formatPercentage(data.averageOccurrencePercentage)}
               </dd>
             </div>
-            <div className="min-w-0 rounded border border-border bg-secondary/30 px-2 py-3 text-center">
-              <dt className="text-[11px] leading-4 text-muted-foreground break-words">
+            <div className="min-w-0 rounded border border-border bg-secondary/30 px-1 py-3 text-center">
+              <dt className="text-[10px] leading-4 text-muted-foreground whitespace-nowrap break-keep">
                 조치 완료율
               </dt>
               <dd className="mt-1 text-lg font-bold tabular-nums">
