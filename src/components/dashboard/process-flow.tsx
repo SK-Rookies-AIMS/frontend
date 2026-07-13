@@ -26,9 +26,9 @@ const ISO_DY = 20  // isometric roof/side Y depth
 const STATIONS = [
   { id: 0, name: "프레스",   num: "01", cx: 170,  cy: 250 },
   { id: 1, name: "차체",     num: "02", cx: 560,  cy: 250 },
-  { id: 2, name: "도장",     num: "03", cx: 490,  cy: 530 },
-  { id: 3, name: "의장",     num: "04", cx: 870,  cy: 530 },
-  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 530 },
+  { id: 2, name: "도장",     num: "03", cx: 490,  cy: 550 },
+  { id: 3, name: "의장",     num: "04", cx: 870,  cy: 550 },
+  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 550 },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,11 +47,12 @@ const ROUTES: { pts: { x: number; y: number }[] }[] = [
     ],
   },
   {
-    // 차체 → 도장  (L-shape: go down then left)
+    // 차체 → 도장  (C-shape: right, down, left)
     pts: [
-      { x: STATIONS[1].cx + BW / 4, y: STATIONS[1].cy + BH / 2 - 10 },
-      { x: STATIONS[1].cx + BW / 4, y: STATIONS[2].cy },
-      { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy },
+      { x: STATIONS[1].cx + BW / 2 + ISO_DX - 20, y: STATIONS[1].cy + BH / 4 + 20 },
+      { x: 730,                                   y: STATIONS[1].cy + BH / 4 + 20 },
+      { x: 730,                                   y: STATIONS[2].cy - 20 },
+      { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy - 20 },
     ],
   },
   {
@@ -784,43 +785,17 @@ function FactoryStation({
 //  AGV path segment (forward + return lanes)
 // ─────────────────────────────────────────────────────────────────────────────
 function RouteSegment({
-  pts, laneOffset, isCenterLane = false, laneIndex = 0
+  pts, laneOffset
 }: {
-  pts: { x: number; y: number }[]; laneOffset: number; isCenterLane?: boolean; laneIndex?: number
+  pts: { x: number; y: number }[]; laneOffset: number
 }) {
   const line = offsetPolyline(pts, laneOffset)
-  const isCyan = laneIndex % 2 === 0
-  const color = isCyan ? "#22d3ee" : "#a855f7"
-  const glow = isCyan ? "pf-glow-c" : "pf-glow-p"
-  const animClass = isCyan ? "pf-track-fwd" : "pf-track-bwd"
+  // Uniform static slate blue color for all lanes across all routes
+  const color = "#45697d"
 
   return (
     <g>
-      {/* Base solid line for clear visibility on bright background */}
-      <polyline points={ptsToStr(line)} fill="none" stroke="#264b66" strokeWidth={2.5} opacity={0.9} strokeLinecap="round" />
-      {/* Neon dashed line on top, same width so no "border" effect */}
-      <polyline points={ptsToStr(line)} fill="none" stroke={color} strokeWidth={2.5}
-        strokeDasharray="14 18" className={animClass} filter={`url(#${glow})`} opacity={0.85} strokeLinecap="round"
-      />
-      {/* Direction arrow (drawn only once in the exact center of the lane bundle) */}
-      {isCenterLane && (() => {
-        const midT = 0.55
-        const aPos = lerp2(pts, midT, 0)
-        const aDir = lerp2(pts, midT + 0.06, 0)
-        const aDx = aDir.x - aPos.x
-        const aDy = aDir.y - aPos.y
-        const aLen = Math.sqrt(aDx * aDx + aDy * aDy) || 1
-        const ax = (aDx / aLen) * 14
-        const ay = (aDy / aLen) * 14
-        const px = (-aDy / aLen) * 6
-        const py = (aDx / aLen) * 6
-        return (
-          <polygon
-            points={`${aPos.x - px},${aPos.y - py} ${aPos.x + px},${aPos.y + py} ${aPos.x + ax},${aPos.y + ay}`}
-            fill="#22d3ee" opacity={0.9} filter="url(#pf-glow-c)"
-          />
-        )
-      })()}
+      <polyline points={ptsToStr(line)} fill="none" stroke={color} strokeWidth={2.5} opacity={0.9} strokeLinecap="round" />
     </g>
   )
 }
@@ -912,25 +887,14 @@ export function ProcessFlow() {
             ))}
 
             {/* ── Routes (draw ON TOP of platforms, UNDER buildings) */}
-            {ROUTES.map((route, ri) =>
+            {ROUTES.map((route) =>
               Array.from({ length: LANE_COUNT }, (_, li) => {
                 const laneOffset = ((li - (LANE_COUNT - 1) / 2) * LANE_SPREAD) / LANE_COUNT
                 return (
-                  <RouteSegment key={`${ri}-${li}`} pts={route.pts} laneOffset={laneOffset} isCenterLane={li === Math.floor(LANE_COUNT / 2)} laneIndex={li} />
+                  <RouteSegment key={`route-${route.pts[0].x}-${li}`} pts={route.pts} laneOffset={laneOffset} />
                 )
               })
             )}
-
-            {/* ── Corner connector dot (차체→도장 bend point) */}
-            {(() => {
-              const bendPt = ROUTES[1].pts[1]
-              return (
-                <g>
-                  <circle cx={bendPt.x} cy={bendPt.y} r={8} fill="#000" opacity={0.5} />
-                  <circle cx={bendPt.x} cy={bendPt.y} r={5} fill="#22d3ee" opacity={0.4} filter="url(#pf-glow-c)" />
-                </g>
-              )
-            })()}
 
             {/* ── Factory stations (draw ON TOP of routes) */}
             {STATIONS.map((s) => (
