@@ -42,6 +42,21 @@ export const eventApi = {
     }
   },
   /**
+   * @param {number} [days=7]
+   * @returns {Promise<import('../types/event').EventPrioritySummaryResponse>}
+   */
+  getEventPrioritySummary: async (days = 7) => {
+    try {
+      const response = await axiosInstance.get('/event/priority-summary', {
+        params: { days },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching event priority summary:', error);
+      throw error;
+    }
+  },
+  /**
    * @param {string} logNo
    * @param {string} actionStatus
    * @param {string | null} [actionBy]
