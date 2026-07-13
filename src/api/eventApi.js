@@ -75,4 +75,13 @@ export const eventApi = {
       throw error;
     }
   },
+  createEventActionTimeline: async (logNo, data) => {
+    try {
+      const response = await axiosInstance.post(`/event/${logNo}/action-timeline`, data);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating event action timeline:', error);
+      throw error;
+    }
+  },
 };

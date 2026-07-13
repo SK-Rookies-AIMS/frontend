@@ -3,26 +3,53 @@ import type { BottleneckRow } from "@/api/bottleneckApi"
 
 type BottleneckAnalysisPanelProps = {
   rows: BottleneckRow[]
+  selectedDate: string | null
+  dateOptions: string[]
   isLoading: boolean
   error: string | null
   scrollRef: RefObject<HTMLDivElement | null>
   onScroll: (event: UIEvent<HTMLDivElement>) => void
+  onChangeDate: (date: string) => void
   formatDelayTime: (seconds: number) => string
   RiskIndicator: ComponentType<{ level: number }>
 }
 
 export function BottleneckAnalysisPanel({
   rows,
+  selectedDate,
+  dateOptions,
   isLoading,
   error,
   scrollRef,
   onScroll,
+  onChangeDate,
   formatDelayTime,
   RiskIndicator,
 }: BottleneckAnalysisPanelProps) {
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <h3 className="mb-2 text-sm font-medium">실시간 병목 분석</h3>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">실시간 병목 분석</h3>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>날짜</span>
+          <select
+            className="appearance-none rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-primary/60"
+            value={selectedDate ?? dateOptions[0] ?? ""}
+            onChange={(event) => onChangeDate(event.target.value)}
+            disabled={dateOptions.length === 0}
+          >
+            {dateOptions.length === 0 ? (
+              <option value="">{isLoading ? "날짜 불러오는 중..." : "조회 가능한 날짜 없음"}</option>
+            ) : (
+              dateOptions.map((date) => (
+                <option key={date} value={date}>
+                  {date}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+      </div>
       <div ref={scrollRef} className="h-[206px] overflow-y-auto pr-1" onScroll={onScroll}>
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-card">

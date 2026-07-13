@@ -50,28 +50,36 @@ export default function ManufacturingPage() {
           <div className="grid grid-cols-3 gap-4 mb-6">
             <BottleneckAnalysisPanel
               rows={dashboard.bottleneckRows}
+              selectedDate={dashboard.selectedBottleneckDate}
+              dateOptions={dashboard.bottleneckDateOptions}
               isLoading={dashboard.isBottleneckLoading}
               error={dashboard.bottleneckError}
               scrollRef={dashboard.bottleneckScrollRef}
               onScroll={dashboard.handleBottleneckScroll}
+              onChangeDate={dashboard.handleBottleneckDateChange}
               formatDelayTime={dashboard.formatDelayTime}
               RiskIndicator={RiskIndicator}
             />
             <DefectTransferPredictionPanel
               rows={dashboard.defectPredictionRows}
               selectedVehicle={dashboard.selectedVehicle}
+              selectedDate={dashboard.selectedDefectPredictionDate}
+              dateOptions={dashboard.defectPredictionDateOptions}
               defectCauseSummary={dashboard.defectCauseSummary}
               isLoading={dashboard.isDefectPredictionLoading}
               error={dashboard.defectPredictionError}
               scrollRef={dashboard.defectPredictionScrollRef}
               onScroll={dashboard.handleDefectPredictionScroll}
               onSelectVehicle={(vehicleId) => dashboard.setSelectedVehicle(dashboard.selectedVehicle === vehicleId ? "" : vehicleId)}
+              onChangeDate={dashboard.handleDefectPredictionDateChange}
               formatProbability={dashboard.formatProbability}
               getDefectRiskTextClass={dashboard.getDefectRiskTextClass}
             />
             <ShapCauseAnalysisPanel
               selectedVehicle={dashboard.selectedVehicle}
               vehicleOptions={dashboard.defectPredictionVehicleOptions}
+              selectedDate={dashboard.selectedDefectCauseDate}
+              dateOptions={dashboard.defectCauseDateOptions}
               defectCauseSummary={dashboard.defectCauseSummary}
               defectCauseRows={dashboard.defectCauseRows}
               isLoading={dashboard.isDefectCauseLoading}
@@ -79,6 +87,7 @@ export default function ManufacturingPage() {
               scrollRef={dashboard.defectCauseScrollRef}
               onScroll={dashboard.handleDefectCauseScroll}
               onChangeVehicle={dashboard.setSelectedVehicle}
+              onChangeDate={dashboard.handleDefectCauseDateChange}
               formatProbability={dashboard.formatProbability}
               getDefectRiskTextClass={dashboard.getDefectRiskTextClass}
               ImpactBar={ImpactBar}

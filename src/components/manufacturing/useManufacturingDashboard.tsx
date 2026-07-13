@@ -514,7 +514,7 @@ function isAssemblyAbnormal(row: AssemblyVehicleRow) {
 
 function formatProbability(value: number) {
   const percent = value <= 1 ? value * 100 : value
-  return `${Math.round(percent)}%`
+  return `${percent.toFixed(2)}%`
 }
 
 function getDefectRiskTextClass(riskLevel: string, probability?: number) {
@@ -576,6 +576,9 @@ export function useManufacturingDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [activeTab, setActiveTab] = useState("press")
   const [selectedVehicle, setSelectedVehicle] = useState("")
+  const [selectedBottleneckDate, setSelectedBottleneckDate] = useState<string | null>(null)
+  const [selectedDefectPredictionDate, setSelectedDefectPredictionDate] = useState<string | null>(null)
+  const [selectedDefectCauseDate, setSelectedDefectCauseDate] = useState<string | null>(null)
   const [bottleneckRows, setBottleneckRows] = useState<BottleneckRow[]>([])
   const [mostBottleneckProcess, setMostBottleneckProcess] = useState<string | null>(null)
   const [mostBottleneckRiskLevel, setMostBottleneckRiskLevel] = useState<string | null>(null)
@@ -583,9 +586,12 @@ export function useManufacturingDashboard() {
   const [hasNextBottleneck, setHasNextBottleneck] = useState(true)
   const [isBottleneckLoading, setIsBottleneckLoading] = useState(false)
   const [bottleneckError, setBottleneckError] = useState<string | null>(null)
+  const [bottleneckDateOptions, setBottleneckDateOptions] = useState<string[]>([])
   const requestedBottleneckCursorsRef = useRef<Set<number>>(new Set())
   const hasNextBottleneckRef = useRef(true)
   const isBottleneckLoadingRef = useRef(false)
+  const bottleneckRequestSeqRef = useRef(0)
+  const activeBottleneckDateRef = useRef<string | null>(null)
   const bottleneckScrollRef = useRef<HTMLDivElement | null>(null)
   const [defectPredictionRows, setDefectPredictionRows] = useState<DefectTransferPredictionRow[]>([])
   const defectPredictionVehicleOptions = defectPredictionRows.filter(
@@ -595,9 +601,12 @@ export function useManufacturingDashboard() {
   const [hasNextDefectPrediction, setHasNextDefectPrediction] = useState(true)
   const [isDefectPredictionLoading, setIsDefectPredictionLoading] = useState(false)
   const [defectPredictionError, setDefectPredictionError] = useState<string | null>(null)
+  const [defectPredictionDateOptions, setDefectPredictionDateOptions] = useState<string[]>([])
   const requestedDefectPredictionCursorsRef = useRef<Set<number>>(new Set())
   const hasNextDefectPredictionRef = useRef(true)
   const isDefectPredictionLoadingRef = useRef(false)
+  const defectPredictionRequestSeqRef = useRef(0)
+  const activeDefectPredictionDateRef = useRef<string | null>(null)
   const defectPredictionScrollRef = useRef<HTMLDivElement | null>(null)
   const [defectCauseSummary, setDefectCauseSummary] = useState<DefectTransferCauseData | null>(null)
   const [defectCauseRows, setDefectCauseRows] = useState<DefectTransferCauseRow[]>([])
@@ -605,9 +614,12 @@ export function useManufacturingDashboard() {
   const [hasNextDefectCause, setHasNextDefectCause] = useState(true)
   const [isDefectCauseLoading, setIsDefectCauseLoading] = useState(false)
   const [defectCauseError, setDefectCauseError] = useState<string | null>(null)
+  const [defectCauseDateOptions, setDefectCauseDateOptions] = useState<string[]>([])
   const requestedDefectCauseCursorsRef = useRef<Set<number>>(new Set())
   const hasNextDefectCauseRef = useRef(true)
   const isDefectCauseLoadingRef = useRef(false)
+  const defectCauseRequestSeqRef = useRef(0)
+  const activeDefectCauseRequestKeyRef = useRef<string>("__default__::__latest__")
   const defectCauseScrollRef = useRef<HTMLDivElement | null>(null)
   const initializedDefectCauseVehicleRef = useRef<string | null>(null)
   const [isPressChartHovered, setIsPressChartHovered] = useState(false)
@@ -858,7 +870,6 @@ export function useManufacturingDashboard() {
     setBodyAnalysisError(null)
     try {
       const result = await fetchBodyAnalysis({ date })
-      console.debug("fetchBodyAnalysis result:", result)
       setBodyAnalysis(result)
     } catch (error) {
       console.error("fetchBodyAnalysis error:", error)
@@ -1110,10 +1121,60 @@ export function useManufacturingDashboard() {
       ? [selectedAssemblyDate, ...assemblyAvailableDates]
       : assemblyAvailableDates
 
-  const fetchBottleneckRows = useCallback(async (cursor: number | null) => {
+  const resetBottleneckAnalysis = useCallback(() => {
+    bottleneckRequestSeqRef.current += 1
+    requestedBottleneckCursorsRef.current.clear()
+    hasNextBottleneckRef.current = true
+    isBottleneckLoadingRef.current = false
+    activeBottleneckDateRef.current = null
+    setBottleneckRows([])
+    setBottleneckCursor(BOTTLENECK_INITIAL_CURSOR)
+    setHasNextBottleneck(true)
+    setIsBottleneckLoading(false)
+    setBottleneckError(null)
+    setMostBottleneckProcess(null)
+    setMostBottleneckRiskLevel(null)
+    setBottleneckDateOptions([])
+  }, [])
+
+  const resetDefectPredictionAnalysis = useCallback(() => {
+    defectPredictionRequestSeqRef.current += 1
+    requestedDefectPredictionCursorsRef.current.clear()
+    hasNextDefectPredictionRef.current = true
+    isDefectPredictionLoadingRef.current = false
+    activeDefectPredictionDateRef.current = null
+    setDefectPredictionRows([])
+    setDefectPredictionCursor(DEFECT_TRANSFER_INITIAL_CURSOR)
+    setHasNextDefectPrediction(true)
+    setIsDefectPredictionLoading(false)
+    setDefectPredictionError(null)
+    setDefectPredictionDateOptions([])
+    setSelectedVehicle("")
+  }, [])
+
+  const resetDefectCauseAnalysis = useCallback(() => {
+    defectCauseRequestSeqRef.current += 1
+    requestedDefectCauseCursorsRef.current.clear()
+    hasNextDefectCauseRef.current = true
+    isDefectCauseLoadingRef.current = false
+    activeDefectCauseRequestKeyRef.current = "__default__::__latest__"
+    setDefectCauseRows([])
+    setDefectCauseCursor(DEFECT_TRANSFER_INITIAL_CURSOR)
+    setHasNextDefectCause(true)
+    setIsDefectCauseLoading(false)
+    setDefectCauseError(null)
+    setDefectCauseSummary(null)
+    setDefectCauseDateOptions([])
+  }, [])
+
+  const fetchBottleneckRows = useCallback(async (cursor: number | null, date?: string | null) => {
     if (cursor === null) return
     if (requestedBottleneckCursorsRef.current.has(cursor)) return
     if (!hasNextBottleneckRef.current && cursor !== BOTTLENECK_INITIAL_CURSOR) return
+
+    const requestDate = date ?? null
+    const requestSeq = bottleneckRequestSeqRef.current
+    activeBottleneckDateRef.current = requestDate
 
     requestedBottleneckCursorsRef.current.add(cursor)
     isBottleneckLoadingRef.current = true
@@ -1122,9 +1183,13 @@ export function useManufacturingDashboard() {
 
     try {
       const result = await fetchBottleneckAnalysis({
+        date: requestDate,
         size: BOTTLENECK_PAGE_SIZE,
         cursor,
       })
+
+      if (requestSeq !== bottleneckRequestSeqRef.current) return
+      if (activeBottleneckDateRef.current !== requestDate) return
 
       setBottleneckRows((prevRows) => {
         const seenKeys = new Set(prevRows.map(getBottleneckRowKey))
@@ -1138,18 +1203,34 @@ export function useManufacturingDashboard() {
         return [...prevRows, ...nextRows]
       })
       if (cursor === BOTTLENECK_INITIAL_CURSOR) {
+        const latestDate = result.dateOptions.map((option) => option.date).sort((a, b) => b.localeCompare(a))[0] ?? requestDate
         setMostBottleneckProcess(result.mostBottleneckProcess)
         setMostBottleneckRiskLevel(result.mostBottleneckRiskLevel)
+        setBottleneckDateOptions(
+          result.dateOptions.length > 0
+            ? result.dateOptions.map((option) => option.date)
+            : requestDate
+              ? [requestDate]
+              : [],
+        )
+        if (!requestDate && latestDate) {
+          setSelectedBottleneckDate(latestDate)
+        }
       }
       hasNextBottleneckRef.current = result.hasNext
       setHasNextBottleneck(result.hasNext)
       setBottleneckCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
+      if (requestSeq !== bottleneckRequestSeqRef.current) return
+      if (activeBottleneckDateRef.current !== requestDate) return
       requestedBottleneckCursorsRef.current.delete(cursor)
       setBottleneckError(error instanceof Error ? error.message : "蹂묐ぉ 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
-      isBottleneckLoadingRef.current = false
-      setIsBottleneckLoading(false)
+      if (requestSeq !== bottleneckRequestSeqRef.current) return
+      if (activeBottleneckDateRef.current === requestDate) {
+        isBottleneckLoadingRef.current = false
+        setIsBottleneckLoading(false)
+      }
     }
   }, [])
 
@@ -1158,14 +1239,18 @@ export function useManufacturingDashboard() {
     const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
 
     if (isNearBottom && hasNextBottleneckRef.current && !isBottleneckLoadingRef.current) {
-      void fetchBottleneckRows(bottleneckCursor)
+      void fetchBottleneckRows(bottleneckCursor, selectedBottleneckDate)
     }
   }
 
-  const fetchDefectPredictionRows = useCallback(async (cursor: number | null) => {
+  const fetchDefectPredictionRows = useCallback(async (cursor: number | null, date?: string | null) => {
     if (cursor === null) return
     if (requestedDefectPredictionCursorsRef.current.has(cursor)) return
     if (!hasNextDefectPredictionRef.current && cursor !== DEFECT_TRANSFER_INITIAL_CURSOR) return
+
+    const requestDate = date ?? null
+    const requestSeq = defectPredictionRequestSeqRef.current
+    activeDefectPredictionDateRef.current = requestDate
 
     requestedDefectPredictionCursorsRef.current.add(cursor)
     isDefectPredictionLoadingRef.current = true
@@ -1174,24 +1259,46 @@ export function useManufacturingDashboard() {
 
     try {
       const result = await fetchDefectTransferPredictions({
+        date: requestDate,
         size: DEFECT_TRANSFER_PAGE_SIZE,
         cursor,
       })
+
+      if (requestSeq !== defectPredictionRequestSeqRef.current) return
+      if (activeDefectPredictionDateRef.current !== requestDate) return
 
       setDefectPredictionRows((prevRows) => {
         const existingVehicleIds = new Set(prevRows.map((row) => row.vehicleId))
         const nextRows = result.content.filter((row) => !existingVehicleIds.has(row.vehicleId))
         return [...prevRows, ...nextRows]
       })
+      if (cursor === DEFECT_TRANSFER_INITIAL_CURSOR) {
+        const latestDate = result.dateOptions.map((option) => option.date).sort((a, b) => b.localeCompare(a))[0] ?? requestDate
+        setDefectPredictionDateOptions(
+          result.dateOptions.length > 0
+            ? result.dateOptions.map((option) => option.date)
+            : requestDate
+              ? [requestDate]
+              : [],
+        )
+        if (!requestDate && latestDate) {
+          setSelectedDefectPredictionDate(latestDate)
+        }
+      }
       hasNextDefectPredictionRef.current = result.hasNext
       setHasNextDefectPrediction(result.hasNext)
       setDefectPredictionCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
+      if (requestSeq !== defectPredictionRequestSeqRef.current) return
+      if (activeDefectPredictionDateRef.current !== requestDate) return
       requestedDefectPredictionCursorsRef.current.delete(cursor)
       setDefectPredictionError(error instanceof Error ? error.message : "遺덈웾 ?꾩씠 ?덉륫 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
-      isDefectPredictionLoadingRef.current = false
-      setIsDefectPredictionLoading(false)
+      if (requestSeq !== defectPredictionRequestSeqRef.current) return
+      if (activeDefectPredictionDateRef.current === requestDate) {
+        isDefectPredictionLoadingRef.current = false
+        setIsDefectPredictionLoading(false)
+      }
     }
   }, [])
 
@@ -1200,25 +1307,19 @@ export function useManufacturingDashboard() {
     const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
 
     if (isNearBottom && hasNextDefectPredictionRef.current && !isDefectPredictionLoadingRef.current) {
-      void fetchDefectPredictionRows(defectPredictionCursor)
+      void fetchDefectPredictionRows(defectPredictionCursor, selectedDefectPredictionDate)
     }
   }
 
-  const resetDefectCauses = useCallback(() => {
-    requestedDefectCauseCursorsRef.current.clear()
-    hasNextDefectCauseRef.current = true
-    isDefectCauseLoadingRef.current = false
-    setDefectCauseRows([])
-    setDefectCauseCursor(DEFECT_TRANSFER_INITIAL_CURSOR)
-    setHasNextDefectCause(true)
-    setIsDefectCauseLoading(false)
-    setDefectCauseError(null)
-    setDefectCauseSummary(null)
-  }, [])
-
-  const fetchDefectCauseRows = useCallback(async (cursor: number | null, vehicleId: string | null) => {
+  const fetchDefectCauseRows = useCallback(async (
+    cursor: number | null,
+    vehicleId: string | null,
+    date?: string | null,
+  ) => {
     if (cursor === null) return
-    const requestKey = vehicleId || "__default__"
+    const requestSeq = defectCauseRequestSeqRef.current
+    const requestKey = `${vehicleId || "__default__"}::${date ?? "__latest__"}`
+    activeDefectCauseRequestKeyRef.current = requestKey
     if (cursor === DEFECT_TRANSFER_INITIAL_CURSOR) {
       initializedDefectCauseVehicleRef.current = requestKey
     }
@@ -1233,27 +1334,54 @@ export function useManufacturingDashboard() {
     try {
       const result = await fetchDefectTransferCauses({
         vehicleId,
+        date,
         size: DEFECT_TRANSFER_PAGE_SIZE,
         cursor,
       })
 
-      if (initializedDefectCauseVehicleRef.current !== requestKey) return
+      if (requestSeq !== defectCauseRequestSeqRef.current) return
+      if (activeDefectCauseRequestKeyRef.current !== requestKey) return
 
       setDefectCauseSummary(result)
       setDefectCauseRows((prevRows) => {
-        const existingRanks = new Set(prevRows.map((row) => row.rank))
-        const nextRows = result.content.filter((row) => !existingRanks.has(row.rank))
+        const incomingRows = [
+          ...(result.representativeCause ? [result.representativeCause] : []),
+          ...(Array.isArray(result.detailCauses) ? result.detailCauses : []),
+          ...result.content,
+        ]
+        const existingKeys = new Set(prevRows.map((row) => `${row.rank}-${row.feature}-${row.message}`))
+        const nextRows = incomingRows.filter((row) => {
+          const key = `${row.rank}-${row.feature}-${row.message}`
+          if (existingKeys.has(key)) return false
+          existingKeys.add(key)
+          return true
+        })
         return [...prevRows, ...nextRows]
       })
+      if (cursor === DEFECT_TRANSFER_INITIAL_CURSOR) {
+        const latestDate = result.dateOptions.map((option) => option.date).sort((a, b) => b.localeCompare(a))[0] ?? date ?? null
+        setDefectCauseDateOptions(
+          result.dateOptions.length > 0
+            ? result.dateOptions.map((option) => option.date)
+            : date
+              ? [date]
+              : [],
+        )
+        if (!date && latestDate) {
+          setSelectedDefectCauseDate(latestDate)
+        }
+      }
       hasNextDefectCauseRef.current = result.hasNext
       setHasNextDefectCause(result.hasNext)
       setDefectCauseCursor(result.hasNext ? result.nextCursor : null)
     } catch (error) {
-      if (initializedDefectCauseVehicleRef.current !== requestKey) return
+      if (requestSeq !== defectCauseRequestSeqRef.current) return
+      if (activeDefectCauseRequestKeyRef.current !== requestKey) return
       requestedDefectCauseCursorsRef.current.delete(cursor)
       setDefectCauseError(error instanceof Error ? error.message : "SHAP ?먯씤 遺꾩꽍 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??")
     } finally {
-      if (initializedDefectCauseVehicleRef.current === requestKey) {
+      if (requestSeq !== defectCauseRequestSeqRef.current) return
+      if (activeDefectCauseRequestKeyRef.current === requestKey) {
         isDefectCauseLoadingRef.current = false
         setIsDefectCauseLoading(false)
       }
@@ -1265,9 +1393,19 @@ export function useManufacturingDashboard() {
     const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24
 
     if (isNearBottom && hasNextDefectCauseRef.current && !isDefectCauseLoadingRef.current) {
-      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null)
+      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null, selectedDefectCauseDate)
     }
   }
+
+  useEffect(() => {
+    resetBottleneckAnalysis()
+    void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR, null)
+  }, [fetchBottleneckRows, resetBottleneckAnalysis])
+
+  useEffect(() => {
+    resetDefectPredictionAnalysis()
+    void fetchDefectPredictionRows(DEFECT_TRANSFER_INITIAL_CURSOR, null)
+  }, [fetchDefectPredictionRows, resetDefectPredictionAnalysis])
 
   useEffect(() => {
   const timer = setInterval(() => {
@@ -1484,22 +1622,14 @@ export function useManufacturingDashboard() {
   }, [fetchAssemblyDashboardData])
 
   useEffect(() => {
-    void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR)
-  }, [fetchBottleneckRows])
-
-  useEffect(() => {
     const scrollElement = bottleneckScrollRef.current
     if (!scrollElement || !hasNextBottleneck || isBottleneckLoading || bottleneckCursor === null) return
 
     const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
     if (!hasScrollableContent) {
-      void fetchBottleneckRows(bottleneckCursor)
+      void fetchBottleneckRows(bottleneckCursor, selectedBottleneckDate)
     }
-  }, [bottleneckRows.length, bottleneckCursor, fetchBottleneckRows, hasNextBottleneck, isBottleneckLoading])
-
-  useEffect(() => {
-    void fetchDefectPredictionRows(DEFECT_TRANSFER_INITIAL_CURSOR)
-  }, [fetchDefectPredictionRows])
+  }, [bottleneckRows.length, bottleneckCursor, fetchBottleneckRows, hasNextBottleneck, isBottleneckLoading, selectedBottleneckDate])
 
   useEffect(() => {
     if (!selectedVehicle && defectPredictionVehicleOptions.length > 0) {
@@ -1508,13 +1638,17 @@ export function useManufacturingDashboard() {
   }, [selectedVehicle, defectPredictionVehicleOptions])
 
   useEffect(() => {
-    const requestKey = selectedVehicle || "__default__"
+    if (!selectedVehicle) {
+      resetDefectCauseAnalysis()
+      return
+    }
+
+    const requestKey = `${selectedVehicle}::${selectedDefectCauseDate ?? "__latest__"}`
     if (initializedDefectCauseVehicleRef.current === requestKey) return
 
-    initializedDefectCauseVehicleRef.current = requestKey
-    resetDefectCauses()
-    void fetchDefectCauseRows(DEFECT_TRANSFER_INITIAL_CURSOR, selectedVehicle || null)
-  }, [fetchDefectCauseRows, resetDefectCauses, selectedVehicle])
+    resetDefectCauseAnalysis()
+    void fetchDefectCauseRows(DEFECT_TRANSFER_INITIAL_CURSOR, selectedVehicle, selectedDefectCauseDate)
+  }, [fetchDefectCauseRows, resetDefectCauseAnalysis, selectedVehicle])
 
   useEffect(() => {
     const scrollElement = defectPredictionScrollRef.current
@@ -1522,9 +1656,9 @@ export function useManufacturingDashboard() {
 
     const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
     if (!hasScrollableContent) {
-      void fetchDefectPredictionRows(defectPredictionCursor)
+      void fetchDefectPredictionRows(defectPredictionCursor, selectedDefectPredictionDate)
     }
-  }, [defectPredictionRows.length, defectPredictionCursor, fetchDefectPredictionRows, hasNextDefectPrediction, isDefectPredictionLoading])
+  }, [defectPredictionRows.length, defectPredictionCursor, fetchDefectPredictionRows, hasNextDefectPrediction, isDefectPredictionLoading, selectedDefectPredictionDate])
 
   useEffect(() => {
     const scrollElement = defectCauseScrollRef.current
@@ -1532,9 +1666,9 @@ export function useManufacturingDashboard() {
 
     const hasScrollableContent = scrollElement.scrollHeight > scrollElement.clientHeight + 1
     if (!hasScrollableContent) {
-      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null)
+      void fetchDefectCauseRows(defectCauseCursor, selectedVehicle || null, selectedDefectCauseDate)
     }
-  }, [defectCauseRows.length, defectCauseCursor, fetchDefectCauseRows, hasNextDefectCause, isDefectCauseLoading, selectedVehicle])
+  }, [defectCauseRows.length, defectCauseCursor, fetchDefectCauseRows, hasNextDefectCause, isDefectCauseLoading, selectedDefectCauseDate, selectedVehicle])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1632,8 +1766,29 @@ export function useManufacturingDashboard() {
     }
   }, [pressDisplayData.length])
 
+  const handleBottleneckDateChange = (nextDate: string) => {
+    setSelectedBottleneckDate(nextDate)
+    resetBottleneckAnalysis()
+    void fetchBottleneckRows(BOTTLENECK_INITIAL_CURSOR, nextDate)
+  }
 
+  const handleDefectPredictionDateChange = (nextDate: string) => {
+    setSelectedDefectPredictionDate(nextDate)
+    setSelectedDefectCauseDate(nextDate)
+    resetDefectPredictionAnalysis()
+    resetDefectCauseAnalysis()
+    void fetchDefectPredictionRows(DEFECT_TRANSFER_INITIAL_CURSOR, nextDate)
+    if (selectedVehicle) {
+      void fetchDefectCauseRows(DEFECT_TRANSFER_INITIAL_CURSOR, selectedVehicle, nextDate)
+    }
+  }
 
+  const handleDefectCauseDateChange = (nextDate: string) => {
+    setSelectedDefectCauseDate(nextDate)
+    if (!selectedVehicle) return
+    resetDefectCauseAnalysis()
+    void fetchDefectCauseRows(DEFECT_TRANSFER_INITIAL_CURSOR, selectedVehicle, nextDate)
+  }
 
   return {
     currentTime,
@@ -1646,6 +1801,9 @@ export function useManufacturingDashboard() {
     bottleneckRows,
     isBottleneckLoading,
     bottleneckError,
+    selectedBottleneckDate,
+    bottleneckDateOptions,
+    handleBottleneckDateChange,
     bottleneckScrollRef,
     handleBottleneckScroll,
     defectPredictionRows,
@@ -1653,6 +1811,9 @@ export function useManufacturingDashboard() {
     defectCauseSummary,
     isDefectPredictionLoading,
     defectPredictionError,
+    selectedDefectPredictionDate,
+    defectPredictionDateOptions,
+    handleDefectPredictionDateChange,
     defectPredictionScrollRef,
     handleDefectPredictionScroll,
     setSelectedVehicle,
@@ -1660,6 +1821,9 @@ export function useManufacturingDashboard() {
     defectCauseRows,
     isDefectCauseLoading,
     defectCauseError,
+    selectedDefectCauseDate,
+    defectCauseDateOptions,
+    handleDefectCauseDateChange,
     defectCauseScrollRef,
     handleDefectCauseScroll,
     latestPressDisplayData,
