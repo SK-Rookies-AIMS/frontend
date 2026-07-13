@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "@/components/theme-provider"
 import { useLocation, useNavigate } from "react-router-dom"
-import { AlertTriangle, ArrowRight } from "lucide-react"
+import { AlertTriangle, ArrowRight, GripVertical } from "lucide-react"
 import type { ManualResponse } from "@/types/manual"
 import { getCurrentManual } from "@/api/manualApi"
-import { jwtDecode } from "jwt-decode";
+import { motion, useDragControls } from "framer-motion";
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -24,6 +24,8 @@ export function Mascot() {
   const [loadingManual, setLoadingManual] = useState(false)
   const isAuthPage = pathname === "/login" || pathname === "/signup"
   const [event, setEvent] = useState<any>(null)
+  const [isDragging, setIsDragging] = useState(false);
+  const dragControls = useDragControls();
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
@@ -58,6 +60,7 @@ export function Mascot() {
 
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
   const handleMascotClick = () => {
+    if (isDragging) return;
     if (event) {
       setBubbleMode((prev) => (prev === "detail" ? "none" : "detail"))
     } else {
@@ -96,7 +99,7 @@ export function Mascot() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
-            <span className="text-xs font-semibold text-warning">
+            <span className="text-xs font-semibold text-red-500">
               AI 지수 {event.riskScore} · {event.severity}
             </span>
           </div>
@@ -195,7 +198,17 @@ export function Mascot() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex items-end gap-2">
+    <motion.div
+        drag
+        dragControls={dragControls}
+        dragListener={false}
+        dragMomentum={false}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => {
+            setTimeout(() => setIsDragging(false), 100);
+        }}
+        className="fixed bottom-4 right-4 z-50 flex items-end gap-2"
+    >
       {/* Speech Bubble - 캐릭터 좌측에 표시 */}
       {bubbleMode !== "none" && (
         <div className="bg-[#1a4a5e] rounded-2xl px-4 py-3 max-w-[260px] shadow-lg relative animate-in fade-in slide-in-from-right-2 duration-200 mb-8">
@@ -208,8 +221,58 @@ export function Mascot() {
       {/* Mascot Image */}
       <div
         className="cursor-pointer transition-transform hover:scale-105 active:scale-95 flex-shrink-0 relative"
+        onPointerDown={(e) => dragControls.start(e)}
         onClick={handleMascotClick}
       >
+        {/* 이동 핸들 */}
+      <div
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          dragControls.start(e);
+        }}
+        className="
+          absolute
+          -top-2
+          left-2
+          z-20
+          w-7
+          h-7
+          rounded-full
+          bg-slate-700/90
+          hover:bg-slate-600
+          flex
+          items-center
+          justify-center
+          cursor-move
+          shadow-md
+        "
+      >
+        <GripVertical className="w-4 h-4 text-white" />
+      </div>{/* 이동 핸들 */}
+      <div
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          dragControls.start(e);
+        }}
+        className="
+          absolute
+          -top-2
+          left-2
+          z-20
+          w-7
+          h-7
+          rounded-full
+          bg-slate-700/90
+          hover:bg-slate-600
+          flex
+          items-center
+          justify-center
+          cursor-move
+          shadow-md
+        "
+      >
+        <GripVertical className="w-4 h-4 text-white" />
+      </div>
         {/* AI 지수 높은 이벤트 발생 시 알림 배지 */}
         {event?.riskScore && bubbleMode !== "detail" && (
           <span className="absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center">
@@ -224,6 +287,6 @@ export function Mascot() {
           height={200}
         />
       </div>
-    </div>
+    </motion.div>
   )
 }
