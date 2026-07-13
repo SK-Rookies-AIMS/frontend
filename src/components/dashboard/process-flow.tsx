@@ -10,7 +10,7 @@ import type { ProcessFlowAgv } from "@/lib/agv-mapper"
 //  SVG Canvas
 // ─────────────────────────────────────────────────────────────────────────────
 const SVG_W = 1380
-const SVG_H = 660
+const SVG_H = 760
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Process station layout  (cx,cy = center of front-face)
@@ -24,11 +24,11 @@ const ISO_DX = 30  // isometric side-face X depth
 const ISO_DY = 20  // isometric roof/side Y depth
 
 const STATIONS = [
-  { id: 0, name: "프레스",   num: "01", cx: 170,  cy: 160 },
-  { id: 1, name: "차체",     num: "02", cx: 560,  cy: 160 },
-  { id: 2, name: "도장",     num: "03", cx: 490,  cy: 440 },
-  { id: 3, name: "의장",     num: "04", cx: 870,  cy: 440 },
-  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 440 },
+  { id: 0, name: "프레스",   num: "01", cx: 170,  cy: 250 },
+  { id: 1, name: "차체",     num: "02", cx: 560,  cy: 250 },
+  { id: 2, name: "도장",     num: "03", cx: 490,  cy: 530 },
+  { id: 3, name: "의장",     num: "04", cx: 870,  cy: 530 },
+  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 530 },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ const ROUTES: { pts: { x: number; y: number }[] }[] = [
 ]
 
 const LANE_COUNT = 5
-const LANE_SPREAD = 22
+const LANE_SPREAD = 40
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AGV status helpers  (logic unchanged)
@@ -131,20 +131,6 @@ function ptsToStr(pts: { x: number; y: number }[]): string {
   return pts.map((p) => `${p.x},${p.y}`).join(" ")
 }
 
-// Offset a 2-point polyline perpendicularly
-function offsetLine(
-  pts: { x: number; y: number }[],
-  d: number
-): { x: number; y: number }[] {
-  if (pts.length < 2) return pts
-  const dx = pts[1].x - pts[0].x
-  const dy = pts[1].y - pts[0].y
-  const len = Math.sqrt(dx * dx + dy * dy) || 1
-  const px = (-dy / len) * d
-  const py = (dx / len) * d
-  return pts.map((p) => ({ x: p.x + px, y: p.y + py }))
-}
-
 // For multi-segment routes, offset each segment independently
 function offsetPolyline(
   pts: { x: number; y: number }[],
@@ -168,8 +154,8 @@ function SvgDefs() {
     <defs>
       {/* Grid */}
       <pattern id="pf-grid" width="50" height="50" patternUnits="userSpaceOnUse">
-        <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#1e3a5f" strokeWidth="0.4" opacity="0.3" />
-        <circle cx="0" cy="0" r="0.8" fill="#22d3ee" opacity="0.12" />
+        <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#5ab4cc" strokeWidth="0.5" opacity="0.22" />
+        <circle cx="0" cy="0" r="0.7" fill="#00a8c6" opacity="0.18" />
       </pattern>
 
       {/* Glow filters */}
@@ -198,7 +184,7 @@ function SvgDefs() {
         <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
       </filter>
       <filter id="pf-drop" x="-10%" y="-10%" width="130%" height="160%">
-        <feDropShadow dx="4" dy="8" stdDeviation="6" floodColor="#000" floodOpacity="0.6" />
+        <feDropShadow dx="3" dy="6" stdDeviation="7" floodColor="#0a2540" floodOpacity="0.45" />
       </filter>
 
       {/* Building gradients */}
@@ -304,7 +290,6 @@ const SVG_CSS = `
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Isometric Platform
-//  Points: top-face (hexagonal-ish trapezoid), front-face, right-face
 // ─────────────────────────────────────────────────────────────────────────────
 function Platform({
   cx, cy, w, h,
@@ -314,21 +299,18 @@ function Platform({
   cx: number; cy: number; w: number; h: number
   accentColor?: string; warn?: boolean
 }) {
-  const pw = w + 40   // platform wider than building
-  const ph = h        // platform front-face height (visual)
-  const pd = 18       // platform depth (front face thickness)
-  const sdx = 28      // isometric side offset X
-  const sdy = 18      // isometric side offset Y (up)
+  const pw = w + 40
+  const ph = h
+  const pd = 18
+  const sdx = 28
+  const sdy = 18
 
   const x = cx - pw / 2
-  const y = cy + ph / 2   // top of front face
-  const bdy = y + pd      // bottom of front face
+  const y = cy + ph / 2
+  const bdy = y + pd
 
-  // Top face (isometric quadrilateral)
   const topPts = `${x},${y} ${x + pw},${y} ${x + pw + sdx},${y - sdy} ${x + sdx},${y - sdy}`
-  // Front face
   const frontPts = `${x},${y} ${x + pw},${y} ${x + pw},${bdy} ${x},${bdy}`
-  // Right face
   const rightPts = `${x + pw},${y} ${x + pw + sdx},${y - sdy} ${x + pw + sdx},${bdy - sdy} ${x + pw},${bdy}`
 
   const lineColor = warn ? "#f59e0b" : accentColor
@@ -365,7 +347,7 @@ function Platform({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Shared building shell (front face + isometric top + right side + pillars)
+//  Shared building shell
 // ─────────────────────────────────────────────────────────────────────────────
 function BuildingShell({
   x, y, bw, bh, warn = false,
@@ -384,13 +366,12 @@ function BuildingShell({
 
   return (
     <g filter="url(#pf-drop)">
-      {/* ── Isometric right face */}
+      {/* Isometric right face */}
       <polygon
         points={`${x+bw},${y} ${x+bw+sdx},${y-sdy} ${x+bw+sdx},${y+bh-sdy} ${x+bw},${y+bh}`}
         fill="url(#pf-bldg-side)" stroke="#0a1624" strokeWidth={0.8}
       />
-
-      {/* ── Isometric top face */}
+      {/* Isometric top face */}
       <polygon
         points={`${x},${y} ${x+bw},${y} ${x+bw+sdx},${y-sdy} ${x+sdx},${y-sdy}`}
         fill="url(#pf-bldg-top)" stroke={borderColor} strokeWidth={1}
@@ -400,12 +381,10 @@ function BuildingShell({
         stroke={roofColor} strokeWidth={2.5} opacity={0.8}
         filter={`url(#${glowId})`} className="pf-neon"
       />
-
-      {/* ── Front face */}
+      {/* Front face */}
       <rect x={x} y={y} width={bw} height={bh}
         fill="url(#pf-bldg-front)" stroke={borderColor} strokeWidth={borderW}
       />
-
       {/* Panel dividers */}
       {[1, 2, 3].map((i) => (
         <line key={i}
@@ -414,17 +393,14 @@ function BuildingShell({
           stroke="#07111e" strokeWidth={0.8} opacity={0.6}
         />
       ))}
-
       {/* Corner pillars */}
       <rect x={x} y={y} width={pw} height={bh} fill="url(#pf-pillar)" stroke="#263d5a" strokeWidth={0.6} />
       <rect x={x + bw - pw} y={y} width={pw} height={bh} fill="url(#pf-pillar)" stroke="#263d5a" strokeWidth={0.6} />
-
       {/* Pillar neon edges */}
       <line x1={x + 3} y1={y + 4} x2={x + 3} y2={y + bh - 4}
         stroke={roofColor} strokeWidth={2.5} opacity={0.9} filter={`url(#${glowId})`} />
       <line x1={x + bw - 3} y1={y + 4} x2={x + bw - 3} y2={y + bh - 4}
         stroke={roofColor} strokeWidth={2.5} opacity={0.9} filter={`url(#${glowId})`} />
-
       {/* Warn glow border overlay */}
       {warn && (
         <rect x={x - 2} y={y - 2} width={bw + 4} height={bh + 4}
@@ -432,22 +408,20 @@ function BuildingShell({
           filter="url(#pf-glow-o)" className="pf-warn-pulse"
         />
       )}
-
-      {/* Windows (left + right upper) */}
+      {/* Windows left */}
       <rect x={x + pw + 5} y={y + 12} width={50} height={36} rx={2}
         fill="#020e1a" stroke="#1e4a6e" strokeWidth={1} />
       <rect x={x + pw + 7} y={y + 14} width={46} height={32} rx={1}
         fill="url(#pf-window)" />
       <line x1={x + pw + 30} y1={y + 14} x2={x + pw + 30} y2={y + 46} stroke="#1e4a6e" strokeWidth={0.7} />
       <line x1={x + pw + 7} y1={y + 30} x2={x + pw + 53} y2={y + 30} stroke="#1e4a6e" strokeWidth={0.7} />
-
+      {/* Windows right */}
       <rect x={x + bw - pw - 55} y={y + 12} width={50} height={36} rx={2}
         fill="#020e1a" stroke="#1e4a6e" strokeWidth={1} />
       <rect x={x + bw - pw - 53} y={y + 14} width={46} height={32} rx={1}
         fill="url(#pf-window)" />
       <line x1={x + bw - pw - 30} y1={y + 14} x2={x + bw - pw - 30} y2={y + 46} stroke="#1e4a6e" strokeWidth={0.7} />
       <line x1={x + bw - pw - 53} y1={y + 30} x2={x + bw - pw - 7} y2={y + 30} stroke="#1e4a6e" strokeWidth={0.7} />
-
       {/* Entrance shutter */}
       <rect x={midX - 24} y={y + bh - 54} width={48} height={54}
         fill="#01080f" stroke={warn ? "#f59e0b" : "#0e7490"} strokeWidth={1.5} />
@@ -462,11 +436,9 @@ function BuildingShell({
         fill="none" stroke={roofColor} strokeWidth={0.8}
         filter={`url(#${glowId})`} opacity={0.5}
       />
-
       {/* Status LEDs top corners */}
       <circle cx={x + 22} cy={y + 8} r={4} className={warn ? "pf-led-y" : "pf-led-c"} filter={`url(#${glowId})`} />
       <circle cx={x + bw - 22} cy={y + 8} r={4} className={warn ? "pf-led-y" : "pf-led-c"} filter={`url(#${glowId})`} />
-
       {/* Mid accent band */}
       <rect x={x} y={y + bh * 0.54} width={bw} height={3} fill="#081828" opacity={0.9} />
       <line x1={x} y1={y + bh * 0.54 + 1.5} x2={x + bw} y2={y + bh * 0.54 + 1.5}
@@ -477,7 +449,7 @@ function BuildingShell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Process label (large text above building)
+//  Process label (large text above building) — bright background colours
 // ─────────────────────────────────────────────────────────────────────────────
 function ProcessLabel({
   cx, cy, num, name, warn,
@@ -487,8 +459,8 @@ function ProcessLabel({
   const bh = BH
   const sdy = ISO_DY
   const labelY = cy - bh / 2 - sdy - 46  // well above building
-  const numColor = warn ? "#f59e0b" : "#22d3ee"
-  const nameColor = warn ? "#fcd34d" : "#e2f0ff"
+  const numColor = warn ? "#d97706" : "#0088aa"
+  const nameColor = warn ? "#92400e" : "#0f2d45"
   const numGlow = warn ? "pf-glow-o" : "pf-glow-c"
 
   return (
@@ -498,8 +470,7 @@ function ProcessLabel({
         x={cx - BW / 2} y={labelY}
         fill={numColor} fontSize={28} fontWeight={900}
         letterSpacing="1px" fontFamily="'Orbitron', 'Roboto Mono', monospace"
-        filter={`url(#${numGlow})`}
-        style={{ textShadow: warn ? "0 0 20px rgba(245,158,11,1)" : "0 0 16px rgba(34,211,238,1)" }}
+        style={{ filter: warn ? "drop-shadow(0 1px 3px rgba(217,119,6,0.5))" : "none" }}
       >
         {num}
       </text>
@@ -508,7 +479,6 @@ function ProcessLabel({
         x={cx - BW / 2 + 42} y={labelY}
         fill={nameColor} fontSize={22} fontWeight={700}
         letterSpacing="0.5px"
-        filter="url(#pf-text-glow)"
       >
         {name}
       </text>
@@ -535,39 +505,31 @@ function ProcessLabel({
 function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: number; bw: number; bh: number }) {
   const midX = x + bw / 2
   switch (name) {
-    // ── 01 프레스: heavy press machine, safety stripes, hydraulic cylinders
+    // ── 01 프레스
     case "프레스":
       return (
         <g>
-          {/* Heavy press frame */}
           <rect x={midX - 46} y={y + 56} width={92} height={78} rx={2}
             fill="#0a1420" stroke="#374151" strokeWidth={1.5} />
-          {/* Press top beam */}
           <rect x={midX - 44} y={y + 56} width={88} height={16} fill="#2d3748" stroke="#4b5563" strokeWidth={1} />
           <rect x={midX - 36} y={y + 58} width={72} height={6} fill="#374151" />
-          {/* Press ram body (static) */}
           <rect x={midX - 22} y={y + 72} width={44} height={38}
             fill="#1f2937" stroke="#4b5563" strokeWidth={1.2} />
           <rect x={midX - 18} y={y + 74} width={36} height={8} fill="#374151" />
-          {/* Anvil base */}
           <rect x={midX - 44} y={y + 116} width={88} height={16}
             fill="#1f2937" stroke="#374151" strokeWidth={1.2} />
-          {/* Safety stripes */}
           {[0,1,2,3,4,5].map((i) => (
             <rect key={i}
               x={midX - 44 + i * 14.5} y={y + 116}
               width={7} height={16} fill="#eab308" opacity={0.85}
             />
           ))}
-          {/* Hydraulic cylinders */}
           <rect x={x + 18} y={y + 66} width={10} height={55} fill="#1a2a3c" stroke="#374151" strokeWidth={1} rx={2} />
           <rect x={x + bw - 28} y={y + 66} width={10} height={55} fill="#1a2a3c" stroke="#374151" strokeWidth={1} rx={2} />
-          {/* Pressure gauges */}
           <circle cx={x + 23} cy={y + 62} r={8} fill="#1f2937" stroke="#4b5563" strokeWidth={1.2} />
           <line x1={x + 23} y1={y + 62} x2={x + 27} y2={y + 56} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
           <circle cx={x + bw - 23} cy={y + 62} r={8} fill="#1f2937" stroke="#4b5563" strokeWidth={1.2} />
           <line x1={x + bw - 23} y1={y + 62} x2={x + bw - 19} y2={y + 56} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
-          {/* Exhaust stacks */}
           <rect x={x + 40} y={y - ISO_DY - 26} width={12} height={26} fill="#232f3e" stroke="#374151" strokeWidth={1} rx={2} />
           <rect x={x + bw - 52} y={y - ISO_DY - 22} width={12} height={22} fill="#232f3e" stroke="#374151" strokeWidth={1} rx={2} />
           <ellipse cx={x + 46} cy={y - ISO_DY - 32} rx={7} ry={4} fill="#2d3748" opacity={0.4} />
@@ -575,58 +537,48 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
         </g>
       )
 
-    // ── 02 차체: robot arms, car silhouette, welding sparks (static)
+    // ── 02 차체
     case "차체":
       return (
         <g>
-          {/* Car body silhouette */}
           <path
             d={`M ${x+35} ${y+100} L ${x+46} ${y+74} L ${x+70} ${y+62} L ${x+bw-70} ${y+62} L ${x+bw-46} ${y+74} L ${x+bw-35} ${y+100} Z`}
             fill="none" stroke="#374151" strokeWidth={1.8} strokeLinejoin="round"
           />
-          {/* Car roof */}
           <path
             d={`M ${x+54} ${y+74} L ${x+68} ${y+54} L ${x+bw-68} ${y+54} L ${x+bw-54} ${y+74}`}
             fill="#0c1a28" stroke="#263d52" strokeWidth={1.2}
           />
-          {/* Windshield */}
           <polygon points={`${x+70},${y+62} ${x+82},${y+48} ${x+100},${y+46} ${x+100},${y+62}`}
             fill="url(#pf-glass)" opacity={0.7} />
-          {/* Wheels */}
           <circle cx={x + 52} cy={y + 104} r={13} fill="#0d1520" stroke="#374151" strokeWidth={1.8} />
           <circle cx={x + 52} cy={y + 104} r={5} fill="#1a2a3a" stroke="#4b5563" strokeWidth={1.2} />
           <circle cx={x + bw - 52} cy={y + 104} r={13} fill="#0d1520" stroke="#374151" strokeWidth={1.8} />
           <circle cx={x + bw - 52} cy={y + 104} r={5} fill="#1a2a3a" stroke="#4b5563" strokeWidth={1.2} />
-          {/* Robot arm Left */}
           <path d={`M ${x+18} ${y+140} L ${x+28} ${y+118} L ${x+50} ${y+104}`}
             fill="none" stroke="#22d3ee" strokeWidth={4.5}
             strokeLinecap="round" strokeLinejoin="round" filter="url(#pf-glow-c)"
           />
           <circle cx={x+18} cy={y+140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
-          <circle cx={x+28} cy={y+118} r={4} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1} />
-          {/* Spark (static) */}
           <circle cx={x+50} cy={y+104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
           <line x1={x+50} y1={y+104} x2={x+56} y2={y+98} stroke="#fcd34d" strokeWidth={1.5} />
           <line x1={x+50} y1={y+104} x2={x+44} y2={y+97} stroke="#fcd34d" strokeWidth={1.5} />
-          {/* Robot arm Right */}
           <path d={`M ${x+bw-18} ${y+140} L ${x+bw-28} ${y+118} L ${x+bw-50} ${y+104}`}
             fill="none" stroke="#22d3ee" strokeWidth={4.5}
             strokeLinecap="round" strokeLinejoin="round" filter="url(#pf-glow-c)"
           />
           <circle cx={x+bw-18} cy={y+140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
-          <circle cx={x+bw-28} cy={y+118} r={4} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1} />
-          {/* Safety beacon */}
+          <circle cx={x+bw-50} cy={y+104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
           <rect x={midX - 6} y={y - ISO_DY - 20} width={12} height={20} fill="#1f2937" stroke="#374151" strokeWidth={1} />
           <circle cx={midX} cy={y - ISO_DY - 25} r={9} fill="#1f2937" stroke="#374151" strokeWidth={1} />
           <circle cx={midX} cy={y - ISO_DY - 25} r={5} className="pf-led-y" filter="url(#pf-glow-y)" />
         </g>
       )
 
-    // ── 03 도장: enclosed spray booth, nozzles, ventilation duct
+    // ── 03 도장
     case "도장":
       return (
         <g>
-          {/* Main ventilation duct */}
           <rect x={midX - 36} y={y - ISO_DY - 32} width={72} height={32}
             fill="#162230" stroke="#2a4060" strokeWidth={1.5} rx={2} />
           {[0,1,2,3,4].map((i) => (
@@ -636,23 +588,19 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
               stroke="#374151" strokeWidth={0.8}
             />
           ))}
-          {/* Side exhaust fans */}
           <rect x={x + 18} y={y - ISO_DY - 20} width={20} height={20} fill="#1a2a3c" stroke="#374151" strokeWidth={1} rx={1} />
           <circle cx={x + 28} cy={y - ISO_DY - 10} r={7} fill="#0d1824" stroke="#4b5563" strokeWidth={1} />
           <circle cx={x + 28} cy={y - ISO_DY - 10} r={3} fill="#162230" />
           <rect x={x + bw - 38} y={y - ISO_DY - 20} width={20} height={20} fill="#1a2a3c" stroke="#374151" strokeWidth={1} rx={1} />
           <circle cx={x + bw - 28} cy={y - ISO_DY - 10} r={7} fill="#0d1824" stroke="#4b5563" strokeWidth={1} />
           <circle cx={x + bw - 28} cy={y - ISO_DY - 10} r={3} fill="#162230" />
-          {/* Spray booth glass enclosure */}
           <rect x={x + 22} y={y + 18} width={bw - 44} height={bh - 70}
             fill="#0891b2" fillOpacity={0.04} stroke="#0e7490" strokeWidth={1.5} rx={3}
             filter="url(#pf-glow-c)"
           />
-          {/* Booth arch top */}
           <path d={`M ${x+22} ${y+28} Q ${midX} ${y+6} ${x+bw-22} ${y+28}`}
             fill="none" stroke="#4a6280" strokeWidth={2}
           />
-          {/* Left spray nozzle bank */}
           {[0,1,2].map((i) => (
             <g key={i}>
               <rect x={x + 24} y={y + 36 + i * 26} width={6} height={12} fill="#3d5060" rx={1} />
@@ -660,7 +608,6 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
                 fill="#0e7490" fillOpacity={0.5} />
             </g>
           ))}
-          {/* Right spray nozzle bank */}
           {[0,1,2].map((i) => (
             <g key={i}>
               <rect x={x + bw - 30} y={y + 36 + i * 26} width={6} height={12} fill="#3d5060" rx={1} />
@@ -668,11 +615,9 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
                 fill="#0e7490" fillOpacity={0.5} />
             </g>
           ))}
-          {/* BOOTH badge */}
           <rect x={midX - 26} y={y + 112} width={52} height={20} fill="#010a12" rx={3} stroke="#0891b2" strokeWidth={1} />
           <text x={midX} y={y + 126} textAnchor="middle" fill="#22d3ee"
             fontSize={9} fontWeight={900} letterSpacing="0.8px">BOOTH</text>
-          {/* Floor drain lines */}
           {[0,1,2].map((i) => (
             <line key={i}
               x1={x + 22 + i * ((bw-44)/3)} y1={y + bh - 20}
@@ -683,44 +628,34 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
         </g>
       )
 
-    // ── 04 의장: assembly conveyor, control panel, shelves, overhead crane
+    // ── 04 의장
     case "의장":
       return (
         <g>
-          {/* Overhead crane rail */}
           <rect x={x + 14} y={y - ISO_DY - 12} width={bw - 28} height={8}
             fill="#1a2c3e" stroke="#2a4060" strokeWidth={1} rx={1} />
           <rect x={midX - 14} y={y - ISO_DY - 12} width={28} height={14}
             fill="#2d3e52" stroke="#3d5060" strokeWidth={1} rx={1} />
           <rect x={midX - 3} y={y - ISO_DY + 2} width={6} height={10} fill="#4b6070" />
           <rect x={midX - 8} y={y - ISO_DY + 11} width={16} height={4} fill="#1e3a52" />
-
-          {/* Assembly conveyor */}
           <rect x={x + 18} y={y + 86} width={bw - 36} height={14}
             fill="#060e1c" rx={2} stroke="#1e3050" strokeWidth={1} />
           <line x1={x+18} y1={y+93} x2={x+bw-18} y2={y+93}
             stroke="#1e3454" strokeWidth={10} strokeDasharray="7 5" opacity={0.7} />
-
-          {/* Robot arm Left */}
           <path d={`M ${x+22} ${y+80} L ${x+34} ${y+60} L ${x+54} ${y+50}`}
             fill="none" stroke="#4a6078" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"
           />
           <circle cx={x+22} cy={y+80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
           <circle cx={x+54} cy={y+50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
-
-          {/* Robot arm Right */}
           <path d={`M ${x+bw-22} ${y+80} L ${x+bw-34} ${y+60} L ${x+bw-54} ${y+50}`}
             fill="none" stroke="#4a6078" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"
           />
           <circle cx={x+bw-22} cy={y+80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
           <circle cx={x+bw-54} cy={y+50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
-
-          {/* Control panel */}
           <rect x={midX - 30} y={y + 18} width={60} height={42}
             fill="#010812" rx={3} stroke="#1a3452" strokeWidth={1.5} />
           <rect x={midX - 26} y={y + 22} width={52} height={20}
             fill="#000d1c" rx={1} stroke="#0e7490" strokeWidth={0.8} />
-          {/* Waveform static */}
           <path d={`M ${midX-22} ${y+32} L ${midX-14} ${y+26} L ${midX-6} ${y+34} L ${midX+2} ${y+28} L ${midX+10} ${y+34} L ${midX+18} ${y+26} L ${midX+22} ${y+32}`}
             fill="none" stroke="#22c55e" strokeWidth={1.2} opacity={0.8}
           />
@@ -728,8 +663,6 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
           <circle cx={midX - 6} cy={y + 52} r={3} className="pf-led-g" />
           <circle cx={midX + 4} cy={y + 52} r={3} className="pf-led-y" />
           <circle cx={midX + 14} cy={y + 52} r={3} fill="#ef4444" />
-
-          {/* Parts shelves */}
           <rect x={x+16} y={y+106} width={20} height={50} fill="#0d1828" stroke="#374151" strokeWidth={1} rx={1} />
           {[0,1,2].map((i) => (
             <rect key={i} x={x+17} y={y+110 + i*15} width={18} height={10} fill="#1f2937" stroke="#374151" strokeWidth={0.5} />
@@ -741,45 +674,33 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
         </g>
       )
 
-    // ── 05 최종검사: scan gate, laser beams, PASS display, cameras
+    // ── 05 최종검사
     case "최종검사":
       return (
         <g>
-          {/* Cameras top */}
           <rect x={x + 20} y={y - ISO_DY - 14} width={20} height={14} fill="#1f2937" stroke="#374151" strokeWidth={1} rx={2} />
           <circle cx={x + 30} cy={y - ISO_DY - 7} r={4.5} fill="#0d1824" stroke="#4b5563" strokeWidth={1} />
           <circle cx={x + 30} cy={y - ISO_DY - 7} r={2} fill="#020a14" />
           <rect x={x + bw - 40} y={y - ISO_DY - 14} width={20} height={14} fill="#1f2937" stroke="#374151" strokeWidth={1} rx={2} />
           <circle cx={x + bw - 30} cy={y - ISO_DY - 7} r={4.5} fill="#0d1824" stroke="#4b5563" strokeWidth={1} />
           <circle cx={x + bw - 30} cy={y - ISO_DY - 7} r={2} fill="#020a14" />
-          {/* Beacon */}
           <rect x={midX - 5} y={y - ISO_DY - 22} width={10} height={22} fill="#1f2937" stroke="#374151" strokeWidth={1} />
           <circle cx={midX} cy={y - ISO_DY - 28} r={10} fill="#1f2937" stroke="#374151" strokeWidth={1.2} />
           <circle cx={midX} cy={y - ISO_DY - 28} r={6} className="pf-led-g" filter="url(#pf-glow-g)" />
-
-          {/* Gate portal frame */}
           <rect x={x + 36} y={y + 16} width={8} height={bh - 48} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
           <rect x={x + bw - 44} y={y + 16} width={8} height={bh - 48} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
           <rect x={x + 36} y={y + 16} width={bw - 72} height={8} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
-
-          {/* Neon pillar lines */}
           <line x1={x+40} y1={y+24} x2={x+40} y2={y+bh-32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
           <line x1={x+bw-40} y1={y+24} x2={x+bw-40} y2={y+bh-32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
-
-          {/* Scan laser beams */}
           <line x1={x+44} y1={y+50}  x2={x+bw-44} y2={y+50}  stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" />
           <line x1={x+44} y1={y+90}  x2={x+bw-44} y2={y+90}  stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.4s" }} />
           <line x1={x+44} y1={y+130} x2={x+bw-44} y2={y+130} stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.8s" }} />
-
-          {/* Barcode display */}
           <rect x={midX - 22} y={y + 24} width={44} height={42} fill="#00080a" rx={2} stroke="#1a4028" strokeWidth={1} />
           {[0,1,2,3,4,5].map((i) => (
             <rect key={i} x={midX - 18 + i * 7} y={y + 27} width={i % 2 === 0 ? 4 : 2} height={36}
               fill="#22c55e" opacity={0.7}
             />
           ))}
-
-          {/* PASS display */}
           <rect x={midX - 30} y={y + bh - 56} width={60} height={24}
             fill="#00080a" rx={3} stroke="#22c55e" strokeWidth={1.5} />
           <text x={midX} y={y + bh - 38} textAnchor="middle"
@@ -787,8 +708,6 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
             filter="url(#pf-glow-g)" className="pf-led-g">
             PASS
           </text>
-
-          {/* Corner LEDs */}
           <circle cx={x+42} cy={y+20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
           <circle cx={x+bw-42} cy={y+20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
         </g>
@@ -800,7 +719,7 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Complete factory station  (platform + shell + interior + label)
+//  Complete factory station
 // ─────────────────────────────────────────────────────────────────────────────
 function FactoryStation({
   cx, cy, name, num, warn,
@@ -814,16 +733,9 @@ function FactoryStation({
 
   return (
     <g>
-      {/* 3D Platform sits below building */}
       <Platform cx={cx + ISO_DX / 2} cy={cy + bh / 2} w={bw} h={bh} warn={warn} />
-
-      {/* Building shell */}
       <BuildingShell x={x} y={y} bw={bw} bh={bh} warn={warn} />
-
-      {/* Process-specific interior */}
       <ProcessInterior name={name} x={x} y={y} bw={bw} bh={bh} />
-
-      {/* Large process label above building */}
       <ProcessLabel cx={cx} cy={cy} num={num} name={name} warn={warn} />
     </g>
   )
@@ -837,11 +749,9 @@ function RouteSegment({
 }: {
   pts: { x: number; y: number }[]; laneOffset: number
 }) {
-  // For multi-segment, offset using first segment direction
   const fwd = offsetPolyline(pts, laneOffset - 5)
   const ret = offsetPolyline(pts, laneOffset + 5)
 
-  // Arrow midpoint
   const midT = 0.55
   const aPos = lerp2(fwd, midT, 0)
   const aDir = lerp2(fwd, midT + 0.06, 0)
@@ -855,21 +765,17 @@ function RouteSegment({
 
   return (
     <g>
-      {/* Forward lane: shadow → base → neon dash */}
       <polyline points={ptsToStr(fwd)} fill="none" stroke="#000" strokeWidth={10} strokeLinecap="round" opacity={0.45} />
       <polyline points={ptsToStr(fwd)} fill="none" stroke="#0a1e34" strokeWidth={7} strokeLinecap="round" />
       <polyline points={ptsToStr(fwd)} fill="none" stroke="#22d3ee" strokeWidth={2.5}
         strokeDasharray="14 18" className="pf-track-fwd" filter="url(#pf-glow-c)" opacity={0.95}
       />
-
-      {/* Return lane: shadow → base → neon dash */}
       <polyline points={ptsToStr(ret)} fill="none" stroke="#000" strokeWidth={10} strokeLinecap="round" opacity={0.45} />
       <polyline points={ptsToStr(ret)} fill="none" stroke="#160a28" strokeWidth={7} strokeLinecap="round" />
       <polyline points={ptsToStr(ret)} fill="none" stroke="#a855f7" strokeWidth={2.5}
         strokeDasharray="14 18" className="pf-track-bwd" filter="url(#pf-glow-p)" opacity={0.95}
       />
-
-      {/* Direction arrow (forward) */}
+      {/* Direction arrow */}
       <polygon
         points={`${aPos.x - px},${aPos.y - py} ${aPos.x + px},${aPos.y + py} ${aPos.x + ax},${aPos.y + ay}`}
         fill="#22d3ee" opacity={0.9} filter="url(#pf-glow-c)"
@@ -890,14 +796,10 @@ export function ProcessFlow() {
   const waitingCount  = useMemo(() => agvs.filter((a) => a.status === "WAITING").length,   [agvs])
   const safeTotal = agvs.length === 0 ? 1 : agvs.length
 
-  // Determine which route has active AGVs → highlight that station
-  // No new logic: just derive highlight state from existing agv data
   const activeRouteIndices = useMemo(
     () => new Set(agvs.filter((a) => a.status === "MOVING" || a.status === "UNLOADING").map((a) => a.routeIndex)),
     [agvs]
   )
-  // Station i is "active/warn" if it is the destination of an active route
-  // routeIndex 0→station1, 1→station2, 2→station3, 3→station4
   const warnStation = useMemo(() => {
     const s = new Set<number>()
     activeRouteIndices.forEach((ri) => s.add(ri + 1))
@@ -940,7 +842,14 @@ export function ProcessFlow() {
       <div className="flex gap-4 flex-col lg:flex-row">
 
         {/* ── SVG Canvas */}
-        <div className="flex-1 rounded-xl bg-[#020810] border border-slate-800/60 overflow-hidden relative">
+        <div
+          className="flex-1 rounded-xl border border-sky-200/60 overflow-hidden relative"
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.55) 0%, transparent 55%), " +
+              "linear-gradient(135deg, #dff8ff 0%, #b9eaf4 50%, #8ecfe0 100%)",
+          }}
+        >
           <svg
             viewBox={`0 0 ${SVG_W} ${SVG_H}`}
             className="w-full select-none"
@@ -949,14 +858,8 @@ export function ProcessFlow() {
             <SvgDefs />
             <style>{SVG_CSS}</style>
 
-            {/* Grid */}
+            {/* Grid overlay on bright background */}
             <rect width="100%" height="100%" fill="url(#pf-grid)" />
-            {/* Subtle radial vignette */}
-            <radialGradient id="pf-vignette" cx="50%" cy="50%" r="70%">
-              <stop offset="60%" stopColor="transparent" />
-              <stop offset="100%" stopColor="#000" stopOpacity="0.5" />
-            </radialGradient>
-            <rect width="100%" height="100%" fill="url(#pf-vignette)" />
 
             {/* ── Routes (draw under buildings) */}
             {ROUTES.map((route, ri) =>
