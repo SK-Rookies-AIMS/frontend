@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
 import { AlertTriangle, ChevronRight, TrendingUp, Zap } from "lucide-react"
 import { Mascot } from "../mascot/mascot"
@@ -27,8 +27,7 @@ export function RightSidebar() {
   const [failures, setFailures] = useState<Event[]>([])
   const [warnings, setWarnings] = useState<Event[]>([])
 
-  useEffect(() => {
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
       try {
         const response = await eventApi.getOverallEvents(0, 50)
         if (response.success) {
@@ -54,9 +53,24 @@ export function RightSidebar() {
       } catch (error) {
         console.error("Failed to fetch dashboard events:", error)
       }
-    }
-    fetchData()
+
   }, [])
+
+  useEffect(() => {
+  void fetchData()
+}, [fetchData])
+
+useEffect(() => {
+  const handleRefresh = () => {
+    void fetchData()
+  }
+
+  window.addEventListener("page-refresh", handleRefresh)
+
+  return () => {
+    window.removeEventListener("page-refresh", handleRefresh)
+  }
+}, [fetchData])
 
   return (
     <aside className="w-72 bg-card border-l border-border flex flex-col overflow-auto relative">
