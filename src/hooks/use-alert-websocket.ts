@@ -4,14 +4,7 @@ import SockJS from "sockjs-client"
 
 import { AlertRealtimeMessage } from "@/types/alert"
 
-// 알람 전용 WebSocket 환경변수 우선 참조 후 fallback 처리
-const WS_URL =
-    import.meta.env.VITE_SOCKJS_URL ??
-    `${window.location.origin}/ws`;
-
-// const WS_URL = "/ws";
-
-// const WS_URL = "/ws";
+const WS_URL = __ALERT_WS_URL__;
 
 const ALERT_TOPIC = "/topic/alerts"
 
@@ -44,7 +37,10 @@ export function useAlertWebSocket(): UseAlertWebSocketResult {
 
         const client = new Client({
 
-            webSocketFactory: () => new SockJS(WS_URL),
+            webSocketFactory: () => {
+                console.log("[Alert WS] SockJS URL:", WS_URL)
+                return new SockJS(WS_URL)
+            },
 
             reconnectDelay: 5000,
 
