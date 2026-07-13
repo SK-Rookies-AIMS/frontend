@@ -131,19 +131,40 @@ function ptsToStr(pts: { x: number; y: number }[]): string {
   return pts.map((p) => `${p.x},${p.y}`).join(" ")
 }
 
-// For multi-segment routes, offset each segment independently
 function offsetPolyline(
   pts: { x: number; y: number }[],
   d: number
 ): { x: number; y: number }[] {
   if (pts.length < 2) return pts
-  // Use first segment direction for offset
-  const dx = pts[1].x - pts[0].x
-  const dy = pts[1].y - pts[0].y
-  const len = Math.sqrt(dx * dx + dy * dy) || 1
-  const px = (-dy / len) * d
-  const py = (dx / len) * d
-  return pts.map((p) => ({ x: p.x + px, y: p.y + py }))
+  
+  const res: { x: number; y: number }[] = []
+  const normals: { nx: number; ny: number }[] = []
+  
+  // Calculate normal for each segment
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x
+    const dy = pts[i + 1].y - pts[i].y
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    normals.push({ nx: -dy / len, ny: dx / len })
+  }
+  
+  // Apply offset to points
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0) {
+      res.push({ x: pts[i].x + normals[0].nx * d, y: pts[i].y + normals[0].ny * d })
+    } else if (i === pts.length - 1) {
+      res.push({ x: pts[i].x + normals[i - 1].nx * d, y: pts[i].y + normals[i - 1].ny * d })
+    } else {
+      const n1 = normals[i - 1]
+      const n2 = normals[i]
+      const dot = n1.nx * n2.nx + n1.ny * n2.ny
+      const denom = Math.abs(1 + dot) < 0.001 ? 1 : 1 + dot
+      const nx = (n1.nx + n2.nx) / denom
+      const ny = (n1.ny + n2.ny) / denom
+      res.push({ x: pts[i].x + nx * d, y: pts[i].y + ny * d })
+    }
+  }
+  return res
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -726,8 +747,9 @@ function FactoryStation({
 }: {
   cx: number; cy: number; name: string; num: string; warn: boolean
 }) {
+  const bldgOffset = 22 // Move building down by 22px
   const x = cx - BW / 2
-  const y = cy - BH / 2
+  const y = cy - BH / 2 + bldgOffset
   const bh = BH
   const bw = BW
 
@@ -736,7 +758,7 @@ function FactoryStation({
       <Platform cx={cx + ISO_DX / 2} cy={cy + bh / 2} w={bw} h={bh} warn={warn} />
       <BuildingShell x={x} y={y} bw={bw} bh={bh} warn={warn} />
       <ProcessInterior name={name} x={x} y={y} bw={bw} bh={bh} />
-      <ProcessLabel cx={cx} cy={cy} num={num} name={name} warn={warn} />
+      <ProcessLabel cx={cx} cy={cy + bldgOffset} num={num} name={name} warn={warn} />
     </g>
   )
 }
@@ -745,41 +767,43 @@ function FactoryStation({
 //  AGV path segment (forward + return lanes)
 // ─────────────────────────────────────────────────────────────────────────────
 function RouteSegment({
-  pts, laneOffset,
+  pts, laneOffset, isCenterLane = false, laneIndex = 0
 }: {
-  pts: { x: number; y: number }[]; laneOffset: number
+  pts: { x: number; y: number }[]; laneOffset: number; isCenterLane?: boolean; laneIndex?: number
 }) {
-  const fwd = offsetPolyline(pts, laneOffset - 5)
-  const ret = offsetPolyline(pts, laneOffset + 5)
-
-  const midT = 0.55
-  const aPos = lerp2(fwd, midT, 0)
-  const aDir = lerp2(fwd, midT + 0.06, 0)
-  const aDx = aDir.x - aPos.x
-  const aDy = aDir.y - aPos.y
-  const aLen = Math.sqrt(aDx * aDx + aDy * aDy) || 1
-  const ax = (aDx / aLen) * 14
-  const ay = (aDy / aLen) * 14
-  const px = (-aDy / aLen) * 6
-  const py = (aDx / aLen) * 6
+  const line = offsetPolyline(pts, laneOffset)
+  const isCyan = laneIndex % 2 === 0
+  const color = isCyan ? "#22d3ee" : "#a855f7"
+  const glow = isCyan ? "pf-glow-c" : "pf-glow-p"
+  const animClass = isCyan ? "pf-track-fwd" : "pf-track-bwd"
 
   return (
     <g>
-      <polyline points={ptsToStr(fwd)} fill="none" stroke="#000" strokeWidth={10} strokeLinecap="round" opacity={0.45} />
-      <polyline points={ptsToStr(fwd)} fill="none" stroke="#0a1e34" strokeWidth={7} strokeLinecap="round" />
-      <polyline points={ptsToStr(fwd)} fill="none" stroke="#22d3ee" strokeWidth={2.5}
-        strokeDasharray="14 18" className="pf-track-fwd" filter="url(#pf-glow-c)" opacity={0.95}
+      {/* Base solid line for clear visibility on bright background */}
+      <polyline points={ptsToStr(line)} fill="none" stroke="#264b66" strokeWidth={2.5} opacity={0.9} strokeLinecap="round" />
+      {/* Neon dashed line on top, same width so no "border" effect */}
+      <polyline points={ptsToStr(line)} fill="none" stroke={color} strokeWidth={2.5}
+        strokeDasharray="14 18" className={animClass} filter={`url(#${glow})`} opacity={0.85} strokeLinecap="round"
       />
-      <polyline points={ptsToStr(ret)} fill="none" stroke="#000" strokeWidth={10} strokeLinecap="round" opacity={0.45} />
-      <polyline points={ptsToStr(ret)} fill="none" stroke="#160a28" strokeWidth={7} strokeLinecap="round" />
-      <polyline points={ptsToStr(ret)} fill="none" stroke="#a855f7" strokeWidth={2.5}
-        strokeDasharray="14 18" className="pf-track-bwd" filter="url(#pf-glow-p)" opacity={0.95}
-      />
-      {/* Direction arrow */}
-      <polygon
-        points={`${aPos.x - px},${aPos.y - py} ${aPos.x + px},${aPos.y + py} ${aPos.x + ax},${aPos.y + ay}`}
-        fill="#22d3ee" opacity={0.9} filter="url(#pf-glow-c)"
-      />
+      {/* Direction arrow (drawn only once in the exact center of the lane bundle) */}
+      {isCenterLane && (() => {
+        const midT = 0.55
+        const aPos = lerp2(pts, midT, 0)
+        const aDir = lerp2(pts, midT + 0.06, 0)
+        const aDx = aDir.x - aPos.x
+        const aDy = aDir.y - aPos.y
+        const aLen = Math.sqrt(aDx * aDx + aDy * aDy) || 1
+        const ax = (aDx / aLen) * 14
+        const ay = (aDy / aLen) * 14
+        const px = (-aDy / aLen) * 6
+        const py = (aDx / aLen) * 6
+        return (
+          <polygon
+            points={`${aPos.x - px},${aPos.y - py} ${aPos.x + px},${aPos.y + py} ${aPos.x + ax},${aPos.y + ay}`}
+            fill="#22d3ee" opacity={0.9} filter="url(#pf-glow-c)"
+          />
+        )
+      })()}
     </g>
   )
 }
@@ -866,7 +890,7 @@ export function ProcessFlow() {
               Array.from({ length: LANE_COUNT }, (_, li) => {
                 const laneOffset = ((li - (LANE_COUNT - 1) / 2) * LANE_SPREAD) / LANE_COUNT
                 return (
-                  <RouteSegment key={`${ri}-${li}`} pts={route.pts} laneOffset={laneOffset} />
+                  <RouteSegment key={`${ri}-${li}`} pts={route.pts} laneOffset={laneOffset} isCenterLane={li === Math.floor(LANE_COUNT / 2)} laneIndex={li} />
                 )
               })
             )}
