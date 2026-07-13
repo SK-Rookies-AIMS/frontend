@@ -42,30 +42,30 @@ const ROUTES: { pts: { x: number; y: number }[] }[] = [
   {
     // 프레스 → 차체  (horizontal)
     pts: [
-      { x: STATIONS[0].cx + BW / 2 + ISO_DX + 8, y: STATIONS[0].cy + BH / 4 },
-      { x: STATIONS[1].cx - BW / 2 - 8,           y: STATIONS[1].cy + BH / 4 },
+      { x: STATIONS[0].cx + BW / 2 + ISO_DX - 20, y: STATIONS[0].cy + BH / 4 },
+      { x: STATIONS[1].cx - BW / 2 + 20,           y: STATIONS[1].cy + BH / 4 },
     ],
   },
   {
     // 차체 → 도장  (L-shape: go down then left)
     pts: [
-      { x: STATIONS[1].cx + BW / 4, y: STATIONS[1].cy + BH / 2 + 8 },
+      { x: STATIONS[1].cx + BW / 4, y: STATIONS[1].cy + BH / 2 - 10 },
       { x: STATIONS[1].cx + BW / 4, y: STATIONS[2].cy },
-      { x: STATIONS[2].cx + BW / 2 + ISO_DX + 8, y: STATIONS[2].cy },
+      { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy },
     ],
   },
   {
     // 도장 → 의장  (horizontal)
     pts: [
-      { x: STATIONS[2].cx + BW / 2 + ISO_DX + 8, y: STATIONS[2].cy + BH / 4 },
-      { x: STATIONS[3].cx - BW / 2 - 8,           y: STATIONS[3].cy + BH / 4 },
+      { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy + BH / 4 },
+      { x: STATIONS[3].cx - BW / 2 + 20,           y: STATIONS[3].cy + BH / 4 },
     ],
   },
   {
     // 의장 → 최종검사  (horizontal)
     pts: [
-      { x: STATIONS[3].cx + BW / 2 + ISO_DX + 8, y: STATIONS[3].cy + BH / 4 },
-      { x: STATIONS[4].cx - BW / 2 - 8,           y: STATIONS[4].cy + BH / 4 },
+      { x: STATIONS[3].cx + BW / 2 + ISO_DX - 20, y: STATIONS[3].cy + BH / 4 },
+      { x: STATIONS[4].cx - BW / 2 + 20,           y: STATIONS[4].cy + BH / 4 },
     ],
   },
 ]
@@ -313,21 +313,21 @@ const SVG_CSS = `
 //  Isometric Platform
 // ─────────────────────────────────────────────────────────────────────────────
 function Platform({
-  cx, cy, w, h,
+  cx, cy, w, h, platformY,
   accentColor = "#22d3ee",
   warn = false,
 }: {
-  cx: number; cy: number; w: number; h: number
+  cx: number; cy: number; w: number; h: number; platformY?: number;
   accentColor?: string; warn?: boolean
 }) {
-  const pw = w + 40
+  const pw = w + 20
   const ph = h
-  const pd = 18
+  const pd = 12
   const sdx = 28
   const sdy = 18
 
   const x = cx - pw / 2
-  const y = cy + ph / 2
+  const y = platformY ?? (cy + ph / 2)
   const bdy = y + pd
 
   const topPts = `${x},${y} ${x + pw},${y} ${x + pw + sdx},${y - sdy} ${x + sdx},${y - sdy}`
@@ -740,6 +740,24 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Factory Platform (base rendered before routes)
+// ─────────────────────────────────────────────────────────────────────────────
+function FactoryPlatform({
+  cx, cy, warn,
+}: {
+  cx: number; cy: number; warn: boolean
+}) {
+  const bldgOffset = 22
+  const buildingBottomY = cy + BH / 2 + bldgOffset
+  const gap = 2 // Close the gap to 2px
+  const platformY = buildingBottomY + gap
+
+  return (
+    <Platform cx={cx + ISO_DX / 2} cy={cy} w={BW} h={BH} platformY={platformY} warn={warn} />
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Complete factory station
 // ─────────────────────────────────────────────────────────────────────────────
 function FactoryStation({
@@ -755,7 +773,6 @@ function FactoryStation({
 
   return (
     <g>
-      <Platform cx={cx + ISO_DX / 2} cy={cy + bh / 2} w={bw} h={bh} warn={warn} />
       <BuildingShell x={x} y={y} bw={bw} bh={bh} warn={warn} />
       <ProcessInterior name={name} x={x} y={y} bw={bw} bh={bh} />
       <ProcessLabel cx={cx} cy={cy + bldgOffset} num={num} name={name} warn={warn} />
@@ -885,7 +902,16 @@ export function ProcessFlow() {
             {/* Grid overlay on bright background */}
             <rect width="100%" height="100%" fill="url(#pf-grid)" />
 
-            {/* ── Routes (draw under buildings) */}
+            {/* ── Factory Platforms (Drawn BEFORE routes) */}
+            {STATIONS.map((s) => (
+              <FactoryPlatform
+                key={`plat-${s.id}`}
+                cx={s.cx} cy={s.cy}
+                warn={warnStation.has(s.id)}
+              />
+            ))}
+
+            {/* ── Routes (draw ON TOP of platforms, UNDER buildings) */}
             {ROUTES.map((route, ri) =>
               Array.from({ length: LANE_COUNT }, (_, li) => {
                 const laneOffset = ((li - (LANE_COUNT - 1) / 2) * LANE_SPREAD) / LANE_COUNT
@@ -906,7 +932,7 @@ export function ProcessFlow() {
               )
             })()}
 
-            {/* ── Factory stations */}
+            {/* ── Factory stations (draw ON TOP of routes) */}
             {STATIONS.map((s) => (
               <FactoryStation
                 key={s.id}
