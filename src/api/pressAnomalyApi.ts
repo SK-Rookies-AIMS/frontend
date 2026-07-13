@@ -8,6 +8,8 @@ export type PressAnomalyMetrics = {
   targetCycleTimeSec: number | null
   actualCycleTimeSec: number | null
   cycleTimeGapSec: number | null
+  warningCycleTimeGapSec?: number | null
+  dangerCycleTimeGapSec?: number | null
   timestampDelaySec: number | null
   riskScore: number | null
   riskScoreScale: string | null
@@ -21,6 +23,8 @@ export type PressAnomalyChartPoint = {
   targetCycleTimeSec: number | null
   actualCycleTimeSec: number | null
   cycleTimeGapSec: number | null
+  warningCycleTimeGapSec?: number | null
+  dangerCycleTimeGapSec?: number | null
   timestampDelaySec: number | null
   riskScore: number | null
   countIncreaseYn: boolean

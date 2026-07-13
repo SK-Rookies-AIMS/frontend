@@ -124,22 +124,35 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
     )
   }
 
-  const pressYAxisDomain = useMemo<[number, number]>(() => {
-    if (pressDisplayData.length === 0) return [0, 1]
+  const warningCycleTimeLine =
+    latestPressDisplayData.target_cycle_time_sec + Number(latestPressDisplayData.warning_cycle_time_gap_sec ?? 0)
+  const dangerCycleTimeLine =
+    latestPressDisplayData.target_cycle_time_sec + Number(latestPressDisplayData.danger_cycle_time_gap_sec ?? 0)
 
-    const values = pressDisplayData.flatMap((item: any) => [
-      Number(item.actual_cycle_time_sec),
-      Number(item.target_cycle_time_sec),
-      Number(item.cycle_time_gap_sec),
-    ])
+  const pressCycleTimeDomain = useMemo<[number, number]>(() => [30, 60], [])
 
-    const minValue = Math.min(...values)
-    const maxValue = Math.max(...values)
+  const pressGapDomain = useMemo<[number, number]>(() => {
+    if (pressDisplayData.length === 0) return [-1, 1]
+
+    const gapValues = pressDisplayData.map((item: any) => Number(item.cycle_time_gap_sec))
+    const minValue = Math.min(...gapValues)
+    const maxValue = Math.max(...gapValues)
     const spread = maxValue - minValue
-    const padding = spread > 0 ? Math.max(spread * 0.15, 0.5) : 1
+    const padding = spread > 0 ? Math.max(spread * 0.2, 1) : 1
 
     return [Math.floor(minValue - padding), Math.ceil(maxValue + padding)]
   }, [pressDisplayData])
+
+  const pressCycleTimeTicks = useMemo(() => {
+    const [minValue, maxValue] = pressCycleTimeDomain
+    const start = Math.floor(minValue / 5) * 5
+    const end = Math.ceil(maxValue / 5) * 5
+    const ticks: number[] = []
+    for (let value = start; value <= end; value += 5) {
+      ticks.push(value)
+    }
+    return ticks
+  }, [pressCycleTimeDomain])
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -184,16 +197,24 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                       </select>
                     </label>
                   </div>
-                  <div className="flex items-center gap-4 mb-2 text-xs">
-                    <div className="flex items-center gap-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
                       <div className="w-3 h-0.5 bg-primary" />
                       <span>실제 사이클 타임</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
                       <div className="w-3 h-0.5 bg-success" />
-                      <span>기준 사이클 타임</span>
+                      <span>기준 {latestPressDisplayData.target_cycle_time_sec.toFixed(1)} sec</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <div className="w-3 h-0.5 border-t border-dashed border-warning bg-transparent" />
+                      <span>경고 {warningCycleTimeLine.toFixed(1)} sec</span>
+                    </div>
+                    <div className="flex items-center gap-1 whitespace-nowrap">
+                      <div className="w-3 h-0.5 border-t border-dashed border-destructive bg-transparent" />
+                      <span>위험 {dangerCycleTimeLine.toFixed(1)} sec</span>
+                    </div>
+                    <div className="flex items-center gap-1 whitespace-nowrap">
                       <div className="w-3 h-0.5 bg-warning" />
                       <span>최대 Cycle Time 지연</span>
                     </div>
@@ -234,18 +255,31 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                             stroke="#64748b"
                             tickFormatter={formatChartTick}
                           />
-                          <YAxis tick={{ fontSize: 10 }} stroke="#64748b" domain={pressYAxisDomain} />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            stroke="#64748b"
+                            domain={pressCycleTimeDomain}
+                            ticks={pressCycleTimeTicks}
+                            allowDataOverflow
+                          />
+                          <YAxis yAxisId="gap" orientation="right" hide domain={pressGapDomain} />
+                          <ReferenceLine
+                            y={warningCycleTimeLine}
+                            stroke="#facc15"
+                            strokeDasharray="5 5"
+                            ifOverflow="discard"
+                          />
+                          <ReferenceLine
+                            y={dangerCycleTimeLine}
+                            stroke="#ef4444"
+                            strokeDasharray="5 5"
+                            ifOverflow="discard"
+                          />
                           <ReferenceLine
                             y={latestPressDisplayData.target_cycle_time_sec}
                             stroke="#22c55e"
                             strokeDasharray="4 4"
-                            ifOverflow="extendDomain"
-                            label={{
-                              value: `기준 사이클 타임 ${latestPressDisplayData.target_cycle_time_sec.toFixed(1)} sec`,
-                              position: "insideTopRight",
-                              fill: "#22c55e",
-                              fontSize: 10,
-                            }}
+                            ifOverflow="discard"
                           />
                           <Tooltip
                             content={renderPressTooltip}
@@ -256,7 +290,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                           />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={renderPressSeverityDot} strokeWidth={2} />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="target_cycle_time_sec" stroke="#22c55e" name="기준 사이클 타임" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
-                          <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="cycle_time_gap_sec" stroke="#f59e0b" name="사이클 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
+                          <Line isAnimationActive={false} yAxisId="gap" pathLength={1} type="monotone" dataKey="cycle_time_gap_sec" stroke="#f59e0b" name="사이클 지연" dot={visiblePressData.length === 1 ? { r: 4 } : false} strokeWidth={2} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>

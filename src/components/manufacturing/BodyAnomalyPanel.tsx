@@ -53,6 +53,10 @@ function getZoneColorByBand(band: string) {
   return ZONE_PALETTE[0].color
 }
 
+function getZoneColorByIndex(index: number) {
+  return ZONE_PALETTE[Math.min(Math.max(index, 0), ZONE_PALETTE.length - 1)].color
+}
+
 function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
   const chart = Array.isArray(bodyAnalysis?.frequencyZoneChart) ? bodyAnalysis.frequencyZoneChart : null
   if (chart && chart.length > 0) {
@@ -63,7 +67,7 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
         description: entry.description ?? null,
         avg: Number(entry.avg ?? 0),
         max: Number(entry.max ?? 0),
-        color: ZONE_PALETTE[Math.min(index, ZONE_PALETTE.length - 1)].color,
+        color: getZoneColorByIndex(index),
       }))
       .filter((entry) => entry.zone)
   }
@@ -77,35 +81,35 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
       range: "0~300Hz",
       description: "저주파 / 기본 구조 진동",
       source: analysis.low ?? analysis.zone1,
-      color: ZONE_PALETTE[0].color,
+      color: getZoneColorByIndex(0),
     },
     {
       zone: "Zone 2",
       range: "301~600Hz",
       description: "로봇 본체 진동",
       source: analysis.main ?? analysis.zone2,
-      color: ZONE_PALETTE[1].color,
+      color: getZoneColorByIndex(1),
     },
     {
       zone: "Zone 3",
       range: "601~900Hz",
       description: "관절·감속기 진동",
       source: analysis.high ?? analysis.zone3,
-      color: ZONE_PALETTE[2].color,
+      color: getZoneColorByIndex(2),
     },
     {
       zone: "Zone 4",
       range: "901~1200Hz",
       description: "베어링·기계 이상 진동",
       source: analysis.ultra ?? analysis.zone4,
-      color: ZONE_PALETTE[3].color,
+      color: getZoneColorByIndex(3),
     },
     {
       zone: "Zone 5",
       range: "1201~1600Hz",
       description: "고주파 충격·충돌 위험",
       source: analysis.extreme ?? analysis.zone5,
-      color: ZONE_PALETTE[4].color,
+      color: getZoneColorByIndex(4),
     },
   ] as const
 
@@ -119,6 +123,39 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
       max: Number(entry.source?.max ?? 0),
       color: entry.color,
     }))
+}
+
+function formatFrequencyZoneTooltip(
+  payload: Array<{ payload?: ZoneSummary; dataKey?: string; value?: number }>,
+) {
+  const row = payload?.[0]?.payload
+  if (!row) return null
+
+  return (
+    <div
+      className="rounded-lg border border-border bg-popover px-3 py-2 shadow-xl"
+      style={{
+        color: "var(--popover-foreground)",
+        backgroundColor: "var(--popover)",
+      }}
+    >
+      <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-medium" style={{ color: row.color }}>{row.zone}</span>
+          <span className="text-muted-foreground">{row.range}</span>
+        </div>
+        {row.description ? <div className="text-muted-foreground">{row.description}</div> : null}
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-medium">평균</span>
+          <span className="font-semibold">{row.avg.toFixed(6)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-medium">최대</span>
+          <span className="font-semibold">{row.max.toFixed(6)}</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function getMaxFromTrend(data: TrendPoint[], fallback = 1) {
@@ -138,23 +175,24 @@ function formatTrendRange(data: TrendPoint[]) {
 function formatTrendTooltip(
   value: number,
   name: string,
-  labels: { valueLabel: string; secondaryValueLabel?: string; unit: string },
+  labels: { valueLabel: string; secondaryValueLabel?: string; unit: string; precision: number },
 ) {
-  if (name === "warning_line") return [Number(value).toFixed(3), "경고 기준"]
-  if (name === "danger_line") return [Number(value).toFixed(3), "위험 기준"]
+  if (name === "warning_line") return [Number(value).toFixed(labels.precision), "경고 기준"]
+  if (name === "danger_line") return [Number(value).toFixed(labels.precision), "위험 기준"]
   if (labels.secondaryValueLabel && (name === "secondaryValue" || name === labels.secondaryValueLabel)) {
-    return [`${Number(value).toFixed(6)} ${labels.unit}`, labels.secondaryValueLabel]
+    return [`${Number(value).toFixed(labels.precision)} ${labels.unit}`, labels.secondaryValueLabel]
   }
-  return [`${Number(value).toFixed(6)} ${labels.unit}`, labels.valueLabel]
+  return [`${Number(value).toFixed(labels.precision)} ${labels.unit}`, labels.valueLabel]
 }
 
 function formatFrequencySpectrumTooltip(
   payload: Array<{ dataKey?: string; value?: number; color?: string; name?: string }>,
+  thresholds: { warningValue: number; dangerValue: number },
 ) {
   const current = payload.find((item) => item.dataKey === "value")
   const row = payload[0]?.payload as any
-  const warningValue = Number(row?.warningValue ?? 0.015)
-  const dangerValue = Number(row?.dangerValue ?? 0.03)
+  const warningValue = Number(row?.warningValue ?? thresholds.warningValue)
+  const dangerValue = Number(row?.dangerValue ?? thresholds.dangerValue)
 
   return (
     <div
@@ -200,6 +238,10 @@ function TrendChart({
   secondaryValueLabel,
   valueColor,
   secondaryValueColor,
+  precision = 3,
+  warningLabelPosition = "insideTopLeft",
+  dangerLabelPosition = "insideTopRight",
+  allowDataOverflow = false,
   hovered,
   dragging,
   onPointerDown,
@@ -214,6 +256,10 @@ function TrendChart({
   secondaryValueLabel?: string
   valueColor: string
   secondaryValueColor?: string
+  precision?: number
+  warningLabelPosition?: "insideTopLeft" | "insideTopRight" | "insideBottomLeft" | "insideBottomRight" | "top" | "bottom"
+  dangerLabelPosition?: "insideTopLeft" | "insideTopRight" | "insideBottomLeft" | "insideBottomRight" | "top" | "bottom"
+  allowDataOverflow?: boolean
   hovered: boolean
   dragging: boolean
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
@@ -312,10 +358,12 @@ function TrendChart({
               domain={[0, resolvedYDomainMax]}
               tick={{ fontSize: 10 }}
               stroke={valueColor}
-              tickFormatter={(value) => Number(value).toFixed(3)}
+              tickFormatter={(value) => Number(value).toFixed(precision)}
+              allowDataOverflow={allowDataOverflow}
+              tickCount={4}
             />
             <Tooltip
-              formatter={(value, name) => formatTrendTooltip(Number(value), String(name), { valueLabel, secondaryValueLabel, unit })}
+              formatter={(value, name) => formatTrendTooltip(Number(value), String(name), { valueLabel, secondaryValueLabel, unit, precision })}
               labelFormatter={(label) => `측정 시간 ${label}`}
               contentStyle={{
                 backgroundColor: "var(--popover)",
@@ -336,8 +384,8 @@ function TrendChart({
                 strokeDasharray="5 5"
                 ifOverflow="extendDomain"
                 label={{
-                  value: `경고선 ${Number(warningLine).toFixed(3)}`,
-                  position: "insideTopRight",
+                  value: `경고선 ${Number(warningLine).toFixed(precision)}`,
+                  position: warningLabelPosition,
                   fill: "#facc15",
                   fontSize: 10,
                 }}
@@ -350,8 +398,8 @@ function TrendChart({
                 strokeDasharray="5 5"
                 ifOverflow="extendDomain"
                 label={{
-                  value: `위험선 ${Number(dangerLine).toFixed(3)}`,
-                  position: "insideTopRight",
+                  value: `위험선 ${Number(dangerLine).toFixed(precision)}`,
+                  position: dangerLabelPosition,
                   fill: "#f97316",
                   fontSize: 10,
                 }}
@@ -410,6 +458,18 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
 
   const frequencyZones = React.useMemo(() => normalizeFrequencyZones(bodyAnalysis), [bodyAnalysis])
   const frequencySpectrum = bodyAnalysis?.frequencyChart ?? []
+  const frequencyZoneSpectrum = frequencyZones
+  const peakWarningLine = Number(latestBodyData.peak_warning_line ?? 0.015)
+  const peakDangerLine = Number(latestBodyData.peak_danger_line ?? 0.03)
+  const frequencyPeakTrendDomainMax = React.useMemo(() => {
+    const thresholdTop = Math.max(
+      peakDangerLine * 1.08,
+      peakWarningLine * 1.15,
+      peakDangerLine + Math.max((peakDangerLine - peakWarningLine) * 0.5, 0.00001),
+      0.00006,
+    )
+    return thresholdTop
+  }, [peakDangerLine, peakWarningLine])
   const frequencySpectrumBarDomainMax = React.useMemo(() => {
     const values = frequencySpectrum.flatMap((row: any) => [
       Number(row.value ?? 0),
@@ -421,19 +481,28 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
   }, [frequencySpectrum])
   const frequencySpectrumThresholdDomainMax = React.useMemo(() => {
     const values = frequencySpectrum.flatMap((row: any) => [
-      Number(row.warningValue ?? 0.015),
-      Number(row.dangerValue ?? 0.03),
+      Number(row.warningValue ?? peakWarningLine),
+      Number(row.dangerValue ?? peakDangerLine),
       Number(row.value ?? 0),
       Number(row.max ?? 0),
     ])
-    return Math.max(0.0315, ...values)
-  }, [frequencySpectrum])
+    return Math.max(peakDangerLine * 1.25, ...values)
+  }, [frequencySpectrum, peakDangerLine, peakWarningLine])
+  const frequencyZoneBarDomainMax = React.useMemo(() => {
+    const values = frequencyZoneSpectrum.flatMap((row: any) => [
+      Number(row.avg ?? 0),
+      Number(row.max ?? 0),
+      Number(row.targetValue ?? 0),
+      Number(row.warningValue ?? 0),
+      Number(row.dangerValue ?? 0),
+    ])
+    const maxValue = Math.max(...values, 0.001)
+    return Math.max(0.0015, maxValue * 1.35)
+  }, [frequencyZoneSpectrum])
 
   const latestBodyRiskScore = Number(latestBodyData.risk_score ?? 0)
   const robotVibrationScore = Number(latestBodyData.robot_vibration_score ?? 0)
   const frequencyPeakValue = Number(latestBodyData.frequency_peak_value ?? 0)
-  const peakWarningLine = Number(latestBodyData.peak_warning_line ?? 0.015)
-  const peakDangerLine = Number(latestBodyData.peak_danger_line ?? 0.03)
 
   const motionClass =
     latestBodyData.robot_motion_status === "NORMAL"
@@ -560,11 +629,15 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           title="주파수 피크값 추이"
           unit="mm/s"
           data={visibleBodyFrequencyData}
-          yDomainMax={bodyFrequencyTrendDomainMax}
+          yDomainMax={frequencyPeakTrendDomainMax}
           valueLabel="피크 진동값"
           secondaryValueLabel="피크 RMS"
           valueColor="#22c55e"
           secondaryValueColor="#38bdf8"
+          precision={6}
+          warningLabelPosition="insideTopLeft"
+          dangerLabelPosition="insideTopRight"
+          allowDataOverflow
           hovered={isBodyFrequencyChartHovered}
           dragging={isBodyFrequencyChartDragging}
           onPointerDown={handleBodyFrequencyChartPointerDown}
@@ -577,13 +650,13 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           </div>
           <div className="chart-line-reveal select-none">
             <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={frequencySpectrum} margin={{ top: 5, right: 24, left: 4, bottom: 50 }}>
+              <ComposedChart data={frequencyZoneSpectrum} margin={{ top: 5, right: 24, left: 4, bottom: 50 }}>
                 <CartesianGrid vertical={false} stroke="#334155" />
                 <XAxis
-                  dataKey="band"
+                  dataKey="zone"
                   tick={{ fontSize: 10, fill: "#94a3b8" }}
                   stroke="#64748b"
-                  angle={-45}
+                  angle={-25}
                   textAnchor="end"
                   dy={10}
                 />
@@ -591,7 +664,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   yAxisId="left"
                   tick={{ fontSize: 10 }}
                   stroke="#64748b"
-                  domain={[0, frequencySpectrumBarDomainMax]}
+                  domain={[0, frequencyZoneBarDomainMax]}
                   tickFormatter={(value) => Number(value).toFixed(6)}
                 />
                 <YAxis
@@ -600,33 +673,33 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   hide
                   domain={[0, frequencySpectrumThresholdDomainMax]}
                 />
-                <Tooltip content={({ payload }) => formatFrequencySpectrumTooltip((payload ?? []) as any)} />
-                <Bar yAxisId="left" dataKey="value" name="실측값" radius={[2, 2, 0, 0]}>
-                  {frequencySpectrum.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={getZoneColorByBand(entry?.band)} />
+                <Tooltip content={({ payload }) => formatFrequencyZoneTooltip((payload ?? []) as any)} />
+                <Bar yAxisId="left" dataKey="max" name="최대" radius={[2, 2, 0, 0]}>
+                  {frequencyZoneSpectrum.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry?.color ?? getZoneColorByIndex(index)} />
                   ))}
                 </Bar>
                 <ReferenceLine
                   yAxisId="right"
-                  y={0.015}
+                  y={peakWarningLine}
                   stroke="#facc15"
                   strokeDasharray="5 5"
                   ifOverflow="extendDomain"
                   label={{
-                    value: "경고 기준 0.015000",
-                    position: "insideTopRight",
+                    value: `경고 기준 ${peakWarningLine.toFixed(6)}`,
+                    position: "insideTopLeft",
                     fill: "#facc15",
                     fontSize: 10,
                   }}
                 />
                 <ReferenceLine
                   yAxisId="right"
-                  y={0.03}
+                  y={peakDangerLine}
                   stroke="#f97316"
                   strokeDasharray="5 5"
                   ifOverflow="extendDomain"
                   label={{
-                    value: "위험 기준 0.030000",
+                    value: `위험 기준 ${peakDangerLine.toFixed(6)}`,
                     position: "insideTopRight",
                     fill: "#f97316",
                     fontSize: 10,

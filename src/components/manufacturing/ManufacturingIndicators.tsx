@@ -92,7 +92,7 @@ export function StageIcon({ type }: { type: string }) {
           <path d="M3 2 L5 2 L5 4 L3 4 Z" strokeWidth="1" />
         </svg>
       )
-    case "연계 분석":
+    case "AI 연계 분석":
       // Network flow / data analysis icon
       return (
         <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

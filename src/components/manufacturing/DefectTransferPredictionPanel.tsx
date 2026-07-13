@@ -56,12 +56,20 @@ export function DefectTransferPredictionPanel({
           </select>
         </div>
       </div>
+
       <div ref={scrollRef} className="h-[206px] overflow-y-auto pr-1" onScroll={onScroll}>
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-[33%]" />
+            <col className="w-[22%]" />
+            <col className="w-[20%]" />
+            <col className="w-[15%]" />
+            <col className="w-[14%]" />
+          </colgroup>
           <thead className="sticky top-0 bg-card">
             <tr className="text-xs text-muted-foreground">
               <th className="py-2 text-left">Vehicle ID</th>
-              <th className="py-2 text-left">현재 공정</th>
+              <th className="py-2 text-center">현재 공정</th>
               <th className="py-2 text-center">예측 불량 공정</th>
               <th className="py-2 text-center">불량 확률</th>
               <th className="py-2 text-center">예상 시점</th>
@@ -81,14 +89,14 @@ export function DefectTransferPredictionPanel({
                   }`}
                 >
                   <td className="py-2 font-medium">{row.vehicleId}</td>
-                  <td className="py-2">{row.currentProcess}</td>
-                  <td className="py-2 text-center text-destructive">{row.predictedDefectProcess}</td>
+                  <td className="py-2 text-center truncate">{row.currentProcess}</td>
+                  <td className="py-2 text-center text-destructive whitespace-nowrap truncate">{row.predictedDefectProcess}</td>
                   <td className="text-center">
                     <span className={`font-bold ${getDefectRiskTextClass(row.riskLevel, row.defectProbability)}`}>
                       {formatProbability(row.defectProbability)}
                     </span>
                   </td>
-                  <td className="text-center text-muted-foreground">{row.expectedTime}</td>
+                  <td className="text-center whitespace-nowrap text-muted-foreground">{row.expectedTime}</td>
                 </tr>
               )
             })}
