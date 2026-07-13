@@ -144,6 +144,18 @@ async function loadDashboard(refresh = false) {
   }
 }
 
+useEffect(() => {
+  const handleRefresh = () => {
+    void loadDashboard(true)
+  }
+
+  window.addEventListener("page-refresh", handleRefresh)
+
+  return () => {
+    window.removeEventListener("page-refresh", handleRefresh)
+  }
+}, [])
+
   // 최신 시간대 기준 최대 4개 추출
   // createdAt 필드가 없으면 processData 전체를 그대로 사용
   const currentDateRef = useRef<string | null>(null)
@@ -338,44 +350,6 @@ async function loadDashboard(refresh = false) {
               <h1 className="text-xl font-bold">
                 품질 / 검사 단계 모니터링
               </h1>
-
-              <div className="flex items-center gap-2">
-
-                <input
-                  type="number"
-                  min={1}
-                  value={refreshInterval}
-                  onChange={(e) => setRefreshInterval(e.target.value)}
-                  className="w-20 px-2 py-1 text-xs rounded bg-slate-800 border border-slate-700"
-                />
-
-                <span className="text-xs text-muted-foreground">
-                  초
-                </span>
-
-                <button
-                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                  className={`px-3 py-1 rounded text-xs transition-colors ${
-                    autoRefreshEnabled
-                      ? "bg-green-600 text-white"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  {autoRefreshEnabled ? "자동 ON" : "자동 OFF"}
-                </button>
-
-                <button
-                  onClick={() => loadDashboard(true)}
-                  disabled={isRefreshing}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-cyan-400 transition-colors disabled:opacity-50 px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
-                  />
-                  {isRefreshing ? "갱신 중..." : "새로고침"}
-                </button>
-
-              </div>
             </div>
             <p className="text-sm text-muted-foreground">
               각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.

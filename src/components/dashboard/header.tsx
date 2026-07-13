@@ -136,20 +136,31 @@ export function Header({ currentTime }: HeaderProps) {
     return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
+  
+const [refreshInterval, setRefreshInterval] = useState<number>(0)
+
+const refreshPageData = () => {
+  window.dispatchEvent(
+    new CustomEvent("page-refresh")
+  )
+}
+
+useEffect(() => {
+  if (refreshInterval === 0) return
+
+  const interval = setInterval(() => {
+    refreshPageData()
+  }, refreshInterval)
+
+  return () => clearInterval(interval)
+
+}, [refreshInterval])
+
   // 클라이언트 사이드에서만 테마 아이콘 표시 (hydration 문제 방지)
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    const hours = String(date.getHours()).padStart(2, "0")
-    const minutes = String(date.getMinutes()).padStart(2, "0")
-    const seconds = String(date.getSeconds()).padStart(2, "0")
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-  }
 
   const navItems = [
     { icon: <Home className="w-4 h-4" />, label: "메인", href: "/" },
@@ -257,10 +268,51 @@ export function Header({ currentTime }: HeaderProps) {
           </span>
         </div>
 
-        {/* DateTime */}
+        {/* DateTime
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" />
           <span>{formatDate(currentTime)}</span>
+        </div> */}
+
+        {/* Page Refresh */}
+        <div className="flex items-center gap-2 text-sm">
+
+          <select
+            value={refreshInterval}
+            onChange={(e)=>{
+              setRefreshInterval(Number(e.target.value))
+            }}
+            className="
+              bg-secondary
+              rounded
+              px-2
+              py-1
+              text-sm
+            "
+          >
+            <option value={0}>
+              자동 OFF
+            </option>
+
+            <option value={3000}>
+              3초
+            </option>
+
+            <option value={5000}>
+              5초
+            </option>
+
+            <option value={10000}>
+              10초
+            </option>
+
+            <option value={30000}>
+              30초
+            </option>
+
+
+          </select>
+
         </div>
 
         {/* Logout */}

@@ -46,6 +46,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
+import api from "@/api/axios"
 
 type PriorityFilter = "전체" | "높음" | "중간" | "낮음"
 
@@ -66,7 +67,7 @@ export default function EventsPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null);
   const [pageSize, setPageSize] = useState(10)
   const [actionReason, setActionReason] = useState("")
   const [severityFilter, setSeverityFilter] = useState<"전체" | "DANGER" | "CAUTION">("전체")
@@ -90,6 +91,18 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+
+  interface ActionTimelineItem { 
+    actionId: string; 
+    actionTime: string; 
+    actionContent: string; 
+    actionResult: string; 
+    actionCategory: string; 
+  }
+  type EventDetail = EventItem & {
+    logNo: string;
+    actionTimeline?: ActionTimelineItem[];
+  };
 
   const fetchEvents = useCallback(async (page: number, size: number) => {
     setLoading(true)
@@ -175,6 +188,23 @@ export default function EventsPage() {
 
   useEffect(() => {
     fetchEvents(currentPage, pageSize)
+
+  const handler = () => {
+    fetchEvents(currentPage, pageSize)
+  }
+
+      window.addEventListener(
+    "page-refresh",
+    handler
+  )
+
+
+  return ()=> {
+    window.removeEventListener(
+      "page-refresh",
+      handler
+    )
+  }
   }, [fetchEvents, currentPage, pageSize])
 
   useEffect(() => {
@@ -419,6 +449,78 @@ const AREA_KOREAN_MAP: Record<string, string> = {
   const todayDangerCount = todayEvents.filter(e => e.severity === "위험").length
   const todayWarningCount = todayEvents.filter(e => e.severity === "경고").length
 
+
+  const handleOpenDetail = async (event: EventItem) => {
+  try {
+    const detailEvent: EventDetail = {
+      ...event,
+      logNo: String(event.id),
+      actionTimeline: [],
+    };
+
+    setSelectedEvent(detailEvent);
+
+      const res = await api.get(
+        `/api/event/${detailEvent.logNo}/action-timeline`
+      );
+
+      setSelectedEvent(prev =>
+        prev
+          ? {
+              ...prev,
+              actionTimeline: res.data.data,
+            }
+          : prev
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case "CHECK":
+        return "점검";
+      case "REPAIR":
+        return "수리";
+      case "CHANGE":
+        return "교체";
+      case "CLEAN":
+        return "청소";
+      case "ADJUST":
+        return "조정";
+      case "RESTART":
+        return "재시작";
+      default:
+        return category;
+    }
+  };
+
+  const getCategoryStyle = (category: string) => {
+    switch (category) {
+      case "CHECK":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/30";
+
+      case "REPAIR":
+        return "bg-red-500/10 text-red-500 border-red-500/30";
+
+      case "CHANGE":
+        return "bg-purple-500/10 text-purple-500 border-purple-500/30";
+
+      case "CLEAN":
+        return "bg-green-500/10 text-green-500 border-green-500/30";
+
+      case "ADJUST":
+        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/30";
+
+      case "RESTART":
+        return "bg-cyan-500/10 text-cyan-500 border-cyan-500/30";
+
+      default:
+        return "bg-secondary text-muted-foreground border-border";
+    }
+  };
+
   return (
     <AuthGuard>
     <div className="min-h-screen bg-background flex flex-col">
@@ -628,7 +730,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <button 
-                          onClick={() => setSelectedEvent(event)}
+                          onClick={() => handleOpenDetail(event)}
                           className="p-1.5 hover:bg-secondary rounded transition-colors"
                         >
                           <Eye className="w-4 h-4 text-muted-foreground" />
@@ -1010,72 +1112,6 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                   </div>
                 )}
 
-                {/* Action Timeline (조치 완료시) */}
-                {selectedEvent.status === "조치 완료" && selectedEvent.actionTimeline && (
-                  <div className="border-t border-border pt-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Clock className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-medium">조치 타임라인</h3>
-                      <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded">
-                        총 {selectedEvent.actionTimeline.length}단계
-                      </span>
-                    </div>
-                    <div className="relative">
-                      {/* Timeline line */}
-                      <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-border" />
-                      
-                      <div className="space-y-3">
-                        {selectedEvent.actionTimeline.map((item, index) => {
-                          const getTypeStyle = (type: string) => {
-                            switch (type) {
-                              case "확인": return "bg-primary/20 text-primary border-primary/30"
-                              case "분석": return "bg-warning/20 text-warning border-warning/30"
-                              case "조치": return "bg-success/20 text-success border-success/30"
-                              case "검증": return "bg-primary/20 text-primary border-primary/30"
-                              case "완료": return "bg-success/20 text-success border-success/30"
-                              default: return "bg-secondary text-muted-foreground"
-                            }
-                          }
-                          
-                          const getDotColor = (type: string) => {
-                            switch (type) {
-                              case "확인": return "bg-primary"
-                              case "분석": return "bg-warning"
-                              case "조치": return "bg-success"
-                              case "��증": return "bg-primary"
-                              case "완료": return "bg-success"
-                              default: return "bg-muted-foreground"
-                            }
-                          }
-                          
-                          return (
-                            <div key={index} className="flex gap-3 relative">
-                              {/* Timeline dot */}
-                              <div className={`w-4 h-4 rounded-full ${getDotColor(item.type)} flex-shrink-0 z-10 flex items-center justify-center`}>
-                                {item.type === "완료" && <Check className="w-2.5 h-2.5 text-white" />}
-                              </div>
-                              
-                              {/* Content */}
-                              <div className="flex-1 bg-secondary/30 rounded-lg p-3 -mt-0.5">
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs text-muted-foreground">{item.time}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getTypeStyle(item.type)}`}>
-                                      {item.type}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs text-muted-foreground">{item.handler}</span>
-                                </div>
-                                <p className="text-sm">{item.action}</p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* AI Analysis (조치 미완료시) */}
                 {selectedEvent.status === "조치 미완료" && selectedEvent.aiAnalysis && (
                   <div className="border-t border-border pt-4">
@@ -1168,6 +1204,87 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                     관제사 반응 기반 알림 우선순위 점수
                   </p>
                 </div>
+
+                {/* Action Timeline */}
+                {selectedEvent.actionTimeline &&
+                  selectedEvent.actionTimeline.length > 0 && (
+                    <div className="border-t border-border pt-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Clock className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-medium">조치 타임라인</h3>
+                      </div>
+
+                      <div className="relative">
+                        <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-border" />
+
+                        <div className="space-y-4">
+                          {[...selectedEvent.actionTimeline]
+                            .sort(
+                              (a, b) =>
+                                new Date(a.actionTime).getTime() -
+                                new Date(b.actionTime).getTime()
+                            )
+                            .map((item) => (
+                              <div key={item.actionId} className="flex gap-3 relative">
+
+                                {/* Timeline Dot */}
+                                <div className="relative flex flex-col items-center">
+                                  <div className="w-4 h-4 rounded-full bg-primary border-2 border-card z-10" />
+
+                                  <div className="absolute top-4 bottom-[-20px] w-0.5 bg-border" />
+                                </div>
+
+                                {/* Card */}
+                                <div className="flex-1 rounded-lg border border-border bg-secondary/30 p-4">
+
+                                  {/* Header */}
+                                  <div className="flex items-center justify-between mb-3">
+
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                      {(() => {
+                                        const date = new Date(item.actionTime);
+
+                                        const month = String(date.getMonth() + 1).padStart(2, "0");
+                                        const day = String(date.getDate()).padStart(2, "0");
+                                        const hour = String(date.getHours()).padStart(2, "0");
+                                        const minute = String(date.getMinutes()).padStart(2, "0");
+
+                                        return `${month}:${day} ${hour}:${minute}`;
+                                      })()}
+                                    </span>                 
+                                    <div>
+                                    <div className="text-muted-foreground">
+                                      조치내용
+                                    </div>
+
+                                    <span className="font-medium">
+                                      {item.actionContent}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted-foreground">
+                                      조치결과
+                                    </div>
+
+                                    <span>
+                                      {item.actionResult}
+                                    </span>
+                                  </div>
+                                    <span
+                                      className={`text-[10px] px-2 py-0.5 rounded border whitespace-nowrap ${getCategoryStyle(
+                                        item.actionCategory
+                                      )}`}
+                                    >
+                                      {getCategoryLabel(item.actionCategory)}
+                                    </span>      
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                )}
 
                 {/* Impact Prediction (MVP.B) */}
                 {selectedEvent.impactPrediction && (

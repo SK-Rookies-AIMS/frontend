@@ -2,7 +2,7 @@
 
 import { CheckCircle, Truck, Clock, AlertTriangle, AlertCircle } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 interface Task {
   taskId: number
@@ -158,6 +158,55 @@ export function LeftSidebar() {
     }
   }
 
+  const loadSidebar = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        setError("로그인이 필요합니다.")
+        return
+      }
+
+      // 담당 업무
+      const response = await fetch("/api/main/task-user", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setTasks(result.data)
+      } else {
+        setError(result.message || "담당 업무를 불러오지 못했습니다.")
+      }
+
+      // 나머지 API는 기존 함수 재사용
+      await Promise.all([
+        fetchAgvStatus(),
+        fetchEquipmentStatus(),
+        fetchProductionTrend(),
+        fetchOverallStatus(),
+      ])
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("알 수 없는 오류가 발생했습니다.")
+      }
+
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const getCountByStatus = (status: string) => {
     return (
       equipmentStatus.find(
@@ -182,56 +231,20 @@ export function LeftSidebar() {
   }
 
   useEffect(() => {
-    const fetchUserTasks = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const accessToken = sessionStorage.getItem("aims-auth-accessToken")
-        if (!accessToken) {
-          setError("로그인이 필요합니다.")
-          setLoading(false)
-          return
-        }
+    void loadSidebar()
+  }, [loadSidebar])
 
-        const response = await fetch("/api/main/task-user", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-        })
-
-        const result = await response.json()
-
-        if (response.ok && result.success) {
-          setTasks(result.data)
-        } else {
-          setError(result.message || "담당 업무를 불러오지 못했습니다.")
-          if (response.status === 401 || response.status === 403) {
-            alert("인증이 만료되었습니다. 다시 로그인해주세요.")
-            sessionStorage.removeItem("aims-auth-accessToken")
-            sessionStorage.removeItem("aims-auth-refreshToken")
-            window.location.href = "/login"
-          }
-        }
-      } catch (err) {
-        if (err instanceof Error) {
-          setError(err.message)
-        } else {
-          setError("알 수 없는 오류가 발생했습니다.")
-        }
-        console.error("담당 업무를 가져오는 중 오류:", err)
-      } finally {
-        setLoading(false)
-      }
+  useEffect(() => {
+    const handleRefresh = () => {
+      void loadSidebar()
     }
 
-    fetchUserTasks()
-    fetchAgvStatus()
-    fetchEquipmentStatus()
-    fetchProductionTrend()
-    fetchOverallStatus()
-  }, [])
+    window.addEventListener("page-refresh", handleRefresh)
+
+    return () => {
+      window.removeEventListener("page-refresh", handleRefresh)
+    }
+  }, [loadSidebar])
 
   const getStatusDisplay = (status: Task["taskStatus"]) => {
     switch (status) {
