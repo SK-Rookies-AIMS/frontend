@@ -152,6 +152,8 @@ type PressDataPoint = PressAnchor & {
   isAbnormal?: boolean
   severity?: string
   countIncreaseYn?: boolean
+  warning_cycle_time_gap_sec?: number
+  danger_cycle_time_gap_sec?: number
 }
 
 // Press mock data removed; rely on backend `pressAnalysis` when available
@@ -566,6 +568,8 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
         ? Number(point.actualCycleTimeSec ?? 0) - Number(point.targetCycleTimeSec ?? 0)
         : 0),
     ),
+    warning_cycle_time_gap_sec: normalizeNumber(point.warningCycleTimeGapSec),
+    danger_cycle_time_gap_sec: normalizeNumber(point.dangerCycleTimeGapSec),
     timestamp_delay_sec: normalizeNumber(point.timestampDelaySec ?? point.cycleTimeGapSec ?? 0),
     risk_score: normalizeNumber(point.riskScore ?? 0),
     overall_risk_score: normalizeNumber(point.riskScore ?? 0),
@@ -729,6 +733,8 @@ export function useManufacturingDashboard() {
         target_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.targetCycleTimeSec),
         actual_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.actualCycleTimeSec),
         cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.cycleTimeGapSec),
+        warning_cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.warningCycleTimeGapSec),
+        danger_cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.dangerCycleTimeGapSec),
         timestamp_delay_sec: normalizeNumber(pressAnalysis.metrics.timestampDelaySec),
         risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
         overall_risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
