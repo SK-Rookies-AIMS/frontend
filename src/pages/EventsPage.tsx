@@ -70,6 +70,11 @@ export default function EventsPage() {
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null);
   const [pageSize, setPageSize] = useState(10)
   const [actionReason, setActionReason] = useState("")
+  const [isAddActionModalOpen, setIsAddActionModalOpen] = useState(false)
+  const [newActionTime, setNewActionTime] = useState("")
+  const [newActionContent, setNewActionContent] = useState("")
+  const [newActionCategory, setNewActionCategory] = useState("CHECK")
+  const [newActionResult, setNewActionResult] = useState("")
   const [severityFilter, setSeverityFilter] = useState<"전체" | "DANGER" | "CAUTION">("전체")
   const [statusFilter, setStatusFilter] = useState<"전체" |"COMPLETED" | "INCOMPLETE" | "NOT_NEEDED">("전체")
   const [areaFilter, setAreaFilter] = useState("전체") // DB enum values: PRESS, BODY, PAINT, ASSEMBLY, INSPECTION
@@ -84,6 +89,54 @@ export default function EventsPage() {
   const [aiDistrustScore, setAiDistrustScore] = useState(72) // AI 불신 지수
   const [actionStats, setActionStats] = useState({ act: 42, view: 31, ign: 55 }) // ACT, VIEW, IGN 건수
   const { updateEventStatus } = useEvents()
+
+  const handleOpenAddActionModal = () => {
+    const now = new Date();
+    const formattedDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    setNewActionTime(formattedDate);
+    setNewActionContent("");
+    setNewActionCategory("CHECK");
+    setNewActionResult("");
+    setIsAddActionModalOpen(true);
+  };
+
+  const handleSaveActionTimeline = async () => {
+    if (!selectedEvent) return;
+    if (!newActionContent || !newActionResult) {
+      alert("조치 내용과 조치 결과를 입력해주세요.");
+      return;
+    }
+    
+    try {
+      const formattedTime = newActionTime.length === 16 ? `${newActionTime}:00` : newActionTime;
+      const data = {
+        actionTime: formattedTime,
+        actionContent: newActionContent,
+        actionCategory: newActionCategory,
+        actionResult: newActionResult
+      };
+      
+      const response = await api.post(`/api/event/${selectedEvent.logNo}/action-timeline`, data);
+      
+      if (response.data.success) {
+        setIsAddActionModalOpen(false);
+        alert("조치이력이 저장되었습니다.");
+        
+        if (selectedEvent.actionTimeline) {
+          setSelectedEvent({
+            ...selectedEvent,
+            actionTimeline: [
+              ...selectedEvent.actionTimeline,
+              response.data.data
+            ]
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error saving action timeline:", error);
+      alert("조치이력 저장에 실패했습니다.");
+    }
+  };
   
   // API 데이터 상태
   const [eventsData, setEventsData] = useState<EventItem[]>([])
@@ -94,6 +147,7 @@ export default function EventsPage() {
 
   interface ActionTimelineItem { 
     actionId: string; 
+    empName: string;
     actionTime: string; 
     actionContent: string; 
     actionResult: string; 
@@ -1251,7 +1305,16 @@ const AREA_KOREAN_MAP: Record<string, string> = {
 
                                         return `${month}:${day} ${hour}:${minute}`;
                                       })()}
-                                    </span>                 
+                                    </span>
+                                    <div>
+                                    <div className="text-muted-foreground">
+                                      조치자
+                                    </div>
+
+                                    <span className="font-medium">
+                                      {item.empName}
+                                    </span>
+                                  </div>                 
                                     <div>
                                     <div className="text-muted-foreground">
                                       조치내용
@@ -1339,10 +1402,13 @@ const AREA_KOREAN_MAP: Record<string, string> = {
 
                 {/* Action Buttons - 모달 최하단 */}
                 <div className="flex justify-between items-center gap-3 pt-4 border-t border-border">
-                  <div className="text-xs text-muted-foreground">
-                  {selectedEvent.status === "조치 미완료" && (
-                    <span>버튼 클릭 시 AI 신뢰도 점수가 조정됩니다</span>
-                  )}
+                  <div className="text-xs text-muted-foreground flex items-center gap-3">
+                    <button
+                      onClick={handleOpenAddActionModal}
+                      className="px-3 py-1.5 text-xs bg-primary/10 text-primary hover:bg-primary/20 rounded-md border border-primary/20 transition-colors"
+                    >
+                      + 조치이력 추가
+                    </button>
                   </div>
                   <div className="flex gap-2">
                     <button 
@@ -1376,6 +1442,82 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Action Timeline Modal */}
+        {isAddActionModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="bg-card w-full max-w-md rounded-xl border border-border shadow-lg flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold">이벤트 조치 추가</h2>
+                <button onClick={() => setIsAddActionModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">조치 시간</label>
+                  <input 
+                    type="datetime-local" 
+                    value={newActionTime}
+                    onChange={(e) => setNewActionTime(e.target.value)}
+                    className="w-full bg-input border border-border rounded-lg p-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">조치 내용 (최대 20자)</label>
+                  <input 
+                    type="text"
+                    value={newActionContent}
+                    onChange={(e) => setNewActionContent(e.target.value)}
+                    maxLength={20}
+                    placeholder="조치 내용 입력"
+                    className="w-full bg-input border border-border rounded-lg p-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">조치 카테고리</label>
+                  <select
+                    value={newActionCategory}
+                    onChange={(e) => setNewActionCategory(e.target.value)}
+                    className="w-full bg-input border border-border rounded-lg p-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="CHECK">점검</option>
+                    <option value="REPAIR">수리</option>
+                    <option value="CHANGE">교체</option>
+                    <option value="CLEAN">청소</option>
+                    <option value="ADJUST">조정</option>
+                    <option value="RESTART">재가동</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">조치 결과 (최대 20자)</label>
+                  <input 
+                    type="text"
+                    value={newActionResult}
+                    onChange={(e) => setNewActionResult(e.target.value)}
+                    maxLength={20}
+                    placeholder="조치 결과 입력"
+                    className="w-full bg-input border border-border rounded-lg p-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <button 
+                  onClick={() => setIsAddActionModalOpen(false)}
+                  className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-secondary text-foreground"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={handleSaveActionTimeline}
+                  className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/80"
+                >
+                  조치이력 저장
+                </button>
               </div>
             </div>
           </div>
