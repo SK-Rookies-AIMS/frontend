@@ -8,9 +8,7 @@ import {
     toProcessFlowAgvs,
 } from "@/lib/agv-mapper";
 
-const WS_URL =
-    import.meta.env.VITE_SOCKJS_URL ??
-    `${window.location.origin}/ws`;
+const WS_URL = "/ws";
 
 export function useAgvWebsocket() {
     const [agvs, setAgvs] = useState<ProcessFlowAgv[]>([]);
