@@ -7,6 +7,7 @@ import { Footer } from "@/components/dashboard/footer"
 import { useEvents } from "@/components/dashboard/event-notification"
 import { eventApi } from "@/api/eventApi"
 import { AuthGuard } from "@/components/auth-guard"
+import { EventPrioritySummaryCard } from "@/components/event/EventPrioritySummaryCard"
 import { jwtDecode } from "jwt-decode"
 import {
   generateLogCode,
@@ -19,7 +20,6 @@ import {
   ChevronDown, 
   ChevronLeft, 
   ChevronRight,
-  ChevronUp,
   Search,
   AlertTriangle,
   Eye,
@@ -80,9 +80,6 @@ export default function EventsPage() {
     return d;
   })
   const [endDate, setEndDate] = useState<Date | undefined>(new Date())
-  const [aiTrustScore, setAiTrustScore] = useState(85) // AI 신뢰도 점수 (전체)
-  const [aiDistrustScore, setAiDistrustScore] = useState(72) // AI 불신 지수
-  const [actionStats, setActionStats] = useState({ act: 42, view: 31, ign: 55 }) // ACT, VIEW, IGN 건수
   const { updateEventStatus } = useEvents()
   
   // API 데이터 상태
@@ -260,10 +257,6 @@ const getStatusStyle = (status: string) => {
         setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
         setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
         
-        // 3. AI 스코어 및 통계 업데이트
-        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-        setAiTrustScore(prev => Math.min(100, prev + 2))
-        setAiDistrustScore(prev => Math.max(0, prev - 2))
       } else {
         alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
       }
@@ -273,7 +266,7 @@ const getStatusStyle = (status: string) => {
     }
   }
 
-  // 조치 완료 처리 - AI 신뢰도 증가, 불신 지수 감소
+  // 조치 완료 처리
   const handleActionComplete = async (eventId: number) => {
     try {
       const actionBy = getActionByFromToken()
@@ -286,12 +279,7 @@ const getStatusStyle = (status: string) => {
       )
 
       if (response && response.success) {
-        // 1. AI 스코어 및 통계 업데이트
-        setAiTrustScore(prev => Math.min(100, prev + 2))
-        setAiDistrustScore(prev => Math.max(0, prev - 2))
-        setActionStats(prev => ({ ...prev, act: prev.act + 1 }))
-
-        // 2. Context 상태 업데이트 (알림/마스코트)
+        // Context 상태 업데이트 (알림/마스코트)
         updateEventStatus(eventId, "조치 완료")
 
         // 3. 로컬 상태 업데이트
@@ -308,7 +296,7 @@ const getStatusStyle = (status: string) => {
     }
   }
 
-  // 조치 불필요 처리 - AI 신뢰도 감소, 불신 지수 증가
+  // 조치 불필요 처리
   const handleActionUnnecessary = async (eventId: number) => {
     try {
       const actionBy = getActionByFromToken()
@@ -321,12 +309,7 @@ const getStatusStyle = (status: string) => {
       )
 
       if (response && response.success) {
-        // 1. AI 스코어 및 통계 업데이트
-        setAiTrustScore(prev => Math.max(0, prev - 3))
-        setAiDistrustScore(prev => Math.min(100, prev + 3))
-        setActionStats(prev => ({ ...prev, ign: prev.ign + 1 }))
-
-        // 2. Context 상태 업데이트 (알림/마스코트)
+        // Context 상태 업데이트 (알림/마스코트)
         updateEventStatus(eventId, "조치 불필요")
 
         // 3. 로컬 상태 업데이트
@@ -926,102 +909,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
               </div>
             </div>
 
-            {/* AI Reliability Assessment Panel (MVP.A) */}
-            <div className="bg-card border border-border rounded-lg">
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-sm font-medium">AI 알림 신뢰성 평가</h3>
-                  <div className="relative group">
-                    <button className="w-4 h-4 rounded-full bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary flex items-center justify-center text-xs font-medium">
-                      ?
-                    </button>
-                    {/* Tooltip Popup */}
-                    <div className="absolute right-full top-0 mr-2 w-72 bg-card border border-border rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <div className="flex items-center justify-between p-3 border-b border-border">
-                        <span className="text-xs font-medium">계산 기준 보기</span>
-                        <ChevronUp className="w-3 h-3 text-muted-foreground" />
-                      </div>
-                      <div className="p-3 border-b border-border">
-                        <div className="bg-secondary/50 rounded p-3 font-mono text-xs">
-                          <p className="text-muted-foreground mb-1">불신 지수 =</p>
-                          <p>(<span className="text-destructive">IGN</span> × 1.0 + <span className="text-warning">VIEW</span> × 0.5) / 전체 경고 수 × 100</p>
-                        </div>
-                      </div>
-                      <div className="p-3 space-y-3">
-                        <div className="flex items-start gap-3">
-                          <span className="text-xs font-bold text-primary w-10">ACT</span>
-                          <div className="flex items-start gap-2">
-                            <div className="w-2 h-2 rounded-full bg-success mt-1 flex-shrink-0" />
-                            <div>
-                              <p className="text-xs text-success">경고 인지 + 조치 취함</p>
-                              <p className="text-[10px] text-muted-foreground">(경고 후 N분 내 설비 점검/액션 발생)</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <span className="text-xs font-bold text-warning w-10">VIEW</span>
-                          <div className="flex items-start gap-2">
-                            <div className="w-2 h-2 rounded-full bg-warning mt-1 flex-shrink-0" />
-                            <div>
-                              <p className="text-xs text-warning">경고 확인했지만 조치 없음</p>
-                              <p className="text-[10px] text-muted-foreground">(클릭은 했으나 후속 액션 없음)</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <span className="text-xs font-bold text-destructive w-10">IGN</span>
-                          <div className="flex items-start gap-2">
-                            <div className="w-2 h-2 rounded-full bg-destructive mt-1 flex-shrink-0" />
-                            <div>
-                              <p className="text-xs text-destructive">경고 자체를 무시</p>
-                              <p className="text-[10px] text-muted-foreground">(일정 시간 내 읽지 않음)</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="relative">
-                  <select className="appearance-none text-xs bg-secondary border border-border rounded px-2 py-1 pr-6" defaultValue="최근 7일">
-                    <option>최근 7일</option>
-                    <option>최근 30일</option>
-                    <option>전체</option>
-                  </select>
-                  <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
-                </div>
-              </div>
-              
-              {/* Distrust Index */}
-              <div className="p-4 border-b border-border">
-                <p className="text-xs text-muted-foreground mb-2">불신 지수</p>
-                <div className="flex flex-col items-center py-4">
-                  <span className={`text-5xl font-bold ${aiDistrustScore >= 70 ? "text-destructive" : aiDistrustScore >= 40 ? "text-warning" : "text-success"}`}>
-                    {aiDistrustScore}%
-                  </span>
-                  <span className={`mt-2 text-sm ${aiDistrustScore >= 70 ? "text-destructive" : aiDistrustScore >= 40 ? "text-warning" : "text-success"}`}>
-                    {aiDistrustScore >= 70 ? "경고 피로 위험" : aiDistrustScore >= 40 ? "주의 필요" : "정상 범위"}
-                  </span>
-                </div>
-                
-                {/* Action Stats */}
-                <div className="flex items-center justify-center gap-2 mt-2">
-                  <div className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 rounded border border-primary/30">
-                    <span className="text-xs font-medium text-primary">ACT</span>
-                    <span className="text-sm font-bold text-primary">{actionStats.act}건</span>
-                  </div>
-                  <div className="flex items-center gap-1 px-3 py-1.5 bg-warning/10 rounded border border-warning/30">
-                    <span className="text-xs font-medium text-warning">VIEW</span>
-                    <span className="text-sm font-bold text-warning">{actionStats.view}건</span>
-                  </div>
-                  <div className="flex items-center gap-1 px-3 py-1.5 bg-destructive/10 rounded border border-destructive/30">
-                    <span className="text-xs font-medium text-destructive">IGN</span>
-                    <span className="text-sm font-bold text-destructive">{actionStats.ign}건</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <EventPrioritySummaryCard />
           </div>
         </div>
 
