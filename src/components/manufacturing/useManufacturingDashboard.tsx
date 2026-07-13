@@ -37,7 +37,7 @@ const processStages = [
   { id: "02", processCode: "BODY", name: "차체", rate: null, events: 22, status: "warning", color: "#f59e0b" },
   { id: "03", processCode: "PAINT", name: "도장", rate: null, events: 22, status: "danger", color: "#ef4444", isBottleneck: true },
   { id: "04", processCode: "ASSEMBLY", name: "의장", rate: null, events: 22, status: "normal", color: "#22c55e" },
-  { id: "05", name: "연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
+  { id: "05", name: "AI 연계 분석", rate: null, defectRate: 78, targetProcess: "도장(L3)", status: "analysis" },
 ]
 
 const defectPredictionData = [
@@ -152,6 +152,8 @@ type PressDataPoint = PressAnchor & {
   isAbnormal?: boolean
   severity?: string
   countIncreaseYn?: boolean
+  warning_cycle_time_gap_sec?: number
+  danger_cycle_time_gap_sec?: number
 }
 
 // Press mock data removed; rely on backend `pressAnalysis` when available
@@ -517,6 +519,11 @@ function formatProbability(value: number) {
   return `${percent.toFixed(2)}%`
 }
 
+function toPercentValue(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null
+  return value <= 1 ? value * 100 : value
+}
+
 function getDefectRiskTextClass(riskLevel: string, probability?: number) {
   const normalizedRisk = riskLevel.toUpperCase()
   const percent = probability === undefined ? 0 : probability <= 1 ? probability * 100 : probability
@@ -561,6 +568,8 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
         ? Number(point.actualCycleTimeSec ?? 0) - Number(point.targetCycleTimeSec ?? 0)
         : 0),
     ),
+    warning_cycle_time_gap_sec: normalizeNumber(point.warningCycleTimeGapSec),
+    danger_cycle_time_gap_sec: normalizeNumber(point.dangerCycleTimeGapSec),
     timestamp_delay_sec: normalizeNumber(point.timestampDelaySec ?? point.cycleTimeGapSec ?? 0),
     risk_score: normalizeNumber(point.riskScore ?? 0),
     overall_risk_score: normalizeNumber(point.riskScore ?? 0),
@@ -724,6 +733,8 @@ export function useManufacturingDashboard() {
         target_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.targetCycleTimeSec),
         actual_cycle_time_sec: normalizeNumber(pressAnalysis.metrics.actualCycleTimeSec),
         cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.cycleTimeGapSec),
+        warning_cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.warningCycleTimeGapSec),
+        danger_cycle_time_gap_sec: normalizeNumber(pressAnalysis.metrics.dangerCycleTimeGapSec),
         timestamp_delay_sec: normalizeNumber(pressAnalysis.metrics.timestampDelaySec),
         risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
         overall_risk_score: normalizeNumber(pressAnalysis.metrics.riskScore),
@@ -1066,10 +1077,19 @@ export function useManufacturingDashboard() {
     (assemblyDashboard.summary?.fasteningErrorCount ?? 0)
   const topProcessStages = processStages.map((stage) => {
     if (stage.id === "05") {
+      const latestTransferRate = toPercentValue(defectCauseSummary?.transferProbability)
+      const latestCurrentProcess = defectCauseSummary?.currentProcess ?? defectPredictionRows[0]?.currentProcess ?? stage.currentProcess
+      const latestPredictedProcess =
+        defectCauseSummary?.predictedDefectProcess ??
+        defectPredictionRows[0]?.predictedDefectProcess ??
+        bottleneckRows[0]?.processCode ??
+        stage.targetProcess
       return {
         ...stage,
-        defectRate: defectPredictionRows[0]?.defectProbability ?? stage.defectRate,
-        targetProcess: bottleneckRows[0]?.processCode ?? stage.targetProcess,
+        defectRate: latestTransferRate ?? stage.defectRate,
+        currentProcess: latestCurrentProcess,
+        targetProcess: latestPredictedProcess,
+        bottleneckProcess: bottleneckRows[0]?.processCode ?? stage.bottleneckProcess,
       }
     }
 

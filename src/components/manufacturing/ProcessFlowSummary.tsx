@@ -8,7 +8,9 @@ type ProcessStage = {
   events?: number
   status: string
   defectRate?: number
+  currentProcess?: string
   targetProcess?: string
+  bottleneckProcess?: string
   isBottleneck?: boolean
   bottleneckRiskLevel?: string | null
 }
@@ -19,15 +21,7 @@ type ProcessFlowSummaryProps = {
   StageIcon: ComponentType<{ type: string }>
 }
 
-function getStatusMeta(stage: ProcessStage): {
-  dotColor: string
-  dotGlow: string
-  badgeText: string
-  badgeClass: string
-  rateClass: string
-  borderClass: string
-  headerAccent: string
-} {
+function getStatusMeta(stage: ProcessStage) {
   if (stage.isBottleneck) {
     return {
       dotColor: "bg-red-500",
@@ -35,7 +29,6 @@ function getStatusMeta(stage: ProcessStage): {
       badgeText: "BOTTLENECK",
       badgeClass: "bg-red-500/20 text-red-400 border border-red-500/40",
       rateClass: "text-red-400",
-      // 빨간색 border + 레드 glow shadow 강조
       borderClass: "border-red-500/75 shadow-[0_0_0_1px_rgba(255,77,79,0.18),0_0_20px_rgba(255,77,79,0.14)]",
       headerAccent: "from-red-500/10 to-transparent",
     }
@@ -84,15 +77,15 @@ function getStatusMeta(stage: ProcessStage): {
   }
 }
 
+const formatPercent = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-"
+  return `${value.toFixed(2)}%`
+}
+
 export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlowSummaryProps) {
   return (
     <div className="mb-6 w-full">
-      {/* 전체 wrapper: 최대 너비 확장 + 중앙 정렬 */}
       <div className="w-full max-w-[1480px] mx-auto">
-        {/*
-          items-end: 라벨이 있는 병목 카드와 없는 일반 카드 모두
-          카드 하단이 맞춰지도록 정렬
-        */}
         <div className="flex items-end justify-between gap-3 overflow-x-auto pb-1 min-w-0">
           {stages.map((stage, index) => {
             const meta = getStatusMeta(stage)
@@ -100,26 +93,16 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
 
             return (
               <div key={stage.id} className="flex items-end flex-1 min-w-0">
-                {/*
-                  카드 컬럼: flex-col로 [라벨 영역 → 카드] 순서로 쌓음.
-                  라벨 영역은 항상 h-7(28px)로 고정해 모든 카드 상단이 맞춰짐.
-                  병목 카드: 라벨 텍스트 표시 / 일반 카드: 빈 공간 유지
-                */}
                 <div className="flex flex-col flex-1 min-w-[180px] max-w-[240px]">
-
-                  {/* ── 병목 상단 라벨 영역 (노멀 플로우, 항상 h-7 확보) ── */}
                   <div className="h-7 flex items-center justify-center mb-1.5">
                     {stage.isBottleneck && (
                       <div className="flex items-center gap-1.5 rounded-full bg-red-500/95 border border-red-400/50 px-3 py-[3px] shadow-[0_2px_14px_rgba(239,68,68,0.45)] whitespace-nowrap">
                         <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse flex-shrink-0" />
-                        <span className="text-[10px] font-bold tracking-wider text-white leading-none">
-                          최대 병목 구간
-                        </span>
+                        <span className="text-[10px] font-bold tracking-wider text-white leading-none">최대 병목 구간</span>
                       </div>
                     )}
                   </div>
 
-                  {/* ── Process Card ── */}
                   <div
                     className={`
                       group relative flex flex-col
@@ -132,10 +115,7 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                       overflow-hidden
                     `}
                   >
-                    {/* Top accent gradient */}
                     <div className={`absolute inset-x-0 top-0 h-16 bg-gradient-to-b ${meta.headerAccent} pointer-events-none`} />
-
-                    {/* Corner grid decoration */}
                     <div className="absolute top-2 right-2 opacity-10 pointer-events-none">
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                         <path d="M0 0 L16 0 L16 16" stroke="currentColor" strokeWidth="0.8" className="text-cyan-400" />
@@ -143,15 +123,11 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                       </svg>
                     </div>
 
-                    {/* ── Header section ── */}
-                    {/* pt-4: 배지가 카드 바깥에 있으므로 일반 패딩 유지 */}
                     <div className="flex items-start gap-2 px-3.5 pt-4 pb-2">
-                      {/* Step number */}
                       <div className="flex-shrink-0">
                         <span className="text-[11px] font-black tracking-widest text-cyan-500/70 font-mono">{stage.id}</span>
                       </div>
 
-                      {/* Icon + Name */}
                       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                         <div className={`flex-shrink-0 ${meta.rateClass}`}>
                           <StageIcon type={stage.name} />
@@ -161,21 +137,17 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                         </span>
                       </div>
 
-                      {/* Status badge */}
                       <div className={`flex-shrink-0 flex items-center gap-1 rounded-md px-1.5 py-0.5 ${meta.badgeClass}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${meta.dotColor} ${meta.dotGlow}`} />
                         <span className="text-[9px] font-bold tracking-widest">{meta.badgeText}</span>
                       </div>
                     </div>
 
-                    {/* Divider */}
                     <div className="mx-3.5 h-px bg-slate-700/50" />
 
-                    {/* ── Body section ── */}
                     <div className="flex-1 px-3.5 py-2.5 flex flex-col gap-2">
                       {stage.status !== "analysis" ? (
                         <>
-                          {/* Utilization rate */}
                           <div className="flex flex-col gap-1">
                             <div className="flex items-baseline justify-between">
                               <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase">가동률</span>
@@ -190,7 +162,6 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                                 )}
                               </span>
                             </div>
-                            {/* Rate bar */}
                             <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all duration-700 ${
@@ -205,16 +176,15 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                             </div>
                           </div>
 
-                          {/* Anomaly events */}
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase">이상 이벤트</span>
                             <div className="flex items-center gap-1">
-                              {(stage.events ?? 0) > 0 && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-                              )}
-                              <span className={`text-sm font-bold tabular-nums ${
-                                (stage.events ?? 0) === 0 ? "text-slate-400" : "text-red-400"
-                              }`}>
+                              {(stage.events ?? 0) > 0 && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
+                              <span
+                                className={`text-sm font-bold tabular-nums ${
+                                  (stage.events ?? 0) === 0 ? "text-slate-400" : "text-red-400"
+                                }`}
+                              >
                                 {stage.events ?? 0}
                                 <span className="text-[10px] font-medium ml-0.5 opacity-70">건</span>
                               </span>
@@ -223,18 +193,23 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                         </>
                       ) : (
                         <>
-                          {/* Defect transfer probability */}
                           <div className="flex flex-col gap-1">
                             <div className="flex items-baseline justify-between">
-                              <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight">불량 전이 확률</span>
-                              <span className={`text-xl font-black tabular-nums ${
-                                (stage.defectRate ?? 0) >= 70 ? "text-red-400" : (stage.defectRate ?? 0) >= 50 ? "text-orange-400" : "text-yellow-400"
-                              }`}>
-                                {stage.defectRate}
-                                <span className="text-xs font-bold ml-0.5 opacity-70">%</span>
+                              <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight">
+                                불량 전이 확률
+                              </span>
+                              <span
+                                className={`text-xl font-black tabular-nums ${
+                                  (stage.defectRate ?? 0) >= 70
+                                    ? "text-red-400"
+                                    : (stage.defectRate ?? 0) >= 50
+                                      ? "text-orange-400"
+                                      : "text-yellow-400"
+                                }`}
+                              >
+                                {formatPercent(stage.defectRate)}
                               </span>
                             </div>
-                            {/* Probability bar */}
                             <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all duration-700 ${
@@ -244,15 +219,36 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                                       ? "bg-gradient-to-r from-orange-600 to-orange-400"
                                       : "bg-gradient-to-r from-yellow-600 to-yellow-400"
                                 }`}
-                                style={{ width: `${stage.defectRate ?? 0}%` }}
+                                style={{ width: `${Math.min(100, stage.defectRate ?? 0)}%` }}
                               />
                             </div>
                           </div>
 
-                          {/* Bottleneck target */}
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight flex-shrink-0">병목 예상 구간</span>
-                            <span className="text-[11px] font-bold text-violet-300 text-right leading-tight">{stage.targetProcess}</span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight flex-shrink-0">
+                                현재 공정
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-200 text-right leading-tight">
+                                {stage.currentProcess ?? "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight flex-shrink-0">
+                                예측 공정
+                              </span>
+                              <span className="text-[11px] font-bold text-violet-300 text-right leading-tight">
+                                {stage.targetProcess ?? "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-[10px] font-medium text-slate-500 tracking-wide uppercase leading-tight flex-shrink-0">
+                                현재 최대 병목 예상 구간
+                              </span>
+                              <span className="text-[11px] font-bold text-red-300 text-right leading-tight">
+                                {stage.bottleneckProcess ?? "-"}
+                              </span>
+                            </div>
                           </div>
                         </>
                       )}
@@ -260,15 +256,13 @@ export function ProcessFlowSummary({ stages, stageCount, StageIcon }: ProcessFlo
                   </div>
                 </div>
 
-                {/* ── Flow connector arrow ── */}
                 {!isLast && (
                   <div className="flex-shrink-0 flex flex-col items-center justify-center w-10 self-center px-1">
                     <div className="relative flex items-center justify-center w-full">
-                      {/* Track line */}
                       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gradient-to-r from-cyan-500/50 via-cyan-400/35 to-cyan-500/50" />
-                      {/* Arrow SVG */}
                       <svg
-                        width="20" height="14"
+                        width="20"
+                        height="14"
                         viewBox="0 0 20 14"
                         fill="none"
                         className="relative z-10 drop-shadow-[0_0_4px_rgba(34,211,238,0.55)]"
