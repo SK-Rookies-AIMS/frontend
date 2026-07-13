@@ -1,3 +1,5 @@
+const BASE_URL = "/api/ai"
+
 export async function getCurrentManual() {
     const token = sessionStorage.getItem("aims-auth-accessToken");
 
@@ -6,7 +8,7 @@ export async function getCurrentManual() {
     }
 
     const response = await fetch(
-        "http://localhost:8000/manual",
+        `${BASE_URL}/manual`,
         {
             method: "GET",
             headers: {

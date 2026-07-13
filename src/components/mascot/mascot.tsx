@@ -66,7 +66,7 @@ export function Mascot() {
   }
 
   const goToEvent = () => {
-    navigate("/events")
+    navigate(`/events`)
   }
 
   const renderBubbleContent = () => {
