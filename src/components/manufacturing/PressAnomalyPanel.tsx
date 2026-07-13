@@ -111,8 +111,8 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
           <p className="mb-2 text-base font-extrabold text-destructive">생산량 미증가</p>
         )}
         <div className="space-y-1.5">
-          {payload.map((item: any) => (
-            <div key={item.dataKey} className="flex items-center justify-between gap-6 text-sm">
+          {payload.map((item: any, index: number) => (
+            <div key={`${item.dataKey ?? item.name ?? "series"}-${index}`} className="flex items-center justify-between gap-6 text-sm">
               <span className="font-medium" style={{ color: item.color ?? "var(--popover-foreground)" }}>{item.name}</span>
               <span className="font-semibold">
                 {Number(item.value).toFixed(1)} sec

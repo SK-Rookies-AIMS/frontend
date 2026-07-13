@@ -9,11 +9,18 @@ export type BottleneckRow = {
   riskScore: number
 }
 
+export type BottleneckDateOption = {
+  date: string
+  sampleEventId: string
+}
+
 export type BottleneckApiResponse = {
   success: boolean
   data?: {
     mostBottleneckProcess?: string
     mostBottleneckRiskLevel?: string
+    date?: string | null
+    dateOptions?: BottleneckDateOption[]
     content?: BottleneckRow[]
     hasNext?: boolean
     nextCursor?: number | null
@@ -22,9 +29,11 @@ export type BottleneckApiResponse = {
 }
 
 export async function fetchBottleneckAnalysis({
+  date,
   size = BOTTLENECK_PAGE_SIZE,
   cursor = BOTTLENECK_INITIAL_CURSOR,
 }: {
+  date?: string | null
   size?: number
   cursor?: number
 }) {
@@ -32,6 +41,10 @@ export async function fetchBottleneckAnalysis({
     size: String(size),
     cursor: String(cursor),
   })
+
+  if (date) {
+    params.set("date", date)
+  }
 
   const response = await fetch(`/api/ai/process/bottleneck?${params.toString()}`)
 
@@ -48,6 +61,8 @@ export async function fetchBottleneckAnalysis({
   return {
     mostBottleneckProcess: result.data?.mostBottleneckProcess ?? null,
     mostBottleneckRiskLevel: result.data?.mostBottleneckRiskLevel ?? null,
+    date: result.data?.date ?? null,
+    dateOptions: Array.isArray(result.data?.dateOptions) ? result.data.dateOptions : [],
     content: Array.isArray(result.data?.content) ? result.data.content : [],
     hasNext: Boolean(result.data?.hasNext),
     nextCursor: result.data?.nextCursor ?? null,
