@@ -7,7 +7,6 @@ import { useState, useEffect, useCallback } from "react"
 interface Task {
   taskId: number
   taskTitle: string
-  taskStatus: "PROGRESS" | "TODO" | "DONE"
   scheduledAt: string
 }
 
@@ -246,19 +245,6 @@ export function LeftSidebar() {
     }
   }, [loadSidebar])
 
-  const getStatusDisplay = (status: Task["taskStatus"]) => {
-    switch (status) {
-      case "DONE":
-        return { label: "완료", className: "bg-emerald-100 text-emerald-800" }
-      case "PROGRESS":
-        return { label: "진행 중", className: "bg-blue-100 text-blue-800" }
-      case "TODO":
-        return { label: "대기 중", className: "bg-amber-100 text-amber-800" }
-      default:
-        return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
-    }
-  }
-
   const getOverallStatusDisplay = (score: number) => {
     if (score >= 80) return { label: "정상", color: "text-success", icon: CheckCircle, desc: "모든 시스템 정상 운영 중" };
     if (score >= 60) return { label: "경고", color: "text-warning", icon: AlertTriangle, desc: "주의가 필요합니다" };
@@ -316,16 +302,12 @@ export function LeftSidebar() {
             <div className="text-xs text-muted-foreground">할당된 업무가 없습니다.</div>
           )}
           {!loading && !error && tasks.length > 0 && tasks.map((task) => {
-            const statusDisplay = getStatusDisplay(task.taskStatus)
             return (
               <div key={task.taskId} className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground w-12">
-                  {task.scheduledAt.substring(11, 16)}
+                  {task.scheduledAt}
                 </span>
                 <span className="flex-1 truncate">{task.taskTitle}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusDisplay.className}`}>
-                  {statusDisplay.label}
-                </span>
               </div>
             )
           })}
