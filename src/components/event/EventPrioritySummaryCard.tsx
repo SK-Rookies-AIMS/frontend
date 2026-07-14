@@ -46,7 +46,13 @@ const normalizeSummary = (
   actionCompletionRate: toSafeNumber(summary?.actionCompletionRate),
 })
 
-export function EventPrioritySummaryCard() {
+interface EventPrioritySummaryCardProps {
+  refreshKey?: number
+}
+
+export function EventPrioritySummaryCard({
+  refreshKey = 0,
+}: EventPrioritySummaryCardProps) {
   const [days, setDays] = useState(7)
   const [summary, setSummary] = useState<EventPrioritySummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -95,7 +101,7 @@ export function EventPrioritySummaryCard() {
     return () => {
       ignore = true
     }
-  }, [days, retryCount])
+  }, [days, refreshKey, retryCount])
 
   const data = summary ?? EMPTY_SUMMARY
 
