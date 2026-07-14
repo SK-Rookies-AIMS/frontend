@@ -17,6 +17,10 @@ export async function getCurrentManual() {
         }
     );
 
+    if (response.status === 404) {
+        return null;
+    }
+
     if (!response.ok) {
         throw new Error("AI Manual 조회 실패");
     }

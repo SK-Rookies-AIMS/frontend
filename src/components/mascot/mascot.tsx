@@ -61,12 +61,15 @@ export function Mascot() {
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
   const handleMascotClick = () => {
     if (isDragging) return;
-    if (event) {
-      setBubbleMode((prev) => (prev === "detail" ? "none" : "detail"))
-    } else {
-      setBubbleMode((prev) => (prev === "alert" ? "none" : "alert"))
+    // 이벤트가 없는 경우
+    if (!event) {
+      setBubbleMode((prev) => (prev === "alert" ? "none" : "alert"));
+      return;
     }
-  }
+
+    // 이벤트가 있는 경우
+    setBubbleMode((prev) => (prev === "detail" ? "none" : "detail"));
+  };
 
   const goToEvent = () => {
     navigate(`/events`)
@@ -90,7 +93,19 @@ export function Mascot() {
     }
     // 이벤트가 없는 경우 기본 인사
     if (!event) {
-      return <p className="text-sm text-white leading-relaxed">안녕하세요! 무엇을 도와드릴까요?</p>
+      return (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-white">
+            😊 현재 처리할 이벤트가 없습니다.
+          </p>
+
+          <p className="text-xs text-white/70 leading-relaxed">
+            모든 설비가 정상적으로 운영되고 있습니다.
+            <br />
+            새로운 이벤트가 발생하면 바로 알려드릴게요!
+          </p>
+        </div>
+      );
     }
 
     // 상황 요약 알림
@@ -147,7 +162,7 @@ export function Mascot() {
           ) : manual ? (
             <p>{manual.summary}</p>
           ) : (
-            <p>현재 분석할 이벤트가 없습니다.</p>
+            <p>현재는 분석할 이벤트가 없습니다.</p>
           )}
         </div>
       )}
