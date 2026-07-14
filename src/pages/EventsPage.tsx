@@ -85,6 +85,7 @@ export default function EventsPage() {
     return d;
   })
   const [endDate, setEndDate] = useState<Date | undefined>(new Date())
+  const [summaryRefreshKey, setSummaryRefreshKey] = useState(0)
   const { updateEventStatus } = useEvents()
 
   const handleOpenAddActionModal = () => {
@@ -310,6 +311,7 @@ const getStatusStyle = (status: string) => {
         // 2. 로컬 상태 업데이트
         setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
         setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setSummaryRefreshKey(prev => prev + 1)
         
       } else {
         alert(response?.message || "이벤트 조치 상태 업데이트에 실패했습니다.")
@@ -339,6 +341,7 @@ const getStatusStyle = (status: string) => {
         // 3. 로컬 상태 업데이트
         setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
         setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 완료" } : e))
+        setSummaryRefreshKey(prev => prev + 1)
 
         setSelectedEvent(null)
       } else {
@@ -369,6 +372,7 @@ const getStatusStyle = (status: string) => {
         // 3. 로컬 상태 업데이트
         setEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
         setAllEventsData(prev => prev.map(e => e.id === eventId ? { ...e, status: "조치 불필요" } : e))
+        setSummaryRefreshKey(prev => prev + 1)
 
         setSelectedEvent(null)
       } else {
@@ -963,7 +967,7 @@ const AREA_KOREAN_MAP: Record<string, string> = {
               </div>
             </div>
 
-            <EventPrioritySummaryCard />
+            <EventPrioritySummaryCard refreshKey={summaryRefreshKey} />
           </div>
         </div>
 
