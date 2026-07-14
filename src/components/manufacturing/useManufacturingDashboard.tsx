@@ -880,7 +880,8 @@ export function useManufacturingDashboard() {
     setIsBodyAnalysisLoading(true)
     setBodyAnalysisError(null)
     try {
-      const result = await fetchBodyAnalysis({ date })
+      // Body charts need more history than the visible window so dragging can move.
+      const result = await fetchBodyAnalysis({ date, limit: 60 })
       setBodyAnalysis(result)
     } catch (error) {
       console.error("fetchBodyAnalysis error:", error)

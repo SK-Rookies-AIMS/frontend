@@ -69,7 +69,7 @@ function normalizeFrequencyZones(bodyAnalysis: any): ZoneSummary[] {
         max: Number(entry.max ?? 0),
         color: getZoneColorByIndex(index),
       }))
-      .filter((entry) => entry.zone)
+      .filter((entry: ZoneSummary) => Boolean(entry.zone))
   }
 
   const analysis = bodyAnalysis?.frequencyZoneAnalysis
@@ -150,8 +150,8 @@ function formatFrequencyZoneTooltip(
           <span className="font-semibold">{row.avg.toFixed(6)}</span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="font-medium">최대</span>
-          <span className="font-semibold">{row.max.toFixed(6)}</span>
+          <span className="font-medium" style={{ color: "#f97316" }}>최대</span>
+          <span className="font-semibold" style={{ color: "#fdba74" }}>{row.max.toFixed(6)}</span>
         </div>
       </div>
     </div>
@@ -186,7 +186,7 @@ function formatTrendTooltip(
 }
 
 function formatFrequencySpectrumTooltip(
-  payload: Array<{ dataKey?: string; value?: number; color?: string; name?: string }>,
+  payload: Array<{ dataKey?: string; value?: number; color?: string; name?: string; payload?: unknown }>,
   thresholds: { warningValue: number; dangerValue: number },
 ) {
   const current = payload.find((item) => item.dataKey === "value")
@@ -233,6 +233,8 @@ function TrendChart({
   subtitle,
   unit,
   data,
+  warningLine: warningLineProp,
+  dangerLine: dangerLineProp,
   yDomainMax,
   valueLabel,
   secondaryValueLabel,
@@ -251,6 +253,8 @@ function TrendChart({
   subtitle?: string
   unit: string
   data: TrendPoint[]
+  warningLine?: number | null
+  dangerLine?: number | null
   yDomainMax?: number
   valueLabel: string
   secondaryValueLabel?: string
@@ -268,8 +272,8 @@ function TrendChart({
   const maxValue = getMaxFromTrend(data)
   const resolvedYDomainMax = yDomainMax ?? maxValue * 1.15
   const showSecondary = data.some((row) => row.secondaryValue !== undefined && row.secondaryValue !== null)
-  const warningLine = data.find((row) => row.warning_line !== undefined && row.warning_line !== null)?.warning_line
-  const dangerLine = data.find((row) => row.danger_line !== undefined && row.danger_line !== null)?.danger_line
+  const warningLine = warningLineProp ?? data.find((row) => row.warning_line !== undefined && row.warning_line !== null)?.warning_line
+  const dangerLine = dangerLineProp ?? data.find((row) => row.danger_line !== undefined && row.danger_line !== null)?.danger_line
   const [showTrendDots, setShowTrendDots] = React.useState(false)
   const trendDataSignature = React.useMemo(
     () => data.map((row) => row.dateTime).join("|"),
@@ -290,7 +294,9 @@ function TrendChart({
   const renderTrendDot = (props: any) => {
     const { cx, cy, payload } = props
     const severity = payload?.severity
-    if (severity !== "WARNING" && severity !== "CRITICAL") return null
+    if (severity !== "WARNING" && severity !== "CRITICAL") {
+      return <g />
+    }
     return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
   }
   const legendItems = [
@@ -386,8 +392,9 @@ function TrendChart({
                 label={{
                   value: `경고선 ${Number(warningLine).toFixed(precision)}`,
                   position: warningLabelPosition,
-                  fill: "#facc15",
+                  fill: "#fde68a",
                   fontSize: 10,
+                  fontWeight: 700,
                 }}
               />
             ) : null}
@@ -400,8 +407,9 @@ function TrendChart({
                 label={{
                   value: `위험선 ${Number(dangerLine).toFixed(precision)}`,
                   position: dangerLabelPosition,
-                  fill: "#f97316",
+                  fill: "#fdba74",
                   fontSize: 10,
+                  fontWeight: 700,
                 }}
               />
             ) : null}
@@ -616,6 +624,8 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           title="로봇 진동 가속도 추이"
           unit="g"
           data={visibleBodyRobotData}
+          warningLine={latestBodyData.vibration_warning_line}
+          dangerLine={latestBodyData.vibration_danger_line}
           yDomainMax={bodyRobotTrendDomainMax}
           valueLabel="로봇 진동 가속도"
           valueColor="#00d4ff"
@@ -629,6 +639,8 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           title="주파수 피크값 추이"
           unit="mm/s"
           data={visibleBodyFrequencyData}
+          warningLine={peakWarningLine}
+          dangerLine={peakDangerLine}
           yDomainMax={frequencyPeakTrendDomainMax}
           valueLabel="피크 진동값"
           secondaryValueLabel="피크 RMS"
@@ -688,8 +700,9 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   label={{
                     value: `경고 기준 ${peakWarningLine.toFixed(6)}`,
                     position: "insideTopLeft",
-                    fill: "#facc15",
+                    fill: "#fde68a",
                     fontSize: 10,
+                    fontWeight: 700,
                   }}
                 />
                 <ReferenceLine
@@ -701,8 +714,9 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
                   label={{
                     value: `위험 기준 ${peakDangerLine.toFixed(6)}`,
                     position: "insideTopRight",
-                    fill: "#f97316",
+                    fill: "#fdba74",
                     fontSize: 10,
+                    fontWeight: 700,
                   }}
                 />
               </ComposedChart>
