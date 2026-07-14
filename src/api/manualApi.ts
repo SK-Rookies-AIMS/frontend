@@ -4,7 +4,7 @@ export async function getCurrentManual() {
     const token = sessionStorage.getItem("aims-auth-accessToken");
 
     if (!token) {
-        throw new Error("로그인 토큰이 없습니다.");
+        return null;
     }
 
     const response = await fetch(
@@ -22,7 +22,10 @@ export async function getCurrentManual() {
     }
 
     if (!response.ok) {
-        throw new Error("AI Manual 조회 실패");
+        console.warn(
+            `AI Manual 조회 실패 (${response.status})`
+        );
+        return null;
     }
 
     return response.json();
