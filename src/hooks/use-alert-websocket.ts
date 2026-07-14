@@ -16,6 +16,7 @@ function sortByPriority(alerts: AlertRealtimeMessage[]): AlertRealtimeMessage[] 
 export interface UseAlertWebSocketResult {
     /** priorityScore 내림차순으로 정렬된 알람 목록 */
     alerts: AlertRealtimeMessage[]
+    
     /** WebSocket 연결 상태 */
     connected: boolean
     /** 특정 eventId의 알람을 목록에서 제거 (팝업 dismiss 등) */
