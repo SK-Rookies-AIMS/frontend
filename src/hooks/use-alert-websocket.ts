@@ -4,8 +4,7 @@ import SockJS from "sockjs-client"
 
 import { AlertRealtimeMessage } from "@/types/alert"
 
-// const WS_URL = __ALERT_WS_URL__;
-const WS_URL = "/ws";
+const WS_URL = __ALERT_WS_URL__;
 
 const ALERT_TOPIC = "/topic/alerts"
 
