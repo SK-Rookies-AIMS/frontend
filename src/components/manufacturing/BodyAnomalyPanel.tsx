@@ -15,11 +15,14 @@ import {
 } from "recharts"
 
 type TrendPoint = {
+  logNo?: string | null
   dateTime: string
   value: number
   secondaryValue?: number
   warning_line: number
   danger_line: number
+  isAbnormal?: boolean
+  severity?: string
 }
 
 type ZoneSummary = {
@@ -244,6 +247,7 @@ function TrendChart({
   warningLabelPosition = "insideTopLeft",
   dangerLabelPosition = "insideTopRight",
   allowDataOverflow = false,
+  onOpenEventLogNo,
   hovered,
   dragging,
   onPointerDown,
@@ -264,6 +268,7 @@ function TrendChart({
   warningLabelPosition?: "insideTopLeft" | "insideTopRight" | "insideBottomLeft" | "insideBottomRight" | "top" | "bottom"
   dangerLabelPosition?: "insideTopLeft" | "insideTopRight" | "insideBottomLeft" | "insideBottomRight" | "top" | "bottom"
   allowDataOverflow?: boolean
+  onOpenEventLogNo?: (logNo: string) => void
   hovered: boolean
   dragging: boolean
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
@@ -275,6 +280,8 @@ function TrendChart({
   const warningLine = warningLineProp ?? data.find((row) => row.warning_line !== undefined && row.warning_line !== null)?.warning_line
   const dangerLine = dangerLineProp ?? data.find((row) => row.danger_line !== undefined && row.danger_line !== null)?.danger_line
   const [showTrendDots, setShowTrendDots] = React.useState(false)
+  const [isTooltipHovered, setIsTooltipHovered] = React.useState(false)
+  const hoverLeaveTimerRef = React.useRef<number | null>(null)
   const trendDataSignature = React.useMemo(
     () => data.map((row) => row.dateTime).join("|"),
     [data],
@@ -291,6 +298,14 @@ function TrendChart({
     return () => window.clearTimeout(timer)
   }, [trendDataSignature])
 
+  React.useEffect(() => {
+    return () => {
+      if (hoverLeaveTimerRef.current !== null) {
+        window.clearTimeout(hoverLeaveTimerRef.current)
+      }
+    }
+  }, [])
+
   const renderTrendDot = (props: any) => {
     const { cx, cy, payload } = props
     const severity = payload?.severity
@@ -298,6 +313,116 @@ function TrendChart({
       return <g />
     }
     return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
+  }
+  const renderTrendTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+
+    const row = payload[0]?.payload as TrendPoint | undefined
+    if (!row) return null
+
+    return (
+      <div
+        data-chart-tooltip-interactive="true"
+        className="rounded-lg border border-border bg-popover px-3 py-2 shadow-xl"
+        style={{
+          color: "var(--popover-foreground)",
+          backgroundColor: "var(--popover)",
+        }}
+        onPointerEnterCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onPointerMoveCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onPointerDownCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseDownCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseMoveCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseEnter={() => setIsTooltipHovered(true)}
+        onMouseLeave={() => setIsTooltipHovered(false)}
+      >
+        <div className="space-y-1 text-xs">
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium">측정 시간</span>
+            <span className="font-semibold">{label}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium" style={{ color: valueColor }}>{valueLabel}</span>
+            <span className="font-semibold" style={{ color: valueColor }}>
+              {Number(row.value ?? 0).toFixed(precision)} {unit}
+            </span>
+          </div>
+          {showSecondary && secondaryValueLabel ? (
+            <div className="flex items-center justify-between gap-4">
+              <span className="font-medium" style={{ color: secondaryValueColor ?? "#94a3b8" }}>{secondaryValueLabel}</span>
+              <span className="font-semibold" style={{ color: secondaryValueColor ?? "#94a3b8" }}>
+                {Number(row.secondaryValue ?? 0).toFixed(precision)} {unit}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium" style={{ color: "#fde68a" }}>경고 기준</span>
+            <span className="font-semibold" style={{ color: "#fde68a" }}>
+              {Number(row.warning_line ?? 0).toFixed(precision)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-medium" style={{ color: "#fdba74" }}>위험 기준</span>
+            <span className="font-semibold" style={{ color: "#fdba74" }}>
+              {Number(row.danger_line ?? 0).toFixed(precision)}
+            </span>
+          </div>
+          {row.isAbnormal && row.logNo ? (
+            <div className="pt-1">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-medium" style={{ color: "#f97316" }}>이벤트 logNO:</span>
+                <span className="max-w-[180px] truncate rounded border border-border px-2 py-0.5 text-[11px] font-semibold text-primary" title={row.logNo}>
+                  {row.logNo}
+                </span>
+              </div>
+              <button
+                type="button"
+                data-chart-tooltip-interactive="true"
+                className="mt-2 w-full rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onOpenEventLogNo?.(row.logNo as string)
+                }}
+                onPointerDownCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onMouseDownCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onPointerMoveCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onMouseMoveCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+              >
+                이벤트 상세 보러가기
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
   }
   const legendItems = [
     { label: "경고 기준", color: "#facc15", dashed: true },
@@ -342,11 +467,35 @@ function TrendChart({
 
       <div
         className={`select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-        style={{ touchAction: "none" }}
-        onPointerDownCapture={onPointerDown}
-        onPointerDown={onPointerDown}
-        onMouseEnter={() => onHoverChange(true)}
-        onMouseLeave={() => onHoverChange(false)}
+        style={{
+          touchAction: "none",
+          pointerEvents: isTooltipHovered ? "none" : "auto",
+        }}
+        onPointerDownCapture={(event) => {
+          const target = event.target as HTMLElement | null
+          if (target?.closest('[data-chart-tooltip-interactive="true"]')) return
+          onPointerDown(event)
+        }}
+        onPointerDown={(event) => {
+          const target = event.target as HTMLElement | null
+          if (target?.closest('[data-chart-tooltip-interactive="true"]')) return
+          onPointerDown(event)
+        }}
+        onMouseEnter={() => {
+          if (hoverLeaveTimerRef.current !== null) {
+            window.clearTimeout(hoverLeaveTimerRef.current)
+            hoverLeaveTimerRef.current = null
+          }
+          onHoverChange(true)
+        }}
+        onMouseLeave={() => {
+          if (hoverLeaveTimerRef.current !== null) {
+            window.clearTimeout(hoverLeaveTimerRef.current)
+          }
+          hoverLeaveTimerRef.current = window.setTimeout(() => {
+            onHoverChange(false)
+          }, 150)
+        }}
       >
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={data} margin={{ top: 5, right: 24, left: 4, bottom: 4 }}>
@@ -369,18 +518,10 @@ function TrendChart({
               tickCount={4}
             />
             <Tooltip
-              formatter={(value, name) => formatTrendTooltip(Number(value), String(name), { valueLabel, secondaryValueLabel, unit, precision })}
-              labelFormatter={(label) => `측정 시간 ${label}`}
-              contentStyle={{
-                backgroundColor: "var(--popover)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                color: "var(--popover-foreground)",
-              }}
-              labelStyle={{ color: "var(--popover-foreground)" }}
+              content={renderTrendTooltip}
               wrapperStyle={{
-                visibility: hovered && !dragging ? "visible" : "hidden",
-                pointerEvents: "none",
+                visibility: (hovered || isTooltipHovered) && !dragging ? "visible" : "hidden",
+                pointerEvents: (hovered || isTooltipHovered) && !dragging ? "auto" : "none",
               }}
             />
             {warningLine !== undefined && warningLine !== null ? (
@@ -533,6 +674,9 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
 
   const [isBodyRobotChartHovered, setIsBodyRobotChartHovered] = React.useState(false)
   const [isBodyFrequencyChartHovered, setIsBodyFrequencyChartHovered] = React.useState(false)
+  const handleOpenEventLogNo = React.useCallback((logNo: string) => {
+    window.location.assign(`/events?logNo=${encodeURIComponent(logNo)}`)
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -632,6 +776,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           hovered={isBodyRobotChartHovered}
           dragging={isBodyRobotChartDragging}
           onPointerDown={handleBodyRobotChartPointerDown}
+          onOpenEventLogNo={handleOpenEventLogNo}
           onHoverChange={setIsBodyRobotChartHovered}
         />
 
@@ -653,6 +798,7 @@ export function BodyAnomalyPanel({ dashboard }: { dashboard: any }) {
           hovered={isBodyFrequencyChartHovered}
           dragging={isBodyFrequencyChartDragging}
           onPointerDown={handleBodyFrequencyChartPointerDown}
+          onOpenEventLogNo={handleOpenEventLogNo}
           onHoverChange={setIsBodyFrequencyChartHovered}
         />
 

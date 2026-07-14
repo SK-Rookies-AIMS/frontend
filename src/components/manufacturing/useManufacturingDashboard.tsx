@@ -149,6 +149,7 @@ const datedLatestPressAnchorData: PressAnchor[] = latestPressAnchorData.map((ite
 const pressAnchorData = [...historicalPressAnchorData, ...datedLatestPressAnchorData]
 
 type PressDataPoint = PressAnchor & {
+  logNo?: string | null
   isAbnormal?: boolean
   severity?: string
   countIncreaseYn?: boolean
@@ -573,6 +574,7 @@ function toPressDataPoint(point: NonNullable<PressAnomalyData["chart"]>[number])
     timestamp_delay_sec: normalizeNumber(point.timestampDelaySec ?? point.cycleTimeGapSec ?? 0),
     risk_score: normalizeNumber(point.riskScore ?? 0),
     overall_risk_score: normalizeNumber(point.riskScore ?? 0),
+    logNo: point.logNo ?? null,
     isAbnormal: Boolean(point.isAbnormal) || isWarningSeverity(point.severity),
     severity: point.severity ?? "NORMAL",
     countIncreaseYn: point.countIncreaseYn,
@@ -692,6 +694,7 @@ export function useManufacturingDashboard() {
   type PressRiskTrendRow = {
     eventId?: string
     analysisId?: string
+    logNo?: string | null
     time: string
     dateTime: string
     timestamp: number
@@ -714,6 +717,7 @@ export function useManufacturingDashboard() {
       return {
         eventId: point.eventId,
         analysisId: point.analysisId,
+        logNo: point.logNo ?? null,
         time: dateTime.slice(11, 19),
         dateTime,
         timestamp: epochMs,
@@ -819,11 +823,12 @@ export function useManufacturingDashboard() {
   const [bodyAnalysisError, setBodyAnalysisError] = useState<string | null>(null)
 
   type BodyTrendRow = {
+    logNo?: string | null
     time: string
     dateTime: string
     timestamp: number
     value: number
-    secondaryValue: number
+    secondaryValue?: number
     warning_line: number
     danger_line: number
     risk_score: number
@@ -843,6 +848,7 @@ export function useManufacturingDashboard() {
         time: dateTime.slice(11, 19),
         dateTime,
         timestamp: epochMs,
+        logNo: point.logNo ?? null,
         value: normalizeNumber(point.value ?? point.robotVibrationScore ?? bodyAnalysis?.metrics?.robotVibrationScore ?? point.vibrationScore),
         warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.vibrationWarningLine),
         danger_line: normalizeNumber(point.dangerLine ?? bodyAnalysis?.metrics?.vibrationDangerLine),
@@ -865,6 +871,7 @@ export function useManufacturingDashboard() {
         time: dateTime.slice(11, 19),
         dateTime,
         timestamp: epochMs,
+        logNo: point.logNo ?? null,
         value: normalizeNumber(point.value ?? point.vibrationPeak ?? point.frequencyPeakValue),
         secondaryValue: normalizeNumber(point.secondaryValue ?? point.vibrationRms ?? bodyAnalysis?.metrics?.vibrationRms),
         warning_line: normalizeNumber(point.warningLine ?? bodyAnalysis?.metrics?.peakWarningLine),
