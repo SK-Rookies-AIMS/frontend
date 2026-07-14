@@ -319,10 +319,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                   ) : (
                     <div
                       className={`chart-line-reveal select-none ${isPressChartDragging ? "cursor-grabbing" : pressDisplayData.length > PRESS_CHART_WINDOW_SIZE ? "cursor-grab" : ""}`}
-                      style={{
-                        touchAction: "none",
-                        pointerEvents: isPressTooltipHovered ? "none" : "auto",
-                      }}
+                      style={{ touchAction: "none" }}
                       onPointerDownCapture={(event) => {
                         const target = event.target as HTMLElement | null
                         if (target?.closest('[data-chart-tooltip-interactive="true"]')) return

@@ -467,10 +467,7 @@ function TrendChart({
 
       <div
         className={`select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-        style={{
-          touchAction: "none",
-          pointerEvents: isTooltipHovered ? "none" : "auto",
-        }}
+        style={{ touchAction: "none" }}
         onPointerDownCapture={(event) => {
           const target = event.target as HTMLElement | null
           if (target?.closest('[data-chart-tooltip-interactive="true"]')) return
