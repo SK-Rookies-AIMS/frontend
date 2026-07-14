@@ -19,6 +19,7 @@ export type PressAnomalyMetrics = {
 export type PressAnomalyChartPoint = {
   eventId: string
   analysisId: string
+  logNo?: string | null
   timestamp: string
   targetCycleTimeSec: number | null
   actualCycleTimeSec: number | null
@@ -35,6 +36,7 @@ export type PressAnomalyChartPoint = {
 export type PressRiskTrendPoint = {
   eventId: string
   analysisId: string
+  logNo?: string | null
   timestamp: string
   value: number | null
   countIncreaseYn: boolean

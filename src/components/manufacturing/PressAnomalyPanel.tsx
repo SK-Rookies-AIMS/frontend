@@ -14,6 +14,8 @@ import {
 import { PaintTooltip } from "./useManufacturingDashboard"
 
 export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
+  const [isPressTooltipHovered, setIsPressTooltipHovered] = React.useState(false)
+  const pressTooltipLeaveTimerRef = React.useRef<number | null>(null)
   const {
     latestPressDisplayData,
     latestPressDisplayRisk,
@@ -88,7 +90,7 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
     if (payload?.countIncreaseYn === false) {
       return <circle cx={cx} cy={cy} r={4.5} fill="#0f172a" stroke="#ef4444" strokeWidth={2.2} />
     }
-    if (severity !== "WARNING" && severity !== "CRITICAL") return null
+    if (severity !== "WARNING" && severity !== "CRITICAL") return <g />
     return <circle cx={cx} cy={cy} r={3.5} fill="#ef4444" stroke="#ffffff" strokeWidth={1.25} />
   }
 
@@ -100,10 +102,46 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
 
     return (
       <div
+        data-chart-tooltip-interactive="true"
         className="rounded-lg border border-border bg-popover px-4 py-3 text-sm shadow-xl"
         style={{
           color: "var(--popover-foreground)",
           backgroundColor: "var(--popover)",
+        }}
+        onPointerEnterCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onPointerMoveCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onPointerDownCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseDownCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseMoveCapture={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseEnter={() => {
+          if (pressTooltipLeaveTimerRef.current !== null) {
+            window.clearTimeout(pressTooltipLeaveTimerRef.current)
+            pressTooltipLeaveTimerRef.current = null
+          }
+          setIsPressTooltipHovered(true)
+        }}
+        onMouseLeave={() => {
+          if (pressTooltipLeaveTimerRef.current !== null) {
+            window.clearTimeout(pressTooltipLeaveTimerRef.current)
+          }
+          pressTooltipLeaveTimerRef.current = window.setTimeout(() => {
+            setIsPressTooltipHovered(false)
+          }, 150)
         }}
       >
         <p className="mb-2 font-semibold text-base">이벤트 시각 {label}</p>
@@ -119,6 +157,44 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
               </span>
             </div>
           ))}
+          {row.isAbnormal && row.logNo ? (
+            <div className="pt-1 text-xs">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-medium" style={{ color: "#f97316" }}>이벤트 logNO:</span>
+                <span className="max-w-[180px] truncate rounded border border-border px-2 py-0.5 font-semibold text-primary" title={row.logNo}>
+                  {row.logNo}
+                </span>
+              </div>
+              <button
+                type="button"
+                data-chart-tooltip-interactive="true"
+                className="mt-2 w-full rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-semibold text-primary transition-colors hover:bg-primary/20"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  window.location.assign(`/events?logNo=${encodeURIComponent(row.logNo)}`)
+                }}
+                onPointerDownCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onMouseDownCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onPointerMoveCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onMouseMoveCapture={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+              >
+                이벤트 상세 보러가기
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     )
@@ -153,6 +229,14 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
     }
     return ticks
   }, [pressCycleTimeDomain])
+
+  React.useEffect(() => {
+    return () => {
+      if (pressTooltipLeaveTimerRef.current !== null) {
+        window.clearTimeout(pressTooltipLeaveTimerRef.current)
+      }
+    }
+  }, [])
 
   return (
     <div className="grid grid-cols-3 gap-4">
@@ -236,9 +320,31 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                     <div
                       className={`chart-line-reveal select-none ${isPressChartDragging ? "cursor-grabbing" : pressDisplayData.length > PRESS_CHART_WINDOW_SIZE ? "cursor-grab" : ""}`}
                       style={{ touchAction: "none" }}
-                      onPointerDownCapture={handlePressChartPointerDown}
-                      onMouseEnter={() => setIsPressChartHovered(true)}
-                      onMouseLeave={() => setIsPressChartHovered(false)}
+                      onPointerDownCapture={(event) => {
+                        const target = event.target as HTMLElement | null
+                        if (target?.closest('[data-chart-tooltip-interactive="true"]')) return
+                        handlePressChartPointerDown(event)
+                      }}
+                      onPointerDown={(event) => {
+                        const target = event.target as HTMLElement | null
+                        if (target?.closest('[data-chart-tooltip-interactive="true"]')) return
+                        handlePressChartPointerDown(event)
+                      }}
+                      onMouseEnter={() => {
+                        if (pressTooltipLeaveTimerRef.current !== null) {
+                          window.clearTimeout(pressTooltipLeaveTimerRef.current)
+                          pressTooltipLeaveTimerRef.current = null
+                        }
+                        setIsPressChartHovered(true)
+                      }}
+                      onMouseLeave={() => {
+                        if (pressTooltipLeaveTimerRef.current !== null) {
+                          window.clearTimeout(pressTooltipLeaveTimerRef.current)
+                        }
+                        pressTooltipLeaveTimerRef.current = window.setTimeout(() => {
+                          setIsPressChartHovered(false)
+                        }, 150)
+                      }}
                     >
                       <ResponsiveContainer width="100%" height={210}>
                         <LineChart
@@ -284,8 +390,8 @@ export function PressAnomalyPanel({ dashboard }: { dashboard: any }) {
                           <Tooltip
                             content={renderPressTooltip}
                             wrapperStyle={{
-                              visibility: isPressChartHovered && !isPressChartDragging ? "visible" : "hidden",
-                              pointerEvents: "none",
+                              visibility: (isPressChartHovered || isPressTooltipHovered) && !isPressChartDragging ? "visible" : "hidden",
+                              pointerEvents: (isPressChartHovered || isPressTooltipHovered) && !isPressChartDragging ? "auto" : "none",
                             }}
                           />
                           <Line isAnimationActive={false} pathLength={1} type="monotone" dataKey="actual_cycle_time_sec" stroke="#00d4ff" name="실제 사이클 타임" dot={renderPressSeverityDot} strokeWidth={2} />

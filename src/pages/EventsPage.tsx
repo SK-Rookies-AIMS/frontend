@@ -1,6 +1,7 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useSearchParams } from "react-router-dom"
 import { Header } from "@/components/dashboard/header"
 import { Mascot } from "@/components/mascot/mascot"
 import { Footer } from "@/components/dashboard/footer"
@@ -64,6 +65,7 @@ const getActionByFromToken = (): string => {
 }
 
 export default function EventsPage() {
+  const [searchParams] = useSearchParams()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
@@ -154,6 +156,41 @@ export default function EventsPage() {
     logNo: string;
     actionTimeline?: ActionTimelineItem[];
   };
+
+  const normalizeEventFromApi = (item: any): EventDetail => {
+    const createdAt = item?.createdAt ?? item?.datetime ?? ""
+    const logNo = String(item?.logNo ?? item?.id ?? item?.eventId ?? "")
+
+    return {
+      ...(item ?? {}),
+      id: item?.id ?? item?.logNo ?? item?.eventId ?? 0,
+      logNo,
+      datetime: createdAt,
+      severity: item?.severity === "DANGER" || item?.severity === "CRITICAL" ? "위험" : "경고",
+      area: item?.processCode ?? item?.area ?? "",
+      subArea: item?.equipmentId ? `ID : ${item.equipmentId}` : (item?.subArea ?? "ID : N/A"),
+      title: item?.title ?? item?.eventTitle ?? "제목 없음",
+      content: item?.contents ?? item?.content ?? "내용 없음",
+      status:
+        item?.actionStatus === "COMPLETED"
+          ? "조치 완료"
+          : item?.actionStatus === "NOT_NEEDED"
+            ? "조치 불필요"
+            : "조치 미완료",
+      equipmentId: item?.equipmentId ?? item?.equipmentNo ?? "000",
+      eventDate: createdAt ? createdAt.substring(5, 10).replace("-", "") : (item?.eventDate ?? ""),
+      eventCount: item?.eventCount ?? 0,
+      currentImpact: item?.currentImpact ?? item?.riskScore ?? 0,
+      followUpImpact: item?.followUpImpact ?? 0,
+      priorityScore: item?.priorityScore ?? 0,
+      alertType:
+        item?.alertType === "PROCESS"
+          ? "공정"
+          : item?.alertType === "EQUIPMENT"
+            ? "설비"
+            : item?.alertType ?? "알 수 없음",
+    }
+  }
 
   const fetchEvents = useCallback(async (page: number, size: number) => {
     setLoading(true)
@@ -261,6 +298,40 @@ export default function EventsPage() {
   useEffect(() => {
     setActionReason("")
   }, [selectedEvent])
+
+  useEffect(() => {
+    const logNo = searchParams.get("logNo")
+    if (!logNo) return
+
+    void (async () => {
+      try {
+        const response = await eventApi.getEventByLogNo(logNo)
+        const eventData = response?.data ?? response
+        const rawEvent = eventData?.data ?? eventData
+        if (!rawEvent) return
+
+        const detailEvent: EventDetail = {
+          ...normalizeEventFromApi(rawEvent),
+          logNo: String(rawEvent.logNo ?? rawEvent.id ?? logNo),
+          actionTimeline: [],
+        }
+
+        setSelectedEvent(detailEvent)
+
+        const timelineResponse = await api.get(`/api/event/${detailEvent.logNo}/action-timeline`)
+        setSelectedEvent((prev) =>
+          prev
+            ? {
+                ...prev,
+                actionTimeline: timelineResponse.data.data,
+              }
+            : prev,
+        )
+      } catch (error) {
+        console.error("Failed to open event detail by logNo", error)
+      }
+    })()
+  }, [searchParams])
 
 const getStatusStyle = (status: string) => {
   switch (status) {
