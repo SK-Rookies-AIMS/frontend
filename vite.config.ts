@@ -4,7 +4,7 @@ import path from "path";
 
 const ALERT_WS_URLS = {
   development: "http://localhost:8081/ws",
-  production: "https://aims-factory.com/api/ws",
+  production: "https://aims-factory.com/ws",
 } as const;
 
 export default defineConfig(({ mode }) => {
