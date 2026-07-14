@@ -497,15 +497,18 @@ const AREA_KOREAN_MAP: Record<string, string> = {
 
     setSelectedEvent(detailEvent);
 
-      const res = await api.get(
+      // fetch timeline
+      const timelineRes = await api.get(
         `/api/event/${detailEvent.logNo}/action-timeline`
       );
-
+      // fetch detail for imageUrl
+      const detailRes = await api.get(`/api/event/${detailEvent.logNo}`);
       setSelectedEvent(prev =>
         prev
           ? {
-              ...prev,
-              actionTimeline: res.data.data,
+                ...prev,
+                actionTimeline: timelineRes.data.data,
+                imageUrl: detailRes?.data?.data?.imageUrl
             }
           : prev
       );
@@ -514,24 +517,30 @@ const AREA_KOREAN_MAP: Record<string, string> = {
     }
   };
 
-  const getCategoryLabel = (category: string) => {
-    switch (category) {
-      case "CHECK":
-        return "점검";
-      case "REPAIR":
-        return "수리";
-      case "CHANGE":
-        return "교체";
-      case "CLEAN":
-        return "청소";
-      case "ADJUST":
-        return "조정";
-      case "RESTART":
-        return "재시작";
-      default:
-        return category;
-    }
+  const getFullImageUrl = (url: string | null): string | null => {
+    if (!url) return null;
+    return url.startsWith('http') ? url : `${import.meta.env.VITE_API_BASE_URL ?? ''}${url}`;
   };
+
+
+const getCategoryLabel = (category: string) => {
+  switch (category) {
+    case "CHECK":
+      return "점검";
+    case "REPAIR":
+      return "수리";
+    case "CHANGE":
+      return "교체";
+    case "CLEAN":
+      return "청소";
+    case "ADJUST":
+      return "조정";
+    case "RESTART":
+      return "재시작";
+    default:
+      return category;
+  }
+};
 
   const getCategoryStyle = (category: string) => {
     switch (category) {
@@ -1032,7 +1041,25 @@ const AREA_KOREAN_MAP: Record<string, string> = {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">내용</label>
-                  <p className="text-sm text-muted-foreground">{selectedEvent.content}</p>
+                  <div className="group relative w-max max-w-full">
+                    <p className="text-sm text-muted-foreground cursor-default flex items-center gap-1">
+                      {selectedEvent.content}
+                      {selectedEvent.imageUrl && (
+                        <span className="text-xs font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded ml-2 whitespace-nowrap">
+                          이미지 보기
+                        </span>
+                      )}
+                    </p>
+                    {selectedEvent.imageUrl && (
+                      <div className="absolute top-full left-0 mt-2 z-50 hidden group-hover:block bg-card border border-border shadow-lg rounded-md p-1 min-w-[200px] w-max max-w-[400px]">
+                        <img 
+                          src={selectedEvent.imageUrl} 
+                          alt="이벤트 상세 이미지" 
+                          className="w-full h-auto rounded object-contain max-h-[300px]"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Handler Info & Action Method */}
