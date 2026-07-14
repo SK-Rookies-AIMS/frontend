@@ -58,6 +58,7 @@ export interface EventItem {
     estimatedDelay: string
   }
   aiScore?: number // AI 지수 (마스코트 우선 안내용)
+  imageUrl?: string | null // 발생 이미지 URL
   alertType?: string // 알림 유형 ("공정" | "설비")
 }
 
