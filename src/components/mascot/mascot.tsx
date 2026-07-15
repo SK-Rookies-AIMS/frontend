@@ -75,9 +75,6 @@ export function Mascot() {
 
   }, [])
 
-  // 테마에 따른 마스코트 이미지 선택
-  const mascotImage = resolvedTheme === "dark" ? MASCOT_IMAGE_DARK : MASCOT_IMAGE_LIGHT
-
   if (isAuthPage) return null
 
   // 마스코트 클릭: 알림 -> 상세, 상세 -> 닫기, 없음 -> 기본 인사
@@ -96,17 +93,23 @@ export function Mascot() {
   const goToEvent = () => {
     navigate(`/events`)
   }
+  const getWatchyState = (): WatchyState => {
+      if (loadingManual) {
+        return "WARNING";
+      }
+
+      if (!event) {
+          return "NORMAL";
+      }
+
+      if (manual) {
+          return "DANGER";
+      }
+
+      return "NORMAL";
+  };
 
   const renderBubbleContent = () => {
-    const watchyState: WatchyState =
-      !event
-        ? "NORMAL"
-        : loadingManual
-          ? "WARNING"
-          : manual
-            ? "DANGER"
-            : "NORMAL";
-
     if (loadingManual) {
         return (
             <div className="flex flex-col gap-2">
@@ -327,8 +330,9 @@ export function Mascot() {
           </span>
         )}
         <Watchy
-            state={watchyState}
-            width={200}
+          state={getWatchyState()}
+          theme={resolvedTheme === "dark" ? "blue" : "navy"}
+          width={200}
         />
       </div>
     </motion.div>
