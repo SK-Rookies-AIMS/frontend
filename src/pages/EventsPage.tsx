@@ -63,6 +63,34 @@ const getActionByFromToken = (): string => {
   }
 }
 
+interface ActionTimeline {
+  actionId: number;
+  actionTime: string;
+  empNo: string;
+  empName: string;
+  empRole: string;
+  actionCategory: string;
+  actionContent: string;
+  actionResult: string;
+}
+
+interface RecommendationResponse {
+  similarLogNo: string;
+  confidence: number;
+  handler: string;
+  recommendedAction: string;
+  recommendationReason: string;
+  actionTimeline: ActionTimeline[];
+}
+
+interface RecommendationApiResponse {
+  success: boolean;
+  data: RecommendationResponse;
+  message: string;
+  timestamp: string;
+}
+
+
 export default function EventsPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentPage, setCurrentPage] = useState(1)
@@ -95,6 +123,34 @@ export default function EventsPage() {
     setNewActionCategory("CHECK");
     setNewActionResult("");
     setIsAddActionModalOpen(true);
+  };
+
+
+  const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null);
+
+
+  useEffect(() => {
+  if (!selectedEvent) {
+    setRecommendation(null);
+    return;
+  }
+
+  fetchRecommendation(selectedEvent.logNo);
+}, [selectedEvent]);
+
+  const fetchRecommendation = async (eventId: string) => {
+    try {
+      const res = await api.get<RecommendationApiResponse>(
+        `/api/event/${eventId}/recommendation`
+      );
+      if (res.data.success) {
+        setRecommendation(res.data.data);
+      } else {
+        setRecommendation(null);
+      }
+    } catch (e) {
+      setRecommendation(null);
+    }
   };
 
   const handleSaveActionTimeline = async () => {
@@ -1152,7 +1208,7 @@ const getCategoryLabel = (category: string) => {
                 )}
 
                 {/* Trust Score (MVP.A) */}
-                <div className="border-t border-border pt-4">
+                {/* <div className="border-t border-border pt-4">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="text-sm font-medium">AI 신뢰도 점수</h3>
                     <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded">MVP.A</span>
@@ -1172,7 +1228,79 @@ const getCategoryLabel = (category: string) => {
                   <p className="text-xs text-muted-foreground mt-1">
                     관제사 반응 기반 알림 우선순위 점수
                   </p>
-                </div>
+                </div> */}
+
+
+                  {/* 추천 조치 */}
+                  {recommendation && (
+                    <div className="mt-5 border border-warning/30 bg-warning/10 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Lightbulb className="w-4 h-4 text-warning" />
+                          <span className="text-sm font-medium">
+                            시니어 추천 조치
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      추천 조치 이력
+                    </p>
+
+                    {recommendation.actionTimeline.map((item) => (
+                      <div
+                        key={item.actionId}
+                        className="rounded border border-warning/20 bg-background p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-warning">
+                            {item.actionCategory}
+                          </span>
+
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(item.actionTime).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="mb-2">
+                          <p className="text-sm">
+                            조치 내용 : {item.actionContent}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            조치 결과 : {item.actionResult}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-warning/20 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">
+                              담당 시니어
+                            </span>
+                            <span className="ml-1 font-medium">
+                              {recommendation.handler}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-muted-foreground">
+                              유사 장애
+                            </span>
+                            <span className="ml-1 font-mono text-primary">
+                              {recommendation.similarLogNo}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Action Timeline */}
                 {selectedEvent.actionTimeline &&
