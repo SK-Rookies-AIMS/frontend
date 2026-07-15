@@ -287,7 +287,6 @@ export default function EventsPage() {
     handler
   )
 
-
   return ()=> {
     window.removeEventListener(
       "page-refresh",
@@ -513,6 +512,21 @@ const AREA_KOREAN_MAP: Record<string, string> = {
   const endIndex = Math.min(startIndex + pageSize, totalEvents)
   const paginatedEvents = filteredEvents.slice(startIndex, endIndex)
   const currentPageCount = paginatedEvents.length
+  const convertS3Url = (url?: string) => {
+    if (!url) return "";
+
+    if (url.startsWith("http")) return url;
+
+    if (url.startsWith("s3://")) {
+      const path = url.replace("s3://", "");
+      const [bucket, ...keys] = path.split("/");
+
+      return `https://${bucket}.s3.ap-northeast-2.amazonaws.com/${keys.join("/")}`;
+    }
+
+    return url;
+  };
+
 
   // 필터 변경 시 1페이지로 리셋
   useEffect(() => {
@@ -1128,7 +1142,7 @@ const getCategoryLabel = (category: string) => {
                     {selectedEvent.imageUrl && (
                       <div className="absolute top-full left-0 mt-2 z-50 hidden group-hover:block bg-card border border-border shadow-lg rounded-md p-1 min-w-[200px] w-max max-w-[400px]">
                         <img 
-                          src={selectedEvent.imageUrl} 
+                          src={convertS3Url(selectedEvent.imageUrl)} 
                           alt="이벤트 상세 이미지" 
                           className="w-full h-auto rounded object-contain max-h-[300px]"
                         />
