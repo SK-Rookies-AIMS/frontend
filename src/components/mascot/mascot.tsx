@@ -7,6 +7,8 @@ import { AlertTriangle, ArrowRight, GripVertical } from "lucide-react"
 import type { ManualResponse } from "@/types/manual"
 import { getCurrentManual } from "@/api/manualApi"
 import { motion, useDragControls } from "framer-motion";
+import type { WatchyState } from "@/types/watchytype";
+import Watchy from "@/components/mascot/watchy";
 
 // 라이트 모드용 마스코트 이미지
 const MASCOT_IMAGE_LIGHT = "/images/watchy-white.png"
@@ -26,6 +28,26 @@ export function Mascot() {
   const [event, setEvent] = useState<any>(null)
   const [isDragging, setIsDragging] = useState(false);
   const dragControls = useDragControls();
+  const [watchyState, setWatchyState] = useState<WatchyState>("NORMAL");
+
+  useEffect(() => {
+    if (!event) {
+        setWatchyState("NORMAL");
+        return;
+    }
+
+    if (loadingManual) {
+        setWatchyState("WARNING");
+        return;
+    }
+
+    if (manual) {
+        setWatchyState("DANGER");
+        return;
+    }
+
+    setWatchyState("NORMAL");
+}, [event, loadingManual, manual]);
 
   // AI 지수가 높은 이벤트가 새로 발생하면 자동으로 상황 알림 말풍선 표시
   useEffect(() => {
@@ -76,6 +98,15 @@ export function Mascot() {
   }
 
   const renderBubbleContent = () => {
+    const watchyState: WatchyState =
+      !event
+        ? "NORMAL"
+        : loadingManual
+          ? "WARNING"
+          : manual
+            ? "DANGER"
+            : "NORMAL";
+
     if (loadingManual) {
         return (
             <div className="flex flex-col gap-2">
@@ -295,11 +326,9 @@ export function Mascot() {
             <span className="relative inline-flex h-3 w-3 rounded-full bg-destructive"></span>
           </span>
         )}
-        <img
-          src={mascotImage}
-          alt="watchy"
-          width={200}
-          height={200}
+        <Watchy
+            state={watchyState}
+            width={200}
         />
       </div>
     </motion.div>
