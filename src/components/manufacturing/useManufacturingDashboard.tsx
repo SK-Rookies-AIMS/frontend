@@ -647,6 +647,7 @@ export function useManufacturingDashboard() {
   const [isBodyRobotChartDragging, setIsBodyRobotChartDragging] = useState(false)
   const [isBodyFrequencyChartDragging, setIsBodyFrequencyChartDragging] = useState(false)
   const [isBodyChartHovered, setIsBodyChartHovered] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const bodyRobotChartDragRef = useRef<{
     pointerId: number
     startX: number
@@ -1440,6 +1441,24 @@ export function useManufacturingDashboard() {
     setCurrentTime(new Date())
   }, 1000)
 
+  useEffect(() => {
+    const handleRefresh = () => {
+      setRefreshTrigger(Date.now())
+    }
+
+    window.addEventListener(
+      "aims-refresh",
+      handleRefresh
+    )
+
+    return () => {
+      window.removeEventListener(
+        "aims-refresh",
+        handleRefresh
+      )
+    }
+  }, [])
+
   return () => clearInterval(timer)
   }, [])
 
@@ -1576,6 +1595,39 @@ export function useManufacturingDashboard() {
       setIsAssemblyDashboardLoading(false)
     }
   }, [])
+
+    const refreshDashboard = useCallback(() => {
+    void fetchPressAnalysis(selectedPressAnalysisDate)
+
+    void fetchBodyAnalysisData(selectedBodyAnalysisDate)
+
+    void fetchPaintDashboardData(
+      selectedPaintDate || undefined
+    )
+
+    void fetchAssemblyDashboardData(
+      selectedAssemblyDate || undefined
+    )
+  }, [
+    fetchPressAnalysis,
+    fetchBodyAnalysisData,
+    fetchPaintDashboardData,
+    fetchAssemblyDashboardData,
+    selectedPressAnalysisDate,
+    selectedBodyAnalysisDate,
+    selectedPaintDate,
+    selectedAssemblyDate,
+  ])
+
+  useEffect(() => {
+    if (!refreshTrigger) return
+
+    refreshDashboard()
+
+  }, [
+    refreshTrigger,
+    refreshDashboard
+  ])
 
   useEffect(() => {
     let ignore = false
@@ -1820,6 +1872,7 @@ export function useManufacturingDashboard() {
 
   return {
     currentTime,
+    refreshDashboard,
     activeTab,
     setActiveTab,
     topProcessStages,
