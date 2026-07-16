@@ -128,6 +128,7 @@ export function EventPrioritySummaryCard({
                 <div>
                   <dt className="font-medium text-primary">평균 대응 우선순위</dt>
                   <dd className="text-muted-foreground">전체 이벤트의 평균 현장 대응 우선순위</dd>
+                  <dd className="text-muted-foreground">위험도 * (1+반복 발생률) + (1+조치 필요도)</dd>
                 </div>
                 <div>
                   <dt className="font-medium">평균 기준 위험도</dt>
