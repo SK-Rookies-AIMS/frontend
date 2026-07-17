@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
-import { Truck } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Truck, X } from "lucide-react"
 
 import { useAgvWebsocket } from "@/hooks/use-agv-websocket"
 import type { ProcessFlowAgv } from "@/lib/agv-mapper"
@@ -24,12 +24,12 @@ const ISO_DX = 30  // isometric side-face X depth
 const ISO_DY = 20  // isometric roof/side Y depth
 
 const STATIONS = [
-  { id: 0, name: "프레스",   num: "01", cx: 170,  cy: 250 },
-  { id: 1, name: "차체",     num: "02", cx: 560,  cy: 250 },
-  { id: 2, name: "도장",     num: "03", cx: 490,  cy: 550 },
-  { id: 3, name: "의장",     num: "04", cx: 870,  cy: 550 },
-  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 550 },
-]
+  { id: 0, name: "프레스", num: "01", cx: 170, cy: 250, routeIndex: 0, routeLabel: "프레스 → 차체", routeCode: "PRESS_BODY" },
+  { id: 1, name: "차체", num: "02", cx: 560, cy: 250, routeIndex: 1, routeLabel: "차체 → 도장", routeCode: "BODY_PAINT" },
+  { id: 2, name: "도장", num: "03", cx: 490, cy: 550, routeIndex: 2, routeLabel: "도장 → 의장", routeCode: "PAINT_ASSEMBLY" },
+  { id: 3, name: "의장", num: "04", cx: 870, cy: 550, routeIndex: 3, routeLabel: "의장 → 최종검사", routeCode: "ASSEMBLY_INSPECTION" },
+  { id: 4, name: "최종검사", num: "05", cx: 1230, cy: 550, routeIndex: 3, routeLabel: "의장 → 최종검사", routeCode: "ASSEMBLY_INSPECTION" },
+] as const
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Routes (routeIndex matches agv-mapper.ts ROUTE_INDEX)
@@ -43,15 +43,15 @@ const ROUTES: { pts: { x: number; y: number }[] }[] = [
     // 프레스 → 차체  (horizontal)
     pts: [
       { x: STATIONS[0].cx + BW / 2 + ISO_DX - 20, y: STATIONS[0].cy + BH / 4 },
-      { x: STATIONS[1].cx - BW / 2 + 20,           y: STATIONS[1].cy + BH / 4 },
+      { x: STATIONS[1].cx - BW / 2 + 20, y: STATIONS[1].cy + BH / 4 },
     ],
   },
   {
     // 차체 → 도장  (C-shape: right, down, left)
     pts: [
       { x: STATIONS[1].cx + BW / 2 + ISO_DX - 20, y: STATIONS[1].cy + BH / 4 + 20 },
-      { x: 730,                                   y: STATIONS[1].cy + BH / 4 + 20 },
-      { x: 730,                                   y: STATIONS[2].cy - 20 },
+      { x: 730, y: STATIONS[1].cy + BH / 4 + 20 },
+      { x: 730, y: STATIONS[2].cy - 20 },
       { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy - 20 },
     ],
   },
@@ -59,14 +59,14 @@ const ROUTES: { pts: { x: number; y: number }[] }[] = [
     // 도장 → 의장  (horizontal)
     pts: [
       { x: STATIONS[2].cx + BW / 2 + ISO_DX - 20, y: STATIONS[2].cy + BH / 4 },
-      { x: STATIONS[3].cx - BW / 2 + 20,           y: STATIONS[3].cy + BH / 4 },
+      { x: STATIONS[3].cx - BW / 2 + 20, y: STATIONS[3].cy + BH / 4 },
     ],
   },
   {
     // 의장 → 최종검사  (horizontal)
     pts: [
       { x: STATIONS[3].cx + BW / 2 + ISO_DX - 20, y: STATIONS[3].cy + BH / 4 },
-      { x: STATIONS[4].cx - BW / 2 + 20,           y: STATIONS[4].cy + BH / 4 },
+      { x: STATIONS[4].cx - BW / 2 + 20, y: STATIONS[4].cy + BH / 4 },
     ],
   },
 ]
@@ -137,10 +137,10 @@ function offsetPolyline(
   d: number
 ): { x: number; y: number }[] {
   if (pts.length < 2) return pts
-  
+
   const res: { x: number; y: number }[] = []
   const normals: { nx: number; ny: number }[] = []
-  
+
   // Calculate normal for each segment
   for (let i = 0; i < pts.length - 1; i++) {
     const dx = pts[i + 1].x - pts[i].x
@@ -148,7 +148,7 @@ function offsetPolyline(
     const len = Math.sqrt(dx * dx + dy * dy) || 1
     normals.push({ nx: -dy / len, ny: dx / len })
   }
-  
+
   // Apply offset to points
   for (let i = 0; i < pts.length; i++) {
     if (i === 0) {
@@ -390,16 +390,16 @@ function BuildingShell({
     <g filter="url(#pf-drop)">
       {/* Isometric right face */}
       <polygon
-        points={`${x+bw},${y} ${x+bw+sdx},${y-sdy} ${x+bw+sdx},${y+bh-sdy} ${x+bw},${y+bh}`}
+        points={`${x + bw},${y} ${x + bw + sdx},${y - sdy} ${x + bw + sdx},${y + bh - sdy} ${x + bw},${y + bh}`}
         fill="url(#pf-bldg-side)" stroke="#0a1624" strokeWidth={0.8}
       />
       {/* Isometric top face */}
       <polygon
-        points={`${x},${y} ${x+bw},${y} ${x+bw+sdx},${y-sdy} ${x+sdx},${y-sdy}`}
+        points={`${x},${y} ${x + bw},${y} ${x + bw + sdx},${y - sdy} ${x + sdx},${y - sdy}`}
         fill="url(#pf-bldg-top)" stroke={borderColor} strokeWidth={1}
       />
       {/* Roof top neon line */}
-      <line x1={x+sdx} y1={y-sdy} x2={x+bw+sdx} y2={y-sdy}
+      <line x1={x + sdx} y1={y - sdy} x2={x + bw + sdx} y2={y - sdy}
         stroke={roofColor} strokeWidth={2.5} opacity={0.8}
         filter={`url(#${glowId})`} className="pf-neon"
       />
@@ -447,7 +447,7 @@ function BuildingShell({
       {/* Entrance shutter */}
       <rect x={midX - 24} y={y + bh - 54} width={48} height={54}
         fill="#01080f" stroke={warn ? "#f59e0b" : "#0e7490"} strokeWidth={1.5} />
-      {[0,1,2,3,4,5,6,7].map((i) => (
+      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
         <line key={i}
           x1={midX - 22} y1={y + bh - 50 + i * 6}
           x2={midX + 22} y2={y + bh - 50 + i * 6}
@@ -540,7 +540,7 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
           <rect x={midX - 18} y={y + 74} width={36} height={8} fill="#374151" />
           <rect x={midX - 44} y={y + 116} width={88} height={16}
             fill="#1f2937" stroke="#374151" strokeWidth={1.2} />
-          {[0,1,2,3,4,5].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <rect key={i}
               x={midX - 44 + i * 14.5} y={y + 116}
               width={7} height={16} fill="#eab308" opacity={0.85}
@@ -564,33 +564,33 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
       return (
         <g>
           <path
-            d={`M ${x+35} ${y+100} L ${x+46} ${y+74} L ${x+70} ${y+62} L ${x+bw-70} ${y+62} L ${x+bw-46} ${y+74} L ${x+bw-35} ${y+100} Z`}
+            d={`M ${x + 35} ${y + 100} L ${x + 46} ${y + 74} L ${x + 70} ${y + 62} L ${x + bw - 70} ${y + 62} L ${x + bw - 46} ${y + 74} L ${x + bw - 35} ${y + 100} Z`}
             fill="none" stroke="#374151" strokeWidth={1.8} strokeLinejoin="round"
           />
           <path
-            d={`M ${x+54} ${y+74} L ${x+68} ${y+54} L ${x+bw-68} ${y+54} L ${x+bw-54} ${y+74}`}
+            d={`M ${x + 54} ${y + 74} L ${x + 68} ${y + 54} L ${x + bw - 68} ${y + 54} L ${x + bw - 54} ${y + 74}`}
             fill="#0c1a28" stroke="#263d52" strokeWidth={1.2}
           />
-          <polygon points={`${x+70},${y+62} ${x+82},${y+48} ${x+100},${y+46} ${x+100},${y+62}`}
+          <polygon points={`${x + 70},${y + 62} ${x + 82},${y + 48} ${x + 100},${y + 46} ${x + 100},${y + 62}`}
             fill="url(#pf-glass)" opacity={0.7} />
           <circle cx={x + 52} cy={y + 104} r={13} fill="#0d1520" stroke="#374151" strokeWidth={1.8} />
           <circle cx={x + 52} cy={y + 104} r={5} fill="#1a2a3a" stroke="#4b5563" strokeWidth={1.2} />
           <circle cx={x + bw - 52} cy={y + 104} r={13} fill="#0d1520" stroke="#374151" strokeWidth={1.8} />
           <circle cx={x + bw - 52} cy={y + 104} r={5} fill="#1a2a3a" stroke="#4b5563" strokeWidth={1.2} />
-          <path d={`M ${x+18} ${y+140} L ${x+28} ${y+118} L ${x+50} ${y+104}`}
+          <path d={`M ${x + 18} ${y + 140} L ${x + 28} ${y + 118} L ${x + 50} ${y + 104}`}
             fill="none" stroke="#22d3ee" strokeWidth={4.5}
             strokeLinecap="round" strokeLinejoin="round" filter="url(#pf-glow-c)"
           />
-          <circle cx={x+18} cy={y+140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
-          <circle cx={x+50} cy={y+104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
-          <line x1={x+50} y1={y+104} x2={x+56} y2={y+98} stroke="#fcd34d" strokeWidth={1.5} />
-          <line x1={x+50} y1={y+104} x2={x+44} y2={y+97} stroke="#fcd34d" strokeWidth={1.5} />
-          <path d={`M ${x+bw-18} ${y+140} L ${x+bw-28} ${y+118} L ${x+bw-50} ${y+104}`}
+          <circle cx={x + 18} cy={y + 140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
+          <circle cx={x + 50} cy={y + 104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
+          <line x1={x + 50} y1={y + 104} x2={x + 56} y2={y + 98} stroke="#fcd34d" strokeWidth={1.5} />
+          <line x1={x + 50} y1={y + 104} x2={x + 44} y2={y + 97} stroke="#fcd34d" strokeWidth={1.5} />
+          <path d={`M ${x + bw - 18} ${y + 140} L ${x + bw - 28} ${y + 118} L ${x + bw - 50} ${y + 104}`}
             fill="none" stroke="#22d3ee" strokeWidth={4.5}
             strokeLinecap="round" strokeLinejoin="round" filter="url(#pf-glow-c)"
           />
-          <circle cx={x+bw-18} cy={y+140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
-          <circle cx={x+bw-50} cy={y+104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
+          <circle cx={x + bw - 18} cy={y + 140} r={5.5} fill="#1a2a3c" stroke="#4b5563" strokeWidth={1.2} />
+          <circle cx={x + bw - 50} cy={y + 104} r={4} fill="#22d3ee" opacity={0.8} filter="url(#pf-glow-c)" />
           <rect x={midX - 6} y={y - ISO_DY - 20} width={12} height={20} fill="#1f2937" stroke="#374151" strokeWidth={1} />
           <circle cx={midX} cy={y - ISO_DY - 25} r={9} fill="#1f2937" stroke="#374151" strokeWidth={1} />
           <circle cx={midX} cy={y - ISO_DY - 25} r={5} className="pf-led-y" filter="url(#pf-glow-y)" />
@@ -603,7 +603,7 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
         <g>
           <rect x={midX - 36} y={y - ISO_DY - 32} width={72} height={32}
             fill="#162230" stroke="#2a4060" strokeWidth={1.5} rx={2} />
-          {[0,1,2,3,4].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <line key={i}
               x1={midX - 32} y1={y - ISO_DY - 28 + i * 6}
               x2={midX + 32} y2={y - ISO_DY - 28 + i * 6}
@@ -620,30 +620,30 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
             fill="#0891b2" fillOpacity={0.04} stroke="#0e7490" strokeWidth={1.5} rx={3}
             filter="url(#pf-glow-c)"
           />
-          <path d={`M ${x+22} ${y+28} Q ${midX} ${y+6} ${x+bw-22} ${y+28}`}
+          <path d={`M ${x + 22} ${y + 28} Q ${midX} ${y + 6} ${x + bw - 22} ${y + 28}`}
             fill="none" stroke="#4a6280" strokeWidth={2}
           />
-          {[0,1,2].map((i) => (
+          {[0, 1, 2].map((i) => (
             <g key={i}>
               <rect x={x + 24} y={y + 36 + i * 26} width={6} height={12} fill="#3d5060" rx={1} />
-              <path d={`M ${x+30} ${y+42 + i*26} L ${x+44} ${y+46 + i*26} L ${x+30} ${y+50 + i*26}`}
+              <path d={`M ${x + 30} ${y + 42 + i * 26} L ${x + 44} ${y + 46 + i * 26} L ${x + 30} ${y + 50 + i * 26}`}
                 fill="#0e7490" fillOpacity={0.5} />
             </g>
           ))}
-          {[0,1,2].map((i) => (
+          {[0, 1, 2].map((i) => (
             <g key={i}>
               <rect x={x + bw - 30} y={y + 36 + i * 26} width={6} height={12} fill="#3d5060" rx={1} />
-              <path d={`M ${x+bw-30} ${y+42 + i*26} L ${x+bw-44} ${y+46 + i*26} L ${x+bw-30} ${y+50 + i*26}`}
+              <path d={`M ${x + bw - 30} ${y + 42 + i * 26} L ${x + bw - 44} ${y + 46 + i * 26} L ${x + bw - 30} ${y + 50 + i * 26}`}
                 fill="#0e7490" fillOpacity={0.5} />
             </g>
           ))}
           <rect x={midX - 26} y={y + 112} width={52} height={20} fill="#010a12" rx={3} stroke="#0891b2" strokeWidth={1} />
           <text x={midX} y={y + 126} textAnchor="middle" fill="#22d3ee"
             fontSize={9} fontWeight={900} letterSpacing="0.8px">BOOTH</text>
-          {[0,1,2].map((i) => (
+          {[0, 1, 2].map((i) => (
             <line key={i}
-              x1={x + 22 + i * ((bw-44)/3)} y1={y + bh - 20}
-              x2={x + 22 + (i+1) * ((bw-44)/3)} y2={y + bh - 20}
+              x1={x + 22 + i * ((bw - 44) / 3)} y1={y + bh - 20}
+              x2={x + 22 + (i + 1) * ((bw - 44) / 3)} y2={y + bh - 20}
               stroke="#0e3a4a" strokeWidth={2}
             />
           ))}
@@ -662,36 +662,36 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
           <rect x={midX - 8} y={y - ISO_DY + 11} width={16} height={4} fill="#1e3a52" />
           <rect x={x + 18} y={y + 86} width={bw - 36} height={14}
             fill="#060e1c" rx={2} stroke="#1e3050" strokeWidth={1} />
-          <line x1={x+18} y1={y+93} x2={x+bw-18} y2={y+93}
+          <line x1={x + 18} y1={y + 93} x2={x + bw - 18} y2={y + 93}
             stroke="#1e3454" strokeWidth={10} strokeDasharray="7 5" opacity={0.7} />
-          <path d={`M ${x+22} ${y+80} L ${x+34} ${y+60} L ${x+54} ${y+50}`}
+          <path d={`M ${x + 22} ${y + 80} L ${x + 34} ${y + 60} L ${x + 54} ${y + 50}`}
             fill="none" stroke="#4a6078" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"
           />
-          <circle cx={x+22} cy={y+80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
-          <circle cx={x+54} cy={y+50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
-          <path d={`M ${x+bw-22} ${y+80} L ${x+bw-34} ${y+60} L ${x+bw-54} ${y+50}`}
+          <circle cx={x + 22} cy={y + 80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
+          <circle cx={x + 54} cy={y + 50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
+          <path d={`M ${x + bw - 22} ${y + 80} L ${x + bw - 34} ${y + 60} L ${x + bw - 54} ${y + 50}`}
             fill="none" stroke="#4a6078" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"
           />
-          <circle cx={x+bw-22} cy={y+80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
-          <circle cx={x+bw-54} cy={y+50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
+          <circle cx={x + bw - 22} cy={y + 80} r={5.5} fill="#1a2a3c" stroke="#3d5060" strokeWidth={1.2} />
+          <circle cx={x + bw - 54} cy={y + 50} r={3.5} fill="#22c55e" className="pf-led-g" filter="url(#pf-glow-g)" />
           <rect x={midX - 30} y={y + 18} width={60} height={42}
             fill="#010812" rx={3} stroke="#1a3452" strokeWidth={1.5} />
           <rect x={midX - 26} y={y + 22} width={52} height={20}
             fill="#000d1c" rx={1} stroke="#0e7490" strokeWidth={0.8} />
-          <path d={`M ${midX-22} ${y+32} L ${midX-14} ${y+26} L ${midX-6} ${y+34} L ${midX+2} ${y+28} L ${midX+10} ${y+34} L ${midX+18} ${y+26} L ${midX+22} ${y+32}`}
+          <path d={`M ${midX - 22} ${y + 32} L ${midX - 14} ${y + 26} L ${midX - 6} ${y + 34} L ${midX + 2} ${y + 28} L ${midX + 10} ${y + 34} L ${midX + 18} ${y + 26} L ${midX + 22} ${y + 32}`}
             fill="none" stroke="#22c55e" strokeWidth={1.2} opacity={0.8}
           />
           <circle cx={midX - 16} cy={y + 52} r={3} className="pf-led-c" filter="url(#pf-glow-c)" />
           <circle cx={midX - 6} cy={y + 52} r={3} className="pf-led-g" />
           <circle cx={midX + 4} cy={y + 52} r={3} className="pf-led-y" />
           <circle cx={midX + 14} cy={y + 52} r={3} fill="#ef4444" />
-          <rect x={x+16} y={y+106} width={20} height={50} fill="#0d1828" stroke="#374151" strokeWidth={1} rx={1} />
-          {[0,1,2].map((i) => (
-            <rect key={i} x={x+17} y={y+110 + i*15} width={18} height={10} fill="#1f2937" stroke="#374151" strokeWidth={0.5} />
+          <rect x={x + 16} y={y + 106} width={20} height={50} fill="#0d1828" stroke="#374151" strokeWidth={1} rx={1} />
+          {[0, 1, 2].map((i) => (
+            <rect key={i} x={x + 17} y={y + 110 + i * 15} width={18} height={10} fill="#1f2937" stroke="#374151" strokeWidth={0.5} />
           ))}
-          <rect x={x+bw-36} y={y+106} width={20} height={50} fill="#0d1828" stroke="#374151" strokeWidth={1} rx={1} />
-          {[0,1,2].map((i) => (
-            <rect key={i} x={x+bw-35} y={y+110 + i*15} width={18} height={10} fill="#1f2937" stroke="#374151" strokeWidth={0.5} />
+          <rect x={x + bw - 36} y={y + 106} width={20} height={50} fill="#0d1828" stroke="#374151" strokeWidth={1} rx={1} />
+          {[0, 1, 2].map((i) => (
+            <rect key={i} x={x + bw - 35} y={y + 110 + i * 15} width={18} height={10} fill="#1f2937" stroke="#374151" strokeWidth={0.5} />
           ))}
         </g>
       )
@@ -712,13 +712,13 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
           <rect x={x + 36} y={y + 16} width={8} height={bh - 48} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
           <rect x={x + bw - 44} y={y + 16} width={8} height={bh - 48} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
           <rect x={x + 36} y={y + 16} width={bw - 72} height={8} fill="#142a44" stroke="#0e7490" strokeWidth={1} />
-          <line x1={x+40} y1={y+24} x2={x+40} y2={y+bh-32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
-          <line x1={x+bw-40} y1={y+24} x2={x+bw-40} y2={y+bh-32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
-          <line x1={x+44} y1={y+50}  x2={x+bw-44} y2={y+50}  stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" />
-          <line x1={x+44} y1={y+90}  x2={x+bw-44} y2={y+90}  stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.4s" }} />
-          <line x1={x+44} y1={y+130} x2={x+bw-44} y2={y+130} stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.8s" }} />
+          <line x1={x + 40} y1={y + 24} x2={x + 40} y2={y + bh - 32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
+          <line x1={x + bw - 40} y1={y + 24} x2={x + bw - 40} y2={y + bh - 32} stroke="#22c55e" strokeWidth={1.2} opacity={0.8} className="pf-neon" />
+          <line x1={x + 44} y1={y + 50} x2={x + bw - 44} y2={y + 50} stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" />
+          <line x1={x + 44} y1={y + 90} x2={x + bw - 44} y2={y + 90} stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.4s" }} />
+          <line x1={x + 44} y1={y + 130} x2={x + bw - 44} y2={y + 130} stroke="#22c55e" strokeWidth={1.6} filter="url(#pf-glow-g)" opacity={0.85} className="pf-neon" style={{ animationDelay: "0.8s" }} />
           <rect x={midX - 22} y={y + 24} width={44} height={42} fill="#00080a" rx={2} stroke="#1a4028" strokeWidth={1} />
-          {[0,1,2,3,4,5].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <rect key={i} x={midX - 18 + i * 7} y={y + 27} width={i % 2 === 0 ? 4 : 2} height={36}
               fill="#22c55e" opacity={0.7}
             />
@@ -730,8 +730,8 @@ function ProcessInterior({ name, x, y, bw, bh }: { name: string; x: number; y: n
             filter="url(#pf-glow-g)" className="pf-led-g">
             PASS
           </text>
-          <circle cx={x+42} cy={y+20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
-          <circle cx={x+bw-42} cy={y+20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
+          <circle cx={x + 42} cy={y + 20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
+          <circle cx={x + bw - 42} cy={y + 20} r={3.5} className="pf-led-g" filter="url(#pf-glow-g)" />
         </g>
       )
 
@@ -805,11 +805,35 @@ function RouteSegment({
 // ─────────────────────────────────────────────────────────────────────────────
 export function ProcessFlow() {
   const agvs = useAgvWebsocket()
+  const [selectedStationId, setSelectedStationId] = useState<number | null>(null)
 
-  const movingCount   = useMemo(() => agvs.filter((a) => a.status === "MOVING").length,    [agvs])
-  const returningCount= useMemo(() => agvs.filter((a) => a.status === "RETURNING").length, [agvs])
-  const unloadingCount= useMemo(() => agvs.filter((a) => a.status === "UNLOADING").length, [agvs])
-  const waitingCount  = useMemo(() => agvs.filter((a) => a.status === "WAITING").length,   [agvs])
+  const selectedStation = useMemo(
+    () => STATIONS.find((station) => station.id === selectedStationId) ?? null,
+    [selectedStationId]
+  )
+
+  const selectedAgvs = useMemo(() => {
+    if (!selectedStation) return []
+    return agvs
+      .filter((agv) => agv.routeIndex === selectedStation.routeIndex)
+      .sort((a, b) => a.laneIndex - b.laneIndex)
+  }, [agvs, selectedStation])
+
+  const selectedCounts = useMemo(() => ({
+    MOVING: selectedAgvs.filter((agv) => agv.status === "MOVING").length,
+    UNLOADING: selectedAgvs.filter((agv) => agv.status === "UNLOADING").length,
+    RETURNING: selectedAgvs.filter((agv) => agv.status === "RETURNING").length,
+    WAITING: selectedAgvs.filter((agv) => agv.status === "WAITING").length,
+  }), [selectedAgvs])
+
+  const toggleStation = (stationId: number) => {
+    setSelectedStationId((current) => current === stationId ? null : stationId)
+  }
+
+  const movingCount = useMemo(() => agvs.filter((a) => a.status === "MOVING").length, [agvs])
+  const returningCount = useMemo(() => agvs.filter((a) => a.status === "RETURNING").length, [agvs])
+  const unloadingCount = useMemo(() => agvs.filter((a) => a.status === "UNLOADING").length, [agvs])
+  const waitingCount = useMemo(() => agvs.filter((a) => a.status === "WAITING").length, [agvs])
   const safeTotal = agvs.length === 0 ? 1 : agvs.length
 
   const activeRouteIndices = useMemo(
@@ -855,7 +879,7 @@ export function ProcessFlow() {
         </div>
       </div>
 
-      <div className="flex gap-4 flex-col lg:flex-row">
+      <div className="relative">
 
         {/* ── SVG Canvas */}
         <div
@@ -897,14 +921,44 @@ export function ProcessFlow() {
             )}
 
             {/* ── Factory stations (draw ON TOP of routes) */}
-            {STATIONS.map((s) => (
-              <FactoryStation
-                key={s.id}
-                cx={s.cx} cy={s.cy}
-                name={s.name} num={s.num}
-                warn={warnStation.has(s.id)}
-              />
-            ))}
+            {STATIONS.map((s) => {
+              const selected = selectedStationId === s.id
+              return (
+                <g
+                  key={s.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${s.name} 공정 상세정보 열기`}
+                  onClick={() => toggleStation(s.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") toggleStation(s.id)
+                  }}
+                  className="cursor-pointer"
+                  style={{ outline: "none" }}
+                >
+                  {selected && (
+                    <rect
+                      x={s.cx - BW / 2 - 16}
+                      y={s.cy - BH / 2 - 24}
+                      width={BW + ISO_DX + 32}
+                      height={BH + 70}
+                      rx={18}
+                      fill="#22d3ee"
+                      fillOpacity={0.08}
+                      stroke="#22d3ee"
+                      strokeWidth={3}
+                      strokeDasharray="9 7"
+                      filter="url(#pf-glow-c)"
+                    />
+                  )}
+                  <FactoryStation
+                    cx={s.cx} cy={s.cy}
+                    name={s.name} num={s.num}
+                    warn={warnStation.has(s.id)}
+                  />
+                </g>
+              )
+            })}
 
             {/* ── AGV Robots */}
             {agvs.map((agv) => {
@@ -983,50 +1037,150 @@ export function ProcessFlow() {
           </svg>
         </div>
 
-        {/* ── Side Panel */}
-        <div className="w-full lg:w-[200px] shrink-0 rounded-xl border border-cyan-500/10 bg-slate-900/60 backdrop-blur-md p-4 flex flex-col justify-between">
-          <div>
-            <div className="mb-4 flex items-center gap-2 pb-2 border-b border-slate-800">
-              <Truck className="h-4 w-4 text-cyan-400 animate-pulse" />
-              <span className="text-sm font-bold text-cyan-100 tracking-wider">AGV 관제 현황</span>
-            </div>
-            <div className="space-y-4">
-              {[
-                { label: "운반중", count: movingCount,    cls: "bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]",    textCls: "text-cyan-400" },
-                { label: "하역중", count: unloadingCount, cls: "bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]",  textCls: "text-green-400" },
-                { label: "복귀중", count: returningCount, cls: "bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]", textCls: "text-purple-400" },
-                { label: "대기중", count: waitingCount,   cls: "bg-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.8)] animate-pulse", textCls: "text-yellow-400" },
-              ].map((item) => (
-                <div key={item.label} className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className={`${item.textCls} flex items-center gap-1.5`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${item.cls}`} />
-                      {item.label}
+        {/* 공정 상세 Drawer: 화면 전체의 기존 우측 패널 위를 덮습니다. */}
+        {selectedStation && (
+          <>
+            <button
+              type="button"
+              aria-label="공정 상세정보 닫기"
+              onClick={() => setSelectedStationId(null)}
+              className="fixed inset-0 z-[90] cursor-default bg-slate-950/20 backdrop-blur-[1px]"
+            />
+
+            <aside
+              className="fixed bottom-0 right-0 top-[62px] z-[100] flex w-[380px] max-w-[92vw] flex-col border-l border-cyan-400/30 bg-[#08172b]/98 shadow-[-18px_0_45px_rgba(2,12,27,0.55)] backdrop-blur-xl animate-in slide-in-from-right duration-300"
+              aria-label={`${selectedStation.name} 공정 상세정보`}
+            >
+              <div className="flex items-start justify-between border-b border-cyan-400/15 px-5 py-5">
+                <div>
+                  <div className="mb-1 text-[10px] font-black tracking-[0.22em] text-cyan-400">PROCESS DETAIL</div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-md border border-cyan-400/25 bg-cyan-400/10 px-2 py-1 text-xs font-black text-cyan-300">
+                      {selectedStation.num}
                     </span>
-                    <span className="text-slate-100">{item.count}대</span>
+                    <h3 className="text-xl font-black text-slate-50">{selectedStation.name} 공정</h3>
                   </div>
-                  <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${item.cls} transition-all duration-500`}
-                      style={{ width: `${(item.count / safeTotal) * 100}%` }}
-                    />
-                  </div>
+                  <p className="mt-2 text-xs font-semibold text-slate-400">{selectedStation.routeLabel}</p>
                 </div>
-              ))}
-            </div>
-          </div>
-          <div className="mt-6 pt-3 border-t border-slate-800 text-[10px] text-slate-400 space-y-1.5 font-medium">
-            <div className="flex justify-between">
-              <span>AGV 수량:</span><span className="text-slate-200">총 {agvs.length}대</span>
-            </div>
-            <div className="flex justify-between">
-              <span>관제 경로:</span><span className="text-slate-200">Route 4개</span>
-            </div>
-            <div className="flex justify-between">
-              <span>운행 라인:</span><span className="text-slate-200">Route당 Lane 5개</span>
-            </div>
-          </div>
-        </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStationId(null)}
+                  className="rounded-lg border border-slate-700 bg-slate-900/70 p-2 text-slate-400 transition hover:border-cyan-400/50 hover:text-cyan-300"
+                  aria-label="닫기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 py-5">
+                <section>
+                  <div className="mb-3 flex items-center gap-2 text-xs font-black text-cyan-200">
+                    <span className="h-4 w-1 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.75)]" />
+                    공정 AGV 요약
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: "운반", value: selectedCounts.MOVING, color: "text-cyan-300", border: "border-cyan-400/25", bg: "bg-cyan-400/5" },
+                      { label: "하역", value: selectedCounts.UNLOADING, color: "text-green-300", border: "border-green-400/25", bg: "bg-green-400/5" },
+                      { label: "복귀", value: selectedCounts.RETURNING, color: "text-purple-300", border: "border-purple-400/25", bg: "bg-purple-400/5" },
+                      { label: "대기", value: selectedCounts.WAITING, color: "text-yellow-300", border: "border-yellow-400/25", bg: "bg-yellow-400/5" },
+                    ].map((item) => (
+                      <div key={item.label} className={`rounded-lg border ${item.border} ${item.bg} px-2 py-3 text-center`}>
+                        <div className={`text-[10px] font-bold ${item.color}`}>{item.label}</div>
+                        <div className="mt-1 text-xl font-black text-white">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between rounded-lg border border-slate-700/80 bg-slate-950/40 px-3 py-2 text-xs">
+                    <span className="font-semibold text-slate-400">배치 AGV</span>
+                    <span className="font-black text-slate-100">{selectedAgvs.length}대</span>
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <div className="mb-3 flex items-center gap-2 text-xs font-black text-cyan-200">
+                    <span className="h-4 w-1 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.75)]" />
+                    레인별 AGV 현황
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/35">
+                    <div className="grid grid-cols-[48px_66px_1fr_72px] border-b border-slate-700/80 bg-slate-900/80 px-3 py-2 text-[10px] font-bold text-slate-400">
+                      <span>레인</span>
+                      <span>AGV</span>
+                      <span>차량</span>
+                      <span className="text-right">상태</span>
+                    </div>
+                    {Array.from({ length: LANE_COUNT }, (_, laneIndex) => {
+                      const agv = selectedAgvs.find((item) => item.laneIndex === laneIndex)
+                      const statusColor = agv ? getStatusColor(agv.status) : "#64748b"
+                      return (
+                        <div
+                          key={laneIndex}
+                          className="grid grid-cols-[48px_66px_1fr_72px] items-center border-b border-slate-800/90 px-3 py-3 text-xs last:border-b-0"
+                        >
+                          <span className="font-black text-slate-300">{laneIndex + 1}</span>
+                          <span className="font-bold text-cyan-300">{agv ? `AGV-${String(agv.agvId).padStart(2, "0")}` : "-"}</span>
+                          <span className="truncate font-semibold text-slate-200">
+                            {agv?.carMasterId != null ? `#${agv.carMasterId}` : "-"}
+                          </span>
+                          <span className="flex items-center justify-end gap-1.5 font-black" style={{ color: statusColor }}>
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor, boxShadow: `0 0 7px ${statusColor}` }} />
+                            {agv ? getStatusLabel(agv.status) : "미배치"}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <div className="mb-3 flex items-center gap-2 text-xs font-black text-cyan-200">
+                    <span className="h-4 w-1 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.75)]" />
+                    선택 공정 정보
+                  </div>
+                  <dl className="overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/35 text-xs">
+                    {[
+                      ["공정명", selectedStation.name],
+                      ["운송 구간", selectedStation.routeLabel],
+                      ["Route Code", selectedStation.routeCode],
+                      ["연결 레인", `${LANE_COUNT}개`],
+                      ["배치 AGV", `${selectedAgvs.length}대`],
+                    ].map(([label, value]) => (
+                      <div key={label} className="grid grid-cols-[92px_1fr] border-b border-slate-800/90 px-3 py-3 last:border-b-0">
+                        <dt className="font-semibold text-slate-500">{label}</dt>
+                        <dd className="text-right font-bold text-slate-200">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+
+                {selectedAgvs.some((agv) => agv.eventId) && (
+                  <section className="mt-6">
+                    <div className="mb-3 flex items-center gap-2 text-xs font-black text-cyan-200">
+                      <span className="h-4 w-1 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.75)]" />
+                      처리 중 이벤트
+                    </div>
+                    <div className="space-y-2">
+                      {selectedAgvs.filter((agv) => agv.eventId).map((agv) => (
+                        <div key={agv.id} className="rounded-lg border border-slate-700/80 bg-slate-950/35 px-3 py-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-black text-cyan-300">{agv.id}</span>
+                            <span className="font-bold" style={{ color: getStatusColor(agv.status) }}>{getStatusLabel(agv.status)}</span>
+                          </div>
+                          <div className="mt-2 break-all font-mono text-[10px] text-slate-400">{agv.eventId}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+
+              <div className="border-t border-cyan-400/15 bg-slate-950/35 px-5 py-4 text-center text-[10px] font-semibold text-slate-500">
+                같은 공정을 다시 클릭하거나 X 버튼을 누르면 닫힙니다.
+              </div>
+            </aside>
+          </>
+        )}
 
       </div>
     </div>
