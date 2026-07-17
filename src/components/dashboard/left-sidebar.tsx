@@ -296,7 +296,6 @@ export function LeftSidebar() {
           <h3 className="text-sm font-medium">시간별 담당업무</h3>
         </div>
         <div className="space-y-2">
-          {loading && <div className="text-xs text-muted-foreground">로딩 중...</div>}
           {error && <div className="text-xs text-destructive">오류: {error}</div>}
           {!loading && !error && tasks.length === 0 && (
             <div className="text-xs text-muted-foreground">할당된 업무가 없습니다.</div>
