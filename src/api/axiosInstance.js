@@ -63,7 +63,7 @@ import axios from 'axios';
 //   - VITE_ 접두사가 없으면 브라우저 코드에서 접근할 수 없습니다. (보안)
 //
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://25.2.109.64:8080/api", // 환경변수가 없으면 현재 개발 서버 주소를 사용합니다.
+    baseURL: import.meta.env.VITE_API_BASE_URL ?? "https://aims-factory.com/api", // 환경변수가 없으면 현재 개발 서버 주소를 사용합니다.
     headers: { 'Content-Type': 'application/json' },     // POST/PUT 시 본문이 JSON임을 서버에 알림
 });
 
@@ -82,7 +82,7 @@ const axiosInstance = axios.create({
 //
 axiosInstance.interceptors.request.use(
     config => {
-        const token = localStorage.getItem('auth_token');
+        const token = sessionStorage.getItem('auth_token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -126,8 +126,8 @@ axiosInstance.interceptors.response.use(
         // 401 = 인증 실패 (토큰 없음 / 만료 / 위변조)
         // 더 이상 유효한 세션이 아니므로 로그아웃 처리합니다.
         if (error.response?.status === 401) {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('auth_email');
+            sessionStorage.removeItem('auth_token');
+            sessionStorage.removeItem('auth_email');
             // window.location.href를 사용하면 React 외부에서도 페이지 이동이 가능합니다.
             // (useNavigate는 React 컴포넌트 안에서만 사용 가능)
             window.location.href = '/login';

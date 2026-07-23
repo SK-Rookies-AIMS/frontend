@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { ThermometerSun, Zap, Droplets } from "lucide-react"
 
 type StatusLevel = "normal" | "warning" | "danger"
@@ -46,8 +46,8 @@ export function EquipmentStatus() {
   const [equipmentList, setEquipmentList] = useState<EquipmentCardProps[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchEquipmentStatus = async () => {
+  const fetchEquipmentStatus = useCallback(async () => {
+    setLoading(true)
       try {
         const accessToken = sessionStorage.getItem("aims-auth-accessToken")
         const response = await fetch("/api/main/get-manufacturing-status", {
@@ -92,8 +92,8 @@ export function EquipmentStatus() {
               tempStatus: "normal",
               humidityStatus: "normal",
               powerStatus: "normal",
-              icon: null, // Will be set in render
-              hasWarning: calculatedPercent < 50 // Example warning logic
+              icon: null,
+              hasWarning: calculatedPercent < 50
             }
           })
           setEquipmentList(mappedData)
@@ -103,11 +103,23 @@ export function EquipmentStatus() {
       } finally {
         setLoading(false)
       }
-    }
-    fetchEquipmentStatus()
   }, [])
 
-  if (loading) return <div className="p-4">로딩 중...</div>
+  useEffect(() => {
+    void fetchEquipmentStatus()
+  }, [fetchEquipmentStatus])
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      void fetchEquipmentStatus()
+    }
+
+    window.addEventListener("page-refresh", handleRefresh)
+
+    return () => {
+      window.removeEventListener("page-refresh", handleRefresh)
+    }
+  }, [fetchEquipmentStatus])
 
   return (
     <div className="bg-card rounded-lg border border-border p-4 flex flex-col flex-1">
@@ -126,6 +138,7 @@ export function EquipmentStatus() {
     </div>
   )
 }
+
 
 function EquipmentCard({
   number,
@@ -185,7 +198,7 @@ function EquipmentCard({
         <span className="font-medium">{running} EA</span>
       </div>
 
-      {/* Footer metrics - 온도, 습도, 전력사용량 with status colors */}
+
       <div className="flex items-center justify-between text-[10px] pt-2 border-t border-border">
         <div className="flex items-center gap-1 text-muted-foreground">
           <span className="w-4 h-4 flex items-center justify-center">🌡️</span>

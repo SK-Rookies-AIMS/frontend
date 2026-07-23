@@ -2,12 +2,11 @@
 
 import { CheckCircle, Truck, Clock, AlertTriangle, AlertCircle } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 interface Task {
   taskId: number
   taskTitle: string
-  taskStatus: "PROGRESS" | "TODO" | "DONE"
   scheduledAt: string
 }
 
@@ -158,6 +157,55 @@ export function LeftSidebar() {
     }
   }
 
+  const loadSidebar = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const accessToken = sessionStorage.getItem("aims-auth-accessToken")
+
+      if (!accessToken) {
+        setError("로그인이 필요합니다.")
+        return
+      }
+
+      // 담당 업무
+      const response = await fetch("/api/main/task-user", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setTasks(result.data)
+      } else {
+        setError(result.message || "담당 업무를 불러오지 못했습니다.")
+      }
+
+      // 나머지 API는 기존 함수 재사용
+      await Promise.all([
+        fetchAgvStatus(),
+        fetchEquipmentStatus(),
+        fetchProductionTrend(),
+        fetchOverallStatus(),
+      ])
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("알 수 없는 오류가 발생했습니다.")
+      }
+
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const getCountByStatus = (status: string) => {
     return (
       equipmentStatus.find(
@@ -182,69 +230,20 @@ export function LeftSidebar() {
   }
 
   useEffect(() => {
-    const fetchUserTasks = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const accessToken = sessionStorage.getItem("aims-auth-accessToken")
-        if (!accessToken) {
-          setError("로그인이 필요합니다.")
-          setLoading(false)
-          return
-        }
+    void loadSidebar()
+  }, [loadSidebar])
 
-        const response = await fetch("/api/main/task-user", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-        })
-
-        const result = await response.json()
-
-        if (response.ok && result.success) {
-          setTasks(result.data)
-        } else {
-          setError(result.message || "담당 업무를 불러오지 못했습니다.")
-          if (response.status === 401 || response.status === 403) {
-            alert("인증이 만료되었습니다. 다시 로그인해주세요.")
-            sessionStorage.removeItem("aims-auth-accessToken")
-            sessionStorage.removeItem("aims-auth-refreshToken")
-            window.location.href = "/login"
-          }
-        }
-      } catch (err) {
-        if (err instanceof Error) {
-          setError(err.message)
-        } else {
-          setError("알 수 없는 오류가 발생했습니다.")
-        }
-        console.error("담당 업무를 가져오는 중 오류:", err)
-      } finally {
-        setLoading(false)
-      }
+  useEffect(() => {
+    const handleRefresh = () => {
+      void loadSidebar()
     }
 
-    fetchUserTasks()
-    fetchAgvStatus()
-    fetchEquipmentStatus()
-    fetchProductionTrend()
-    fetchOverallStatus()
-  }, [])
+    window.addEventListener("page-refresh", handleRefresh)
 
-  const getStatusDisplay = (status: Task["taskStatus"]) => {
-    switch (status) {
-      case "DONE":
-        return { label: "완료", className: "bg-emerald-100 text-emerald-800" }
-      case "PROGRESS":
-        return { label: "진행 중", className: "bg-blue-100 text-blue-800" }
-      case "TODO":
-        return { label: "대기 중", className: "bg-amber-100 text-amber-800" }
-      default:
-        return { label: "알 수 없음", className: "bg-gray-100 text-gray-800" }
+    return () => {
+      window.removeEventListener("page-refresh", handleRefresh)
     }
-  }
+  }, [loadSidebar])
 
   const getOverallStatusDisplay = (score: number) => {
     if (score >= 80) return { label: "정상", color: "text-success", icon: CheckCircle, desc: "모든 시스템 정상 운영 중" };
@@ -297,22 +296,17 @@ export function LeftSidebar() {
           <h3 className="text-sm font-medium">시간별 담당업무</h3>
         </div>
         <div className="space-y-2">
-          {loading && <div className="text-xs text-muted-foreground">로딩 중...</div>}
           {error && <div className="text-xs text-destructive">오류: {error}</div>}
           {!loading && !error && tasks.length === 0 && (
             <div className="text-xs text-muted-foreground">할당된 업무가 없습니다.</div>
           )}
           {!loading && !error && tasks.length > 0 && tasks.map((task) => {
-            const statusDisplay = getStatusDisplay(task.taskStatus)
             return (
               <div key={task.taskId} className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground w-12">
-                  {task.scheduledAt.substring(11, 16)}
+                  {task.scheduledAt}
                 </span>
                 <span className="flex-1 truncate">{task.taskTitle}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${statusDisplay.className}`}>
-                  {statusDisplay.label}
-                </span>
               </div>
             )
           })}
@@ -395,9 +389,9 @@ export function LeftSidebar() {
 
           <StatusRow
             color="bg-primary"
-            label="IDLE"
-            count={getCountByStatus("IDLE")}
-            percent={getPercentByStatus("IDLE")}
+            label="WARNING"
+            count={getCountByStatus("WARNING")}
+            percent={getPercentByStatus("WARNING")}
           />
 
           <StatusRow
@@ -413,14 +407,6 @@ export function LeftSidebar() {
             count={getCountByStatus("FAULT")}   
             percent={getPercentByStatus("FAULT")}
           />
-
-          <StatusRow
-            color="bg-muted-foreground"
-            label="MAINTENANCE"
-            count={getCountByStatus("MAINTENANCE")}
-            percent={getPercentByStatus("MAINTENANCE")}
-          />
-
         </div>
       </div>
 

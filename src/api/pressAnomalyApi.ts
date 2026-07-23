@@ -8,6 +8,8 @@ export type PressAnomalyMetrics = {
   targetCycleTimeSec: number | null
   actualCycleTimeSec: number | null
   cycleTimeGapSec: number | null
+  warningCycleTimeGapSec?: number | null
+  dangerCycleTimeGapSec?: number | null
   timestampDelaySec: number | null
   riskScore: number | null
   riskScoreScale: string | null
@@ -17,15 +19,43 @@ export type PressAnomalyMetrics = {
 export type PressAnomalyChartPoint = {
   eventId: string
   analysisId: string
+  logNo?: string | null
   timestamp: string
   targetCycleTimeSec: number | null
   actualCycleTimeSec: number | null
   cycleTimeGapSec: number | null
+  warningCycleTimeGapSec?: number | null
+  dangerCycleTimeGapSec?: number | null
   timestampDelaySec: number | null
   riskScore: number | null
   countIncreaseYn: boolean
   isAbnormal: boolean
   severity: PressAnomalySeverity
+}
+
+export type PressRiskTrendPoint = {
+  eventId: string
+  analysisId: string
+  logNo?: string | null
+  timestamp: string
+  value: number | null
+  countIncreaseYn: boolean
+  isAbnormal: boolean
+  severity: PressAnomalySeverity
+}
+
+export type PressRiskTrendChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: PressRiskTrendPoint[]
+}
+
+export type PressCycleTimeChart = {
+  title: string
+  metricKey: string
+  unit: string
+  points: PressAnomalyChartPoint[]
 }
 
 export type PressAnomalyAlert = {
@@ -46,7 +76,11 @@ export type PressAnomalyData = {
   previousEndAt: string | null
   dateOptions: PressDateOption[]
   metrics: PressAnomalyMetrics | null
-  chart: PressAnomalyChartPoint[]
+  chart?: PressAnomalyChartPoint[]
+  charts?: {
+    cycleTime?: PressCycleTimeChart | null
+    riskScore?: PressRiskTrendChart | null
+  }
   alert: PressAnomalyAlert | null
 }
 
@@ -83,24 +117,49 @@ export async function fetchPressAnomalyAnalysis({
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
-  if (!response.ok) {
-    throw new Error(`프레스 이상 탐지 API 요청 실패 (${response.status})`)
-  }
-
-  const result: ApiEnvelope<Omit<PressAnomalyData, "chart" | "alert" | "dateOptions"> & {
+  type ResultType = ApiEnvelope<Omit<PressAnomalyData, "chart" | "charts" | "alert" | "dateOptions"> & {
     dateOptions?: PressDateOption[]
     chart?: PressAnomalyChartPoint[]
+    charts?: {
+      cycleTime?: PressCycleTimeChart | null
+      riskScore?: PressRiskTrendChart | null
+    }
     alert?: PressAnomalyAlert | null
-  }> = await response.json()
+  }>
 
-  if (!result.success || !result.data) {
-    throw new Error(result.message || "프레스 이상 탐지 API 응답이 실패 상태입니다.")
+  let result: ResultType | null = null
+  try {
+    result = await response.json()
+  } catch (e) {
+    // JSON parsing failed
   }
 
-  return {
-    ...result.data,
-    dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
-    chart: Array.isArray(result.data.chart) ? result.data.chart : [],
-    alert: result.data.alert ?? null,
+  if (result && result.success && result.data) {
+    return {
+      ...result.data,
+      dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
+      chart: Array.isArray(result.data.chart) ? result.data.chart : [],
+      charts: {
+        cycleTime: result.data.charts?.cycleTime
+          ? {
+              ...result.data.charts.cycleTime,
+              points: Array.isArray(result.data.charts.cycleTime.points) ? result.data.charts.cycleTime.points : [],
+            }
+          : null,
+        riskScore: result.data.charts?.riskScore
+          ? {
+              ...result.data.charts.riskScore,
+              points: Array.isArray(result.data.charts.riskScore.points) ? result.data.charts.riskScore.points : [],
+            }
+          : null,
+      },
+      alert: result.data.alert ?? null,
+    }
   }
+
+  if (!response.ok) {
+    throw new Error(result?.message || `프레스 이상 탐지 API 요청 실패 (${response.status})`)
+  }
+
+  throw new Error(result?.message || "프레스 이상 탐지 API 응답이 실패 상태입니다.")
 }

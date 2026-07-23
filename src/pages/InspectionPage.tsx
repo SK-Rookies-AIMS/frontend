@@ -4,7 +4,7 @@ import { Header } from "@/components/dashboard/header"
 import { Footer } from "@/components/dashboard/footer"
 import { Mascot } from "@/components/mascot/mascot"
 import { AuthGuard } from "@/components/auth-guard"
-import { connectWebSocket } from "@/lib/qualityWebsocket";
+import { AlertTriangle, TriangleAlert } from "lucide-react";
 
 import {
   Car,
@@ -23,7 +23,6 @@ import {
 } from "lucide-react"
 
 import {
-  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
@@ -31,7 +30,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-} from "recharts"
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
 
 import {
   fetchInspectionProcess,
@@ -97,34 +98,6 @@ export default function InspectionPage() {
     loadDashboard()
   }, [])
 
-  useEffect(() => {
-
-    const disconnect = connectWebSocket({
-
-          onSummary: (data) => {
-              setSummaryData(data);
-          },
-
-          onProcess: (data) => {
-              setProcessData(data);
-          },
-
-          onStatus: (data) => {
-              setStatusDetailData(data);
-          },
-
-          onDrive: (data) => {
-              setDriveDetailData(data);
-          }
-
-      });
-
-      return () => {
-          disconnect();
-      };
-
-  }, []);
-
 async function loadDashboard(refresh = false) {
   if (refresh) {
     setIsRefreshing(true)
@@ -171,6 +144,18 @@ async function loadDashboard(refresh = false) {
   }
 }
 
+useEffect(() => {
+  const handleRefresh = () => {
+    void loadDashboard(true)
+  }
+
+  window.addEventListener("page-refresh", handleRefresh)
+
+  return () => {
+    window.removeEventListener("page-refresh", handleRefresh)
+  }
+}, [])
+
   // 최신 시간대 기준 최대 4개 추출
   // createdAt 필드가 없으면 processData 전체를 그대로 사용
   const currentDateRef = useRef<string | null>(null)
@@ -197,7 +182,7 @@ async function loadDashboard(refresh = false) {
     // 3. 해당 날짜 데이터만 필터링
     return processData
       .filter(item => getDate(item.createdAt) === latestDate)
-      .slice(0, 4)
+      .slice(-4)
     }, [processData])
 
   // API summary가 모두 0이면 statusDetailData 기반으로 직접 계산
@@ -216,7 +201,6 @@ async function loadDashboard(refresh = false) {
         abnormalCount: latest.abnormalCount ?? 0,
         standbyCount:
           latest.standbyCount ??
-          latest.stanbyCount ??
           0,
       }
     }
@@ -251,10 +235,25 @@ async function loadDashboard(refresh = false) {
   }, [riskHistoryData])
 
   // 위험도 분포 계산
+  const latestDate = useMemo(() => {
+    if (!riskTrendData.length) return "";
+
+    return riskTrendData
+      .map((item: any) => item.createdAt.substring(0, 10)) // YYYY-MM-DD
+      .sort()
+      .at(-1) ?? "";
+  }, [riskTrendData]);
+
+  const filteredRisk = useMemo(() => {
+    return riskTrendData.filter(
+      (item: any) => item.createdAt.startsWith(latestDate)
+    );
+  }, [riskTrendData, latestDate]);
+
   const riskDistribution = useMemo(() => {
-    const high = riskTrendData.find((r: any) => r.riskLevel === "HIGH")
-    const medium = riskTrendData.find((r: any) => r.riskLevel === "MEDIUM")
-    const low = riskTrendData.find((r: any) => r.riskLevel === "LOW")
+    const high = filteredRisk.find((r: any) => r.riskLevel === "HIGH");
+    const medium = filteredRisk.find((r: any) => r.riskLevel === "MEDIUM");
+    const low = filteredRisk.find((r: any) => r.riskLevel === "LOW");
 
     return {
       high: high?.riskCount ?? 0,
@@ -263,8 +262,8 @@ async function loadDashboard(refresh = false) {
       highPct: high?.riskRatio ?? 0,
       mediumPct: medium?.riskRatio ?? 0,
       lowPct: low?.riskRatio ?? 0,
-    }
-  }, [riskTrendData])
+    };
+  }, [filteredRisk]);
 
   // 집계 테이블 데이터
   const statusRows = useMemo(
@@ -322,6 +321,21 @@ async function loadDashboard(refresh = false) {
       default:        return status
     }
   }
+  const issueMessageMap: Record<string, string> = {
+    "over speed": "과속 감지",
+    "rpm error": "RPM 이상",
+    "crash warning": "충돌 위험",
+    "parking": "주차 상태",
+  };
+
+  const issueMessage =
+    selectedDetail?.issueMessage
+      ?.split(",")
+      .map((msg: string) => {
+        const key = msg.trim().toLowerCase();
+        return issueMessageMap[key] ?? msg.trim();
+      })
+      .join(", ") ?? "이상 메시지 없음";
 
   return (
     <AuthGuard>
@@ -336,44 +350,6 @@ async function loadDashboard(refresh = false) {
               <h1 className="text-xl font-bold">
                 품질 / 검사 단계 모니터링
               </h1>
-
-              <div className="flex items-center gap-2">
-
-                <input
-                  type="number"
-                  min={1}
-                  value={refreshInterval}
-                  onChange={(e) => setRefreshInterval(e.target.value)}
-                  className="w-20 px-2 py-1 text-xs rounded bg-slate-800 border border-slate-700"
-                />
-
-                <span className="text-xs text-muted-foreground">
-                  초
-                </span>
-
-                <button
-                  onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                  className={`px-3 py-1 rounded text-xs transition-colors ${
-                    autoRefreshEnabled
-                      ? "bg-green-600 text-white"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  {autoRefreshEnabled ? "자동 ON" : "자동 OFF"}
-                </button>
-
-                <button
-                  onClick={() => loadDashboard(true)}
-                  disabled={isRefreshing}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-cyan-400 transition-colors disabled:opacity-50 px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
-                  />
-                  {isRefreshing ? "갱신 중..." : "새로고침"}
-                </button>
-
-              </div>
             </div>
             <p className="text-sm text-muted-foreground">
               각 검사 단계별 진행 상황과 결과를 실시간으로 모니터링합니다.
@@ -456,10 +432,37 @@ async function loadDashboard(refresh = false) {
             {/* 차트 */}
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold">검사 단계별 위험도 추이</h3>
+                <h3 className="text-sm font-semibold">검사 단계별 안전 결과 추이</h3>
               </div>
               <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
+                  {/* 위험 기준선 (25점) */}
+                  <ReferenceLine
+                    y={25}
+                    stroke="#ef4444"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
+                    label={{
+                      value: "위험 (25점)",
+                      position: "insideTopRight",
+                      fill: "#ef4444",
+                      fontSize: 11,
+                    }}
+                  />
+
+                  {/* 주의 기준선 (50점) */}
+                  <ReferenceLine
+                    y={50}
+                    stroke="#f97316"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
+                    label={{
+                      value: "주의 (50점)",
+                      position: "insideTopRight",
+                      fill: "#f97316",
+                      fontSize: 11,
+                    }}
+                  />
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="time" tick={{ fontSize: 10 }} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
@@ -470,8 +473,8 @@ async function loadDashboard(refresh = false) {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="DYNAMICS" name="외관 검사" stroke="#22c55e" dot={false} strokeWidth={1.5} />
                   <Line type="monotone" dataKey="STATUS"   name="기능 검사" stroke="#00d4ff" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="CONTROL"  name="주행 검사" stroke="#f59e0b" dot={false} strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="DRIVE"    name="최종 검사" stroke="#ef4444" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="CONTROL"  name="주행 검사" stroke="#fff200" dot={false} strokeWidth={1.5} />
+                  <Line type="monotone" dataKey="DRIVE"    name="최종 검사" stroke="#2f00ff" dot={false} strokeWidth={1.5} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -491,7 +494,7 @@ async function loadDashboard(refresh = false) {
                 <SummaryBox
                   label="검사 진행"
                   value={(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}
-                  sub={`대 (${activeSummary?.totalCount ? Math.round(((activeSummary.inspectingCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)`}
+                  sub={`대 (${(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}%)`}
                 />
                 <SummaryBox
                   label="정상"
@@ -511,9 +514,9 @@ async function loadDashboard(refresh = false) {
               <div className="bg-slate-800/60 rounded-lg p-3 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">대기 중</span>
                 <div className="text-right">
-                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.stanbyCount ?? 0}</span>
+                  <span className="text-xl font-bold text-yellow-400">{activeSummary?.standbyCount ?? 0}</span>
                   <span className="text-xs text-muted-foreground ml-1">
-                    대 ({activeSummary?.totalCount ? Math.round(((activeSummary.stanbyCount ?? 0) / activeSummary.totalCount) * 100) : 0}%)
+                    대 (${(activeSummary?.normalCount ?? 0) + (activeSummary?.abnormalCount ?? 0)}%)
                   </span>
                 </div>
               </div>
@@ -626,47 +629,80 @@ async function loadDashboard(refresh = false) {
                 {detailType === 'status' ? (
                   /* ── 차량 상태 결과 (fetchStatusDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="속도"         value={selectedDetail.speed} />
-                    <DetailCard icon={<Battery />}  label="배터리 전압"  value={selectedDetail.batteryVoltage} />
-                    <DetailCard icon={<Fuel />}     label="연료율"       value={selectedDetail.fuelRate} />
-                    <DetailCard icon={<Gauge />}    label="진동량" value={selectedDetail.att} />
+                    <DetailCard icon={<Activity />} label="속도  (기준:80km/h)"         value={`${selectedDetail.speed} km/h`} />
+                    <DetailCard icon={<Battery />}  label="배터리 전압 (기준:11~13V)"  value={`${selectedDetail.batteryVoltage} V`} />
+                    <DetailCard icon={<Fuel />}     label="연료율 (기준:8~10km/L)"       value={`${selectedDetail.fuelRate} km/L`} />
+                    <DetailCard icon={<Gauge />}    label="진동량 (기준:1500~2000RPM)" value={`${selectedDetail.att} RPM`} />
                     <DetailCard icon={<Gauge />}    label="차량 종류"       value={selectedDetail.carCode} />
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 ) : (
                   /* ── 운전자 입력 결과 (fetchDriveDetail 데이터) ── */
                   <div className="grid grid-cols-3 gap-4">
-                    <DetailCard icon={<Activity />} label="조향각"    value={selectedDetail.steeringAngle} />
-                    <DetailCard icon={<Gauge />}    label="브레이크 강도"    value={selectedDetail.brakePressure} />
+                    <DetailCard icon={<Activity />} label="조향각 (degree)"    value={`${selectedDetail.steeringAngle} °`} />
+                    <DetailCard icon={<Gauge />}    label="브레이크 강도 (Force/Tension)"    value={`${selectedDetail.brakePressure} kgf`} />
                     <DetailCard icon={<PlayCircle />} label="운전 방식" value={selectedDetail.drivingPattern} />
-                    <DetailCard icon={<PlayCircle />} label="운행 점수" value={selectedDetail.driveScore} />
-                    <DetailCard icon={<Activity />}    label="가속량"    value={selectedDetail.throttlePosition} />
+                    <DetailCard icon={<PlayCircle />} label="운행 점수 (100점 만점)" value={`${selectedDetail.driveScore} 점`} />
+                    <DetailCard icon={<Activity />}    label="가속량 (국제표준단위)"    value={`${selectedDetail.throttlePosition} m/s²`}/>
                     <DetailCard icon={<Clock />}    label="생성 시간"    value={selectedDetail.createdAt} />
                   </div>
                 )}
 
-                <div className="mt-6 p-4 rounded-xl bg-slate-900">
-                  <p className="text-sm text-muted-foreground mb-2">검사 결과</p>
-
-                  <p
-                    className={`text-lg font-bold ${
+                <div className="mt-6 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
+                  {/* 검사 결과 */}
+                  <div
+                    className={`flex items-center justify-between px-4 py-3 ${
                       selectedDetail.inspectionResult === "NORMAL"
-                        ? "text-green-400"
+                        ? "bg-green-900/20"
                         : selectedDetail.inspectionResult === "WARNING"
-                        ? "text-yellow-400"
-                        : "text-red-400"
+                        ? "bg-yellow-900/20"
+                        : "bg-red-900/20"
                     }`}
                   >
-                    {selectedDetail.inspectionResult === "NORMAL"
-                      ? "정상"
-                      : selectedDetail.inspectionResult === "WARNING"
-                      ? "주의"
-                      : "이상"}
-                  </p>
+                    <span className="text-sm text-slate-300">검사 결과</span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm font-bold ${
+                        selectedDetail.inspectionResult === "NORMAL"
+                          ? "bg-green-500/20 text-green-400"
+                          : selectedDetail.inspectionResult === "WARNING"
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-red-500/20 text-red-400"
+                      }`}
+                    >
+                      {selectedDetail.inspectionResult === "NORMAL"
+                        ? "✅ 정상"
+                        : selectedDetail.inspectionResult === "WARNING"
+                        ? "⚠️ 주의"
+                        : "🚨 이상"}
+                    </span>
+                  </div>
+                  {/* 이상 메시지 */}
+                  <div className="p-4">
 
-                  <p className="mt-4 text-sm text-slate-300">
-                    {selectedDetail.issueMessage || "이상 메시지 없음"}
+                  <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">
+                    이상 메시지
                   </p>
+                  <div
+                      className={`rounded-lg border p-4 ${
+                        selectedDetail.inspectionResult === "NORMAL"
+                          ? "border-green-500/30 bg-green-500/10"
+                          : selectedDetail.inspectionResult === "WARNING"
+                          ? "border-yellow-500/30 bg-yellow-500/10"
+                          : "border-red-500/30 bg-red-500/10"
+                      }`}
+                    >
+                      <p
+                        className={`text-base font-medium leading-7 ${
+                          selectedDetail.inspectionResult === "NORMAL"
+                            ? "text-green-200"
+                            : selectedDetail.inspectionResult === "WARNING"
+                            ? "text-yellow-200"
+                            : "text-red-200"
+                        }`}
+                      ></p>
+                      {issueMessage}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,7 +1,6 @@
-interface ImportMetaEnv {
-  readonly VITE_WS_URL: string;
-}
-
+/// <reference types="vite/client" />
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __ALERT_WS_URL__: string;

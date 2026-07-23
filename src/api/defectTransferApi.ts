@@ -11,6 +11,11 @@ export type DefectTransferPredictionRow = {
   riskLevel: string
 }
 
+export type DefectTransferDateOption = {
+  date: string
+  sampleEventId: string
+}
+
 export type DefectTransferCauseRow = {
   rank: number
   feature: string
@@ -18,6 +23,7 @@ export type DefectTransferCauseRow = {
   value: string
   impact: number
   message: string
+  mainCauses?: { message: string; impact: number }[]
 }
 
 export type DefectTransferCauseData = {
@@ -28,6 +34,8 @@ export type DefectTransferCauseData = {
   currentProcess: string
   predictedDefectProcess: string
   transferProbability: number
+  representativeCause?: DefectTransferCauseRow | null
+  detailCauses?: DefectTransferCauseRow[]
   content: DefectTransferCauseRow[]
   hasNext: boolean
   nextCursor: number | null
@@ -40,9 +48,11 @@ type ApiEnvelope<T> = {
 }
 
 export async function fetchDefectTransferPredictions({
+  date,
   size = DEFECT_TRANSFER_PAGE_SIZE,
   cursor = DEFECT_TRANSFER_INITIAL_CURSOR,
 }: {
+  date?: string | null
   size?: number
   cursor?: number
 }) {
@@ -51,6 +61,10 @@ export async function fetchDefectTransferPredictions({
     cursor: String(cursor),
   })
 
+  if (date) {
+    params.set("date", date)
+  }
+
   const response = await fetch(`/api/ai/process/defect-transfer/predictions?${params.toString()}`)
 
   if (!response.ok) {
@@ -58,6 +72,8 @@ export async function fetchDefectTransferPredictions({
   }
 
   const result: ApiEnvelope<{
+    date?: string | null
+    dateOptions?: DefectTransferDateOption[]
     content?: DefectTransferPredictionRow[]
     hasNext?: boolean
     nextCursor?: number | null
@@ -68,6 +84,8 @@ export async function fetchDefectTransferPredictions({
   }
 
   return {
+    date: result.data?.date ?? null,
+    dateOptions: Array.isArray(result.data?.dateOptions) ? result.data.dateOptions : [],
     content: Array.isArray(result.data?.content) ? result.data.content : [],
     hasNext: Boolean(result.data?.hasNext),
     nextCursor: result.data?.nextCursor ?? null,
@@ -76,10 +94,12 @@ export async function fetchDefectTransferPredictions({
 
 export async function fetchDefectTransferCauses({
   vehicleId,
+  date,
   size = DEFECT_TRANSFER_PAGE_SIZE,
   cursor = DEFECT_TRANSFER_INITIAL_CURSOR,
 }: {
   vehicleId?: string | null
+  date?: string | null
   size?: number
   cursor?: number
 }) {
@@ -92,6 +112,10 @@ export async function fetchDefectTransferCauses({
     params.set("vehicleId", vehicleId)
   }
 
+  if (date) {
+    params.set("date", date)
+  }
+
   const response = await fetch(`/api/ai/process/defect-transfer/causes?${params.toString()}`)
 
   if (!response.ok) {
@@ -99,7 +123,11 @@ export async function fetchDefectTransferCauses({
   }
 
   const result: ApiEnvelope<Omit<DefectTransferCauseData, "content" | "hasNext" | "nextCursor"> & {
+    date?: string | null
+    dateOptions?: DefectTransferDateOption[]
     content?: DefectTransferCauseRow[]
+    representativeCause?: DefectTransferCauseRow | null
+    detailCauses?: DefectTransferCauseRow[]
     hasNext?: boolean
     nextCursor?: number | null
   }> = await response.json()
@@ -108,11 +136,23 @@ export async function fetchDefectTransferCauses({
     throw new Error(result.message || "SHAP 원인 분석 API 응답이 실패 상태입니다.")
   }
 
+  const representativeCause = result.data.representativeCause ?? null
+  const detailCauses = Array.isArray(result.data.detailCauses) ? result.data.detailCauses : []
+  const content = Array.isArray(result.data.content)
+    ? result.data.content
+    : [
+        ...(representativeCause ? [representativeCause] : []),
+        ...detailCauses,
+      ]
+
   return {
     ...result.data,
-    content: Array.isArray(result.data.content) ? result.data.content : [],
+    date: result.data.date ?? null,
+    dateOptions: Array.isArray(result.data.dateOptions) ? result.data.dateOptions : [],
+    representativeCause,
+    detailCauses,
+    content,
     hasNext: Boolean(result.data.hasNext),
     nextCursor: result.data.nextCursor ?? null,
   }
 }
-
